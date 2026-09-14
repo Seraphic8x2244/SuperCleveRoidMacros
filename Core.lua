@@ -4516,6 +4516,12 @@ if CleveRoids.NampowerAPI.features.hasKeyEvents then
     CleveRoids.Frame:RegisterEvent("KEY_UP")
 end
 
+-- ClassicAPI raw mouse-button events, for [button:N] icon refresh. Ungated,
+-- unlike the Nampower features above: these long predate the ClassicAPI v1.15.0
+-- floor the addon already refuses to run below.
+CleveRoids.Frame:RegisterEvent("GLOBAL_MOUSE_DOWN")
+CleveRoids.Frame:RegisterEvent("GLOBAL_MOUSE_UP")
+
 -- NOTE: SuperMacro hook installation is handled by Compatibility/SuperMacro.lua
 -- which has the complete implementation including the INTERCEPT path for all commands
 
@@ -5564,6 +5570,22 @@ function CleveRoids.Frame:KEY_UP()
     local keyCode = arg1
     if keyCode == 0 or keyCode == 1 or keyCode == 2 then return end
     CleveRoids._keyState[keyCode] = nil
+    CleveRoids.isActionUpdateQueued = true
+end
+
+-- ClassicAPI GLOBAL_MOUSE_DOWN / GLOBAL_MOUSE_UP: arg1 = button name
+-- ("LeftButton" .. "Button5"), fired on every raw press/release whether or not
+-- the click lands on a frame. [button:N] reads IsMouseButtonDown live, but
+-- nothing sampled that state -- the OnUpdate polls modifier keys only -- so a
+-- [button:N] macro's icon sat on whatever it resolved to with no button held.
+-- Flag set directly rather than through QueueActionUpdate, as with KEY_DOWN:
+-- these fire from the message pump, which can beat VARIABLES_LOADED to the
+-- CleveRoidMacros table QueueActionUpdate reads.
+function CleveRoids.Frame:GLOBAL_MOUSE_DOWN()
+    CleveRoids.isActionUpdateQueued = true
+end
+
+function CleveRoids.Frame:GLOBAL_MOUSE_UP()
     CleveRoids.isActionUpdateQueued = true
 end
 
