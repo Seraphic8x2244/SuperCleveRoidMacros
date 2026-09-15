@@ -5241,6 +5241,104 @@ local function ResolvePetHappinessState(value)
     return PET_HAPPINESS_STATES[GetLowercaseString(value)]
 end
 
+-- ClassicAPI's totem bar is TBC-ordered: SUMMON_TOTEM_SLOT1..4 in Spell.dbc.
+local TOTEM_SLOTS = {
+    fire  = 1,
+    earth = 2,
+    water = 3,
+    air   = 4,
+    ["1"] = 1,
+    ["2"] = 2,
+    ["3"] = 3,
+    ["4"] = 4,
+}
+
+-- Resolve a [totem:X] argument to a slot. An element name or slot number names
+-- the slot directly; anything else is matched against the name of the totem
+-- standing in each slot, so [totem:Searing_Totem] asks for that totem rather
+-- than "whatever is in the fire slot". nil when neither matches -- which
+-- includes naming a totem that is not currently out.
+local function ResolveTotemSlot(name)
+    if type(name) ~= "string" or name == "" then return nil end
+
+    local searchName = GetLowercaseString(
+        CleveRoids.Trim(string.gsub(CleveRoids.StripRank(name), "_", " ")))
+
+    local slot = TOTEM_SLOTS[searchName]
+    if slot then return slot end
+
+    for i = 1, 4 do
+        -- Second return, not the first: GetTotemInfo's haveTotem reports whether
+        -- the player carries the slot's TOOL item, not whether a totem is out.
+        local _, totemName = GetTotemInfo(i)
+        if totemName and totemName ~= "" and GetLowercaseString(totemName) == searchName then
+            return i
+        end
+    end
+end
+
+-- True while any totem slot has a timer running. Drives the OnUpdate re-test
+-- that keeps [totem:X<N] icons honest -- see the caller for why polling is the
+-- only option. GetTotemTimeLeft, not GetTotemInfo: this asks whether a countdown
+-- is in progress (a totem with no timer has nothing to go stale), and it reads
+-- the slot alone, where GetTotemInfo walks the bags for the tool item.
+function CleveRoids.AnyTotemTimerRunning()
+    for i = 1, 4 do
+        local timeLeft = GetTotemTimeLeft(i)
+        if timeLeft and timeLeft > 0 then return true end
+    end
+    return false
+end
+
+-- [totem:X] / [nototem:X], shaped like the aura validators: X is a plain name or
+-- a parsed comparison entry, comparisons read seconds left, and `#N` stack
+-- comparisons read 1 for a standing totem -- a totem is either up or it isn't.
+--
+-- An empty slot reads -1 on both axes, the same "missing counts as least" the
+-- aura path uses, so [totem:Searing_Totem<5] passes while the totem is expiring
+-- AND while it is absent: one clause for the whole recast macro.
+local function ValidateTotem(args)
+    if not args then return false end
+
+    if type(args) ~= "table" then
+        args = { name = args }
+    end
+
+    local remaining, stacks = -1, -1
+    local slot = ResolveTotemSlot(args.name)
+    if slot then
+        -- Occupancy comes from the name, not from the time left: a totem whose
+        -- summon spell carries no SpellDuration row reads 0 seconds, and that is
+        -- "up with no timer", not "absent".
+        local _, totemName = GetTotemInfo(slot)
+        if totemName and totemName ~= "" then
+            stacks = 1
+            remaining = GetTotemTimeLeft(slot)
+        end
+    end
+
+    local ops = CleveRoids.operators
+    local cmp = CleveRoids.comparators
+
+    -- Multi-comparison (e.g. >2&<8) - ALL must pass
+    if args.comparisons and type(args.comparisons) == "table" then
+        for _, comp in ipairs(args.comparisons) do
+            if not ops[comp.operator] then return false end
+            local value = comp.checkStacks and stacks or remaining
+            if not cmp[comp.operator](value, comp.amount) then return false end
+        end
+        return true
+    end
+
+    if not args.amount and not args.operator and not args.checkStacks then
+        return stacks == 1
+    elseif args.amount and ops[args.operator] then
+        return cmp[args.operator](args.checkStacks and stacks or remaining, args.amount)
+    else
+        return false
+    end
+end
+
 -- A list of Conditionals and their functions to validate them
 CleveRoids.Keywords = {
     -- [button:N] — true while mouse button N is held (1=Left, 2=Right, 3=Middle,
@@ -5265,6 +5363,23 @@ CleveRoids.Keywords = {
             local name = CleveRoids.buttons[button]
             return not (name and IsMouseButtonDown(name))
         end, conditionals, "nobutton")
+    end,
+
+    -- [totem:X] — X names a totem-bar slot (fire/earth/water/air, or 1-4) or the
+    -- totem itself ([totem:Searing_Totem]). Bare [totem] takes the action as its
+    -- argument, as [mybuff] does, so /cast [nototem] Searing Totem is the whole
+    -- recast macro. Time and stack comparisons follow the aura precedent; see
+    -- ValidateTotem.
+    totem = function(conditionals)
+        return Multi(conditionals.totem, function(v)
+            return ValidateTotem(v)
+        end, conditionals, "totem")
+    end,
+
+    nototem = function(conditionals)
+        return NegatedMulti(conditionals.nototem, function(v)
+            return not ValidateTotem(v)
+        end, conditionals, "nototem")
     end,
 
     exists = function(conditionals)
@@ -9200,6 +9315,7 @@ CleveRoids.STATIC_CONDITIONALS = {
     mod = true, nomod = true,
     keydown = true, nokeydown = true,
     button = true, nobutton = true,
+    totem = true, nototem = true,
     swimming = true, noswimming = true, swim = true, noswim = true,
     indoors = true, noindoors = true, outdoors = true, nooutdoors = true,
     rooted = true, norooted = true,

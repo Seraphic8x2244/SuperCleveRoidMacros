@@ -4190,6 +4190,21 @@ function CleveRoids.OnUpdate(self)
         end
     end
 
+    -- A totem's timer runs down with nothing behind it: PLAYER_TOTEM_UPDATE fires
+    -- when a slot changes hands, never as one counts toward zero, so a
+    -- [totem:X<N] icon would hold the answer from its last refresh until some
+    -- unrelated event queued another. Unlike an aura, there is no ambient event
+    -- stream to ride -- UNIT_AURA is what quietly keeps [mybuff:X<N] honest -- so
+    -- a re-test once a second while any totem timer runs is the whole mechanism.
+    -- Only the icon is at stake: the click path evaluates conditionals live.
+    -- Realtime mode re-tests everything each tick and needs none of this.
+    if CRM.realtime == 0 and time >= (CR.nextTotemPoll or 0) then
+        CR.nextTotemPoll = time + 1
+        if CR.AnyTotemTimerRunning() then
+            CR.isActionUpdateQueued = true
+        end
+    end
+
     -- Check the saved variable to decide which update mode to use.
     if CRM.realtime == 1 then
         -- Realtime Mode: Force an update on every throttled tick for maximum responsiveness.
@@ -4521,6 +4536,10 @@ end
 -- floor the addon already refuses to run below.
 CleveRoids.Frame:RegisterEvent("GLOBAL_MOUSE_DOWN")
 CleveRoids.Frame:RegisterEvent("GLOBAL_MOUSE_UP")
+
+-- ClassicAPI totem-bar tracking, for [totem:X] icon refresh. Ungated for the
+-- same reason.
+CleveRoids.Frame:RegisterEvent("PLAYER_TOTEM_UPDATE")
 
 -- NOTE: SuperMacro hook installation is handled by Compatibility/SuperMacro.lua
 -- which has the complete implementation including the INTERCEPT path for all commands
@@ -5587,6 +5606,14 @@ end
 
 function CleveRoids.Frame:GLOBAL_MOUSE_UP()
     CleveRoids.isActionUpdateQueued = true
+end
+
+-- ClassicAPI PLAYER_TOTEM_UPDATE: arg1 = the slot (1 Fire .. 4 Air) whose totem
+-- was dropped, expired, killed or recalled. The slot goes unread for the same
+-- reason the mouse handlers ignore their button -- a [totem:X] macro may name
+-- any slot, and [nototem:X] flips on any of them.
+function CleveRoids.Frame:PLAYER_TOTEM_UPDATE()
+    CleveRoids.QueueActionUpdate()
 end
 
 -- Base SendChatMessage captured at first hook; used to break a hook cycle.
