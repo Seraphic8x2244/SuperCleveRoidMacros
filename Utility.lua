@@ -6013,7 +6013,7 @@ local IMMUNITY_SCHOOLS = {
 local CC_IMMUNITY_TYPES = {
     stun = true,       -- Mechanic 12: Cheap Shot, Kidney Shot, Hammer of Justice
     freeze = true,     -- Mechanic 13: frozen effects
-    incap = true,      -- Mechanic 14: Gouge, Repentance, Blast Wave
+    knockout = true,   -- Mechanic 14: Gouge, Repentance, Blast Wave
     sap = true,        -- Mechanic 30: Sap
     fear = true,       -- Fear, Psychic Scream, Howl of Terror
     root = true,       -- Entangling Roots, Frost Nova
@@ -6029,9 +6029,9 @@ local CC_IMMUNITY_TYPES = {
 }
 
 local CC_IMMUNITY_ALIASES = {
-    knockout = "incap",
-    incapacitate = "incap",
-    incapacitated = "incap",
+    incap = "knockout",
+    incapacitate = "knockout",
+    incapacitated = "knockout",
 }
 
 local function NormalizeCCImmunityType(ccType)
@@ -6063,7 +6063,7 @@ local MECHANIC_TO_CC_TYPE = {
 
 -- Mechanic-precise mapping used only for learned NPC immunity. Do not use
 -- CCMechanicGroups here: Vanilla can distinguish Stun (12), Freeze (13),
--- Knockout/Incapacitate (14), and Sap (30) immunities independently.
+-- Knockout (14), and Sap (30) immunities independently.
 local MECHANIC_TO_IMMUNITY_TYPE = {
     [1] = "charm",
     [2] = "disorient",
@@ -6074,7 +6074,7 @@ local MECHANIC_TO_IMMUNITY_TYPE = {
     [11] = "snare",
     [12] = "stun",
     [13] = "freeze",
-    [14] = "incap",
+    [14] = "knockout",
     [17] = "polymorph",
     [18] = "banish",
     [20] = "shackle",
@@ -7737,7 +7737,7 @@ function CleveRoids.ListCCImmunities(ccType)
         local key = "cc_" .. ccType
 
         if not CC_IMMUNITY_TYPES[ccType] then
-            CleveRoids.Print("Invalid CC type. Use: stun, freeze, incap, sap, fear, root, silence, sleep, charm, polymorph, banish, shackle, horror, disorient, snare")
+            CleveRoids.Print("Invalid CC type. Use: stun, freeze, knockout, sap, fear, root, silence, sleep, charm, polymorph, banish, shackle, horror, disorient, snare")
             return
         end
 
@@ -7788,7 +7788,7 @@ function CleveRoids.ClearCCImmunities(ccType)
         local key = "cc_" .. ccType
 
         if not CC_IMMUNITY_TYPES[ccType] then
-            CleveRoids.Print("Invalid CC type. Use: stun, freeze, incap, sap, fear, root, silence, sleep, charm, polymorph, banish, shackle, horror, disorient, snare")
+            CleveRoids.Print("Invalid CC type. Use: stun, freeze, knockout, sap, fear, root, silence, sleep, charm, polymorph, banish, shackle, horror, disorient, snare")
             return
         end
 
@@ -7811,13 +7811,13 @@ end
 function CleveRoids.AddCCImmunity(npcName, ccType, buffName)
     if not npcName or not ccType then
         CleveRoids.Print("Usage: /cleveroid addccimmune <npc name> <cctype> [buff name]")
-        CleveRoids.Print("CC Types: stun, freeze, incap, sap, fear, root, silence, sleep, charm, polymorph, banish, shackle, horror, disorient, snare")
+        CleveRoids.Print("CC Types: stun, freeze, knockout, sap, fear, root, silence, sleep, charm, polymorph, banish, shackle, horror, disorient, snare")
         return
     end
 
     ccType = NormalizeCCImmunityType(ccType)
     if not CC_IMMUNITY_TYPES[ccType] then
-        CleveRoids.Print("Invalid CC type. Use: stun, freeze, incap, sap, fear, root, silence, sleep, charm, polymorph, banish, shackle, horror, disorient, snare")
+        CleveRoids.Print("Invalid CC type. Use: stun, freeze, knockout, sap, fear, root, silence, sleep, charm, polymorph, banish, shackle, horror, disorient, snare")
         return
     end
 
@@ -8636,14 +8636,14 @@ reactiveFrame:SetScript("OnEvent", function()
     -- NAMPOWER v2.31+ SPELL_MISS EVENTS (preferred when available)
     -- ========================================================================
     if event == "SPELL_MISS_SELF" then
-        -- Player's spell missed: arg1=spellId, arg2=targetGuid, arg3=missInfo
-        ProcessSpellMissSelf(arg1, arg2, arg3)
+        -- Nampower: casterGuid, targetGuid, spellId, missInfo
+        ProcessSpellMissSelf(arg3, arg2, arg4)
         return
     end
 
     if event == "SPELL_MISS_OTHER" then
-        -- Other unit's spell missed: arg1=spellId, arg2=casterGuid, arg3=targetGuid, arg4=missInfo
-        ProcessSpellMissOther(arg1, arg2, arg3, arg4)
+        -- Nampower: casterGuid, targetGuid, spellId, missInfo
+        ProcessSpellMissOther(arg3, arg1, arg2, arg4)
         return
     end
 
