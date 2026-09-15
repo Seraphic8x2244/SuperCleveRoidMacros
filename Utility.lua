@@ -847,7 +847,8 @@ lib.allAuraCasts = lib.allAuraCasts or {}   -- [targetGUID][spellName][casterGui
 lib.pendingCasts = lib.pendingCasts or {}   -- [targetGUID][spellName] = {casterGuid, rank, time, comboPoints}
 lib.recentMisses = lib.recentMisses or {}   -- [targetGUID][spellName] = {time, spellId, targetName, reason} for miss/dodge/parry detection
 lib.recentDeaths = lib.recentDeaths or {}   -- [targetGUID] = GetTime() timestamp of UNIT_DIED (prevents false immunity on dead targets)
-lib.recentCCHits = lib.recentCCHits or {}   -- [targetGUID][ccType] = {count, lastHitTime} for DR tracking (prevents DR immunity → permanent)
+local DR_RESET_WINDOW = 20
+lib.recentCCHits = lib.recentCCHits or {}   -- [targetGUID][drType] = {count, lastHitTime} for NPC DR safeguard
 lib.iconCache = lib.iconCache or {}          -- [spellId] = texture (shared with pfUI 7.6 or standalone)
 
 -- Buff tracking tables (parallel to debuff tables, standalone Nampower mode only)
@@ -2327,7 +2328,7 @@ lib.pendingPersonalDebuffs = lib.pendingPersonalDebuffs or {}
 
 -- CC (Crowd Control) pending tracking system
 -- Stores CC spells to verify they landed (for immunity detection)
--- Format: { [index] = { timestamp = GetTime(), targetGUID = guid, targetName = name, spellID = id, ccType = "stun", immunityType = "stun" } }
+-- Format: { [index] = { timestamp = GetTime(), targetGUID = guid, targetName = name, spellID = id, ccType = "stun", immunityType = "stun", drType = "stun_control" } }
 lib.pendingCCDebuffs = lib.pendingCCDebuffs or {}
 
 -- Shared debuff pending tracking system
@@ -3113,17 +3114,17 @@ delayedTrackingFrame:SetScript("OnUpdate", function()
           elseif totalDebuffs < DEBUFF_CAP_THRESHOLD then
             -- Check DR before recording as permanent CC immunity
             local isDR = false
-            if pending.targetGUID and pending.ccType then
-              local drEntry = lib.recentCCHits[pending.targetGUID] and lib.recentCCHits[pending.targetGUID][pending.ccType]
-              if drEntry and (GetTime() - drEntry.lastHitTime) < 20 and drEntry.count >= 3 then
+            if pending.targetGUID and pending.drType then
+              local drEntry = lib.recentCCHits[pending.targetGUID] and lib.recentCCHits[pending.targetGUID][pending.drType]
+              if drEntry and (GetTime() - drEntry.lastHitTime) < DR_RESET_WINDOW and drEntry.count >= 3 then
                 isDR = true
               end
             end
             if isDR then
               if debug then
                 DEFAULT_CHAT_FRAME:AddMessage(
-                  _string_format("|cff00aaff[CC DR Skip]|r %s on %s - likely DR immune (3+ recent %s hits), not recording permanent immunity",
-                    pending.spellName or "Unknown", resolvedTargetName or "Unknown", pending.ccType or "Unknown")
+                  _string_format("|cff00aaff[CC DR Skip]|r %s on %s - likely %s DR immunity (3+ recent hits), not recording permanent immunity",
+                    pending.spellName or "Unknown", resolvedTargetName or "Unknown", pending.drType or "Unknown")
                 )
               end
             elseif resolvedTargetName and resolvedTargetName ~= "" and (pending.immunityType or pending.ccType) then
@@ -3162,13 +3163,18 @@ delayedTrackingFrame:SetScript("OnUpdate", function()
           if resolvedTargetName and learnedImmunityType then
             CleveRoids.RemoveCCImmunity(resolvedTargetName, learnedImmunityType)
           end
-          -- Track successful CC hit for DR detection
-          if pending.targetGUID and pending.ccType then
+          -- Track only NPC-applicable DR groups for the permanent-immunity safeguard.
+          if pending.targetGUID and pending.drType then
             lib.recentCCHits[pending.targetGUID] = lib.recentCCHits[pending.targetGUID] or {}
-            local entry = lib.recentCCHits[pending.targetGUID][pending.ccType]
-            lib.recentCCHits[pending.targetGUID][pending.ccType] = {
-              count = (entry and entry.count or 0) + 1,
-              lastHitTime = GetTime(),
+            local now = GetTime()
+            local entry = lib.recentCCHits[pending.targetGUID][pending.drType]
+            local count = 1
+            if entry and (now - entry.lastHitTime) < DR_RESET_WINDOW then
+              count = (entry.count or 0) + 1
+            end
+            lib.recentCCHits[pending.targetGUID][pending.drType] = {
+              count = count,
+              lastHitTime = now,
             }
           end
           if debug then
@@ -3619,6 +3625,7 @@ ev:SetScript("OnEvent", function()
         -- Uses the original spellID (not trackingSpellID) to detect CC type
         local ccType = CleveRoids.GetSpellCCType and CleveRoids.GetSpellCCType(spellID)
         local immunityType = CleveRoids.GetSpellImmunityType and CleveRoids.GetSpellImmunityType(spellID)
+        local drType = CleveRoids.GetSpellImmunityDRType and CleveRoids.GetSpellImmunityDRType(spellID)
 
         -- Debug: Show what GetSpellCCType returns for this spell
         if CleveRoids.debug then
@@ -3658,6 +3665,7 @@ ev:SetScript("OnEvent", function()
             spellName = spellName,
             ccType = ccType,
             immunityType = immunityType or ccType,
+            drType = drType,
             isHiddenCC = isHiddenCC,  -- Flag for hidden CC spells
           })
 
@@ -4375,6 +4383,7 @@ ev:SetScript("OnEvent", function()
       -- CC IMMUNITY TRACKING: Check if this spell is a CC spell
       local ccType = CleveRoids.GetSpellCCType and CleveRoids.GetSpellCCType(spellId)
       local immunityType = CleveRoids.GetSpellImmunityType and CleveRoids.GetSpellImmunityType(spellId)
+      local drType = CleveRoids.GetSpellImmunityDRType and CleveRoids.GetSpellImmunityDRType(spellId)
       if ccType then
         local isHiddenCC = lib.hiddenCCSpells and lib.hiddenCCSpells[spellId]
         if not isHiddenCC and _G.IsAuraHidden then
@@ -4396,6 +4405,7 @@ ev:SetScript("OnEvent", function()
           spellName = spellName,
           ccType = ccType,
           immunityType = immunityType or ccType,
+          drType = drType,
           isHiddenCC = isHiddenCC,
           spellGoHit = true,  -- We already know it hit
         })
@@ -6671,6 +6681,70 @@ end
 
 CleveRoids.GetSpellImmunityType = GetSpellImmunityType
 
+-- NPC immunity learning only needs DR groups that can actually diminish creatures.
+-- vMaNGOS 1.12 marks controlled stun, triggered stun, and Kidney Shot as DRTYPE_ALL;
+-- the other staged DR groups are player-only and must not suppress NPC immunity learning.
+local STUN_CONTROL_DR_OVERRIDES = {
+    [7922] = true,   -- Charge Stun
+    [20253] = true,  -- Intercept Stun Rank 1
+    [20614] = true,  -- Intercept Stun Rank 2
+    [20615] = true,  -- Intercept Stun Rank 3
+}
+local KIDNEY_SHOT_IDS = {
+    [408] = true,
+    [8643] = true,
+}
+
+local function IsKidneyShotSpell(spellID)
+    if KIDNEY_SHOT_IDS[spellID] then return true end
+
+    -- Vanilla Rogue family bit 21 (0x00200000) is Kidney Shot. Prefer the
+    -- family mask so custom ranks that preserve DBC family data also classify correctly.
+    if GetSpellRecField then
+        local familyName = GetSpellRecField(spellID, "spellFamilyName")
+        local familyFlags = GetSpellRecField(spellID, "spellFamilyFlags")
+        if familyName == 8 and familyFlags then -- SPELLFAMILY_ROGUE
+            local kidneyBit = 2097152 -- 0x00200000
+            if math.mod(math.floor(familyFlags / kidneyBit), 2) == 1 then
+                return true
+            end
+        end
+    end
+
+    return false
+end
+
+local function WasClientInitiatedSpell(spellID)
+    -- Nampower SPELL_CAST_EVENT fires only for spells initiated by the client.
+    -- Proc/trigger spell IDs reach server SPELL_GO/MISS without their own entry.
+    local cast = CleveRoids.pendingCasts and CleveRoids.pendingCasts[spellID]
+    if not cast or not cast.timestamp then return false end
+    local age = GetTime() - cast.timestamp
+    return age >= 0 and age <= 5
+end
+
+local function GetSpellImmunityDRType(spellID)
+    if GetSpellCCType(spellID) ~= "stun" then return nil end
+
+    if IsKidneyShotSpell(spellID) then
+        return "stun_kidneyshot"
+    end
+
+    -- These stun subspells are internally triggered but explicitly belong to
+    -- controlled-stun DR in Vanilla.
+    if STUN_CONTROL_DR_OVERRIDES[spellID] then
+        return "stun_control"
+    end
+
+    if WasClientInitiatedSpell(spellID) then
+        return "stun_control"
+    end
+
+    return "stun_trigger"
+end
+
+CleveRoids.GetSpellImmunityDRType = GetSpellImmunityDRType
+
 -- Record a CC immunity (permanent or buff-based)
 -- Parameters:
 --   npcName: Name of the NPC that is immune
@@ -8311,14 +8385,15 @@ local function ProcessSpellMissSelf(spellId, targetGuid, missInfo)
                 end
             end
 
-            -- Check DR before recording as permanent CC immunity
+            -- Check NPC-applicable DR before recording permanent CC immunity.
             local ccType = GetSpellCCType(spellId)
             local immunityType = GetSpellImmunityType(spellId) or ccType
-            if ccType and targetGuid then
-                local drEntry = lib.recentCCHits[targetGuid] and lib.recentCCHits[targetGuid][ccType]
-                if drEntry and (GetTime() - drEntry.lastHitTime) < 20 and drEntry.count >= 3 then
+            local drType = GetSpellImmunityDRType(spellId)
+            if drType and targetGuid then
+                local drEntry = lib.recentCCHits[targetGuid] and lib.recentCCHits[targetGuid][drType]
+                if drEntry and (GetTime() - drEntry.lastHitTime) < DR_RESET_WINDOW and drEntry.count >= 3 then
                     if CleveRoids.debug then
-                        CleveRoids.Print("|cff00aaff[SPELL_MISS DR Skip]|r " .. targetName .. " - likely DR immune to " .. ccType .. ", not recording")
+                        CleveRoids.Print("|cff00aaff[SPELL_MISS DR Skip]|r " .. targetName .. " - likely " .. drType .. " DR immunity, not recording")
                     end
                     return
                 end
