@@ -4847,7 +4847,8 @@ end
 -- ============================================================================
 
 -- Maps CC type names to mechanic constants (matches DBC mechanic IDs)
--- Note: Some types map to multiple mechanics via CCMechanicGroups below
+-- One name, one mechanic: [cc:type] follows the exact DBC mechanic. Several
+-- names may share a mechanic as aliases, but no name spans two mechanics.
 CleveRoids.CCMechanics = {
     -- Movement/control impairment
     charm       = 1,   -- Mind Control, Seduction
@@ -4856,31 +4857,30 @@ CleveRoids.CCMechanics = {
     disarm      = 3,   -- Disarm, Riposte disarm
     distract    = 4,   -- Distract (Rogue ability)
     fear        = 5,   -- Fear, Psychic Scream, Howl of Terror
-    grip        = 6,   -- Grip effects
+    fumble      = 6,   -- DBC Fumble mechanic
+    grip        = 6,   -- Legacy alias for fumble
     root        = 7,   -- Entangling Roots, Frost Nova, Improved Hamstring
     pacify      = 8,   -- Pacify effects
     silence     = 9,   -- Silence, Kick, Counterspell (lockout)
     sleep       = 10,  -- Hibernate, Wyvern Sting sleep
     snare       = 11,  -- Hamstring, Wing Clip, Crippling Poison
     slow        = 11,  -- Alias for snare
-    stun        = 12,  -- Consolidated: Stun(12) + Knockout(14) + Sap(30)
-    freeze      = 13,  -- Freeze effects (Frost Nova freeze)
+    stun        = 12,  -- Stun (Cheap Shot, Kidney Shot, Hammer of Justice)
+    freeze      = 13,  -- Freeze effects
+    knockout    = 14,  -- Knockout (Gouge, Repentance)
     bleed       = 15,  -- Rend, Garrote, Deep Wounds
     polymorph   = 17,  -- Polymorph (all variants)
     banish      = 18,  -- Banish (Warlock)
     shackle     = 20,  -- Shackle Undead
+    turn        = 23,  -- Turn effects
     horror      = 24,  -- Death Coil (Warlock), Intimidating Shout (horror)
+    interrupt   = 26,  -- Interrupt mechanic
     daze        = 27,  -- Dazed effects
-}
-
--- Mechanic groups: CC types that check multiple DBC mechanics
--- Used when a single conditional should match several related effects
-CleveRoids.CCMechanicGroups = {
-    stun = {12, 14, 30},  -- Stun(12), Knockout/Gouge(14), Sap(30)
+    sap         = 30,  -- Sap/Sapped mechanic
 }
 
 -- CC types that count as "crowd controlled" (loss of control)
--- Note: Mechanics 12, 14, 30 are all consolidated under "stun" for conditionals
+-- Individual DBC mechanics remain distinct; this table only powers [cc]/[cc:any].
 CleveRoids.CCTypesLossOfControl = {
     [1] = true,   -- charm
     [2] = true,   -- disoriented
@@ -4889,12 +4889,12 @@ CleveRoids.CCTypesLossOfControl = {
     [10] = true,  -- sleep
     [12] = true,  -- stun (Cheap Shot, Kidney Shot, etc.)
     [13] = true,  -- freeze
-    [14] = true,  -- knockout/gouge (now part of stun group)
+    [14] = true,  -- knockout/gouge
     [17] = true,  -- polymorph
     [18] = true,  -- banish
     [20] = true,  -- shackle
     [24] = true,  -- horror
-    [30] = true,  -- sap (now part of stun group)
+    [30] = true,  -- sap
 }
 
 -- Check if BuffLib is available with full mechanic support
@@ -4961,19 +4961,6 @@ function CleveRoids.ValidateUnitCC(unit, ccType)
         return CleveRoids.ValidateUnitAnyCrowdControl(unit)
     end
 
-    -- Check if this CC type maps to a group of mechanics
-    local mechanicGroup = CleveRoids.CCMechanicGroups[ccTypeLower]
-    if mechanicGroup then
-        -- Check all mechanics in the group (e.g., stun checks 12, 14, 30)
-        for _, mechanic in ipairs(mechanicGroup) do
-            if CleveRoids.ValidateUnitCCSingleMechanic(unit, mechanic) then
-                return true
-            end
-        end
-        return false
-    end
-
-    -- Single mechanic lookup
     local mechanic = CleveRoids.CCMechanics[ccTypeLower]
     if not mechanic then return false end
 

@@ -6025,6 +6025,7 @@ local CC_IMMUNITY_TYPES = {
     shackle = true,    -- Shackle Undead
     horror = true,     -- Death Coil
     disorient = true,  -- Scatter Shot, Blind
+    daze = true,       -- Daze mechanic
     snare = true,      -- Hamstring, Wing Clip
 }
 
@@ -6051,19 +6052,19 @@ local MECHANIC_TO_CC_TYPE = {
     [10] = "sleep",
     [11] = "snare",
     [12] = "stun",
-    [13] = "stun",     -- freeze → stun (similar effect)
-    [14] = "stun",     -- knockout/gouge → stun
+    [13] = "freeze",
+    [14] = "knockout",
     [17] = "polymorph",
     [18] = "banish",
     [20] = "shackle",
     [24] = "horror",
-    [27] = "disorient", -- daze → disorient
-    [30] = "stun",     -- sap → stun
+    [27] = "daze",
+    [30] = "sap",
 }
 
--- Mechanic-precise mapping used only for learned NPC immunity. Do not use
--- CCMechanicGroups here: Vanilla can distinguish Stun (12), Freeze (13),
--- Knockout (14), and Sap (30) immunities independently.
+-- Mechanic-precise mapping used only for learned NPC immunity. Keep it
+-- one-to-one: Vanilla can distinguish Stun (12), Freeze (13), Knockout (14)
+-- and Sap (30) immunities independently, so never fold them together here.
 local MECHANIC_TO_IMMUNITY_TYPE = {
     [1] = "charm",
     [2] = "disorient",
@@ -6079,7 +6080,7 @@ local MECHANIC_TO_IMMUNITY_TYPE = {
     [18] = "banish",
     [20] = "shackle",
     [24] = "horror",
-    [27] = "disorient", -- Preserve existing daze handling for now
+    [27] = "daze",
     [30] = "sap",
 }
 
@@ -7737,7 +7738,7 @@ function CleveRoids.ListCCImmunities(ccType)
         local key = "cc_" .. ccType
 
         if not CC_IMMUNITY_TYPES[ccType] then
-            CleveRoids.Print("Invalid CC type. Use: stun, freeze, knockout, sap, fear, root, silence, sleep, charm, polymorph, banish, shackle, horror, disorient, snare")
+            CleveRoids.Print("Invalid CC type. Use: stun, freeze, knockout, sap, fear, root, silence, sleep, charm, polymorph, banish, shackle, horror, disorient, daze, snare")
             return
         end
 
@@ -7788,7 +7789,7 @@ function CleveRoids.ClearCCImmunities(ccType)
         local key = "cc_" .. ccType
 
         if not CC_IMMUNITY_TYPES[ccType] then
-            CleveRoids.Print("Invalid CC type. Use: stun, freeze, knockout, sap, fear, root, silence, sleep, charm, polymorph, banish, shackle, horror, disorient, snare")
+            CleveRoids.Print("Invalid CC type. Use: stun, freeze, knockout, sap, fear, root, silence, sleep, charm, polymorph, banish, shackle, horror, disorient, daze, snare")
             return
         end
 
@@ -7811,13 +7812,13 @@ end
 function CleveRoids.AddCCImmunity(npcName, ccType, buffName)
     if not npcName or not ccType then
         CleveRoids.Print("Usage: /cleveroid addccimmune <npc name> <cctype> [buff name]")
-        CleveRoids.Print("CC Types: stun, freeze, knockout, sap, fear, root, silence, sleep, charm, polymorph, banish, shackle, horror, disorient, snare")
+        CleveRoids.Print("CC Types: stun, freeze, knockout, sap, fear, root, silence, sleep, charm, polymorph, banish, shackle, horror, disorient, daze, snare")
         return
     end
 
     ccType = NormalizeCCImmunityType(ccType)
     if not CC_IMMUNITY_TYPES[ccType] then
-        CleveRoids.Print("Invalid CC type. Use: stun, freeze, knockout, sap, fear, root, silence, sleep, charm, polymorph, banish, shackle, horror, disorient, snare")
+        CleveRoids.Print("Invalid CC type. Use: stun, freeze, knockout, sap, fear, root, silence, sleep, charm, polymorph, banish, shackle, horror, disorient, daze, snare")
         return
     end
 
