@@ -201,9 +201,13 @@ requirementCheckFrame:SetScript("OnEvent", function()
     -- v1.15.0 added frame:RegisterUnitEvent, which Utility.lua calls at file scope.
     -- On an older build that call raises, aborting the rest of the chunk -- so this
     -- is not a degraded-features warning, it's "the addon did not finish loading".
-    local hasClassicAPI1150 = hasClassicAPI and CleveRoids.ClassicAPI.HasMinimumVersion(1, 15, 0)
+    -- v1.15.8 scoped GetMouseButtonClicked to the click dispatch. Below it the
+    -- function exists but a held button keeps its value, so [button:N] reads the
+    -- button you are turning the camera with -- wrong quietly, which is the worse
+    -- failure and why the floor moved rather than the conditional being gated.
+    local hasClassicAPI1158 = hasClassicAPI and CleveRoids.ClassicAPI.HasMinimumVersion(1, 15, 8)
 
-    if not hasNampower30 or not hasUnitXP or not hasClassicAPI or not hasClassicAPI1150 then
+    if not hasNampower30 or not hasUnitXP or not hasClassicAPI or not hasClassicAPI1158 then
         -- Show warnings (don't disable — tearing down a partially-initialized addon causes hangs)
         if not hasNampower then
             CleveRoids.Print("|cFFFF9900WARNING:|r |cFF00FFFFAvitasia's Nampower v3.0.0+|r is required:")
@@ -223,9 +227,9 @@ requirementCheckFrame:SetScript("OnEvent", function()
             CleveRoids.Print("|cFFFF9900WARNING:|r |cFF00FFFFClassicAPI|r is required:")
             CleveRoids.Print("https://github.com/brues-code/ClassicAPI")
             CleveRoids.Print("Dispel-type and movement conditionals will be unavailable without it.")
-        elseif not hasClassicAPI1150 then
+        elseif not hasClassicAPI1158 then
             local major, minor, patch = CleveRoids.ClassicAPI.GetVersion()
-            CleveRoids.Print(format("|cFFFF9900WARNING:|r |cFF00FFFFClassicAPI v1.15.0+|r is required (you have v%d.%d.%d):", major, minor, patch))
+            CleveRoids.Print(format("|cFFFF9900WARNING:|r |cFF00FFFFClassicAPI v1.15.8+|r is required (you have v%d.%d.%d):", major, minor, patch))
             CleveRoids.Print("https://github.com/brues-code/ClassicAPI")
             CleveRoids.Print("The addon cannot finish loading on this version -- update ClassicAPI.")
         end
@@ -4527,14 +4531,9 @@ if CleveRoids.NampowerAPI.features.hasKeyEvents then
     CleveRoids.Frame:RegisterEvent("KEY_UP")
 end
 
--- ClassicAPI raw mouse-button events, for [button:N] icon refresh. Ungated,
--- unlike the Nampower features above: these long predate the ClassicAPI v1.15.0
--- floor the addon already refuses to run below.
-CleveRoids.Frame:RegisterEvent("GLOBAL_MOUSE_DOWN")
-CleveRoids.Frame:RegisterEvent("GLOBAL_MOUSE_UP")
-
--- ClassicAPI totem-bar tracking, for [totem:X] icon refresh. Ungated for the
--- same reason.
+-- ClassicAPI totem-bar tracking, for [totem:X] icon refresh. Ungated, unlike the
+-- Nampower features above: it long predates the ClassicAPI floor the addon
+-- already refuses to run below.
 CleveRoids.Frame:RegisterEvent("PLAYER_TOTEM_UPDATE")
 
 -- NOTE: SuperMacro hook installation is handled by Compatibility/SuperMacro.lua
@@ -5588,26 +5587,10 @@ function CleveRoids.Frame:KEY_UP()
     CleveRoids.isActionUpdateQueued = true
 end
 
--- ClassicAPI GLOBAL_MOUSE_DOWN / GLOBAL_MOUSE_UP: arg1 = button name
--- ("LeftButton" .. "Button5"), fired on every raw press/release whether or not
--- the click lands on a frame. [button:N] reads IsMouseButtonDown live, but
--- nothing sampled that state -- the OnUpdate polls modifier keys only -- so a
--- [button:N] macro's icon sat on whatever it resolved to with no button held.
--- Flag set directly rather than through QueueActionUpdate, as with KEY_DOWN:
--- these fire from the message pump, which can beat VARIABLES_LOADED to the
--- CleveRoidMacros table QueueActionUpdate reads.
-function CleveRoids.Frame:GLOBAL_MOUSE_DOWN()
-    CleveRoids.isActionUpdateQueued = true
-end
-
-function CleveRoids.Frame:GLOBAL_MOUSE_UP()
-    CleveRoids.isActionUpdateQueued = true
-end
-
 -- ClassicAPI PLAYER_TOTEM_UPDATE: arg1 = the slot (1 Fire .. 4 Air) whose totem
--- was dropped, expired, killed or recalled. The slot goes unread for the same
--- reason the mouse handlers ignore their button -- a [totem:X] macro may name
--- any slot, and [nototem:X] flips on any of them.
+-- was dropped, expired, killed or recalled. The slot goes unread and every macro
+-- is refreshed: a [totem:X] macro may name any slot, and [nototem:X] flips on any
+-- of them.
 function CleveRoids.Frame:PLAYER_TOTEM_UPDATE()
     CleveRoids.QueueActionUpdate()
 end

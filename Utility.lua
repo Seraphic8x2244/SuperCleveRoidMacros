@@ -734,14 +734,24 @@ CleveRoids.buttons = {
     ['5'] = 'Button5',
 }
 
--- True while any mapped mouse button is held. Backs the argument-less [button] /
--- [nobutton], mirroring how a bare [mod] means "any modifier". Bare [nobutton] is
--- the practical "activated by a keybind, not a click" test.
-function CleveRoids.AnyMouseButtonDown()
-    for _, name in pairs(CleveRoids.buttons) do
-        if IsMouseButtonDown(name) then return true end
-    end
-    return false
+-- The button that invoked the action now running, as retail's [button:N] means
+-- it. ClassicAPI v1.15.8+ scopes GetMouseButtonClicked to the click dispatch, so
+-- it reads the button of the handler this macro is running under -- through the
+-- helpers the handler calls, not just the handler itself -- and nil at any other
+-- time. A held button no longer keeps it set, which is what made mouse-turning
+-- poison every keybind press before v1.15.8.
+--
+-- nil outside a click dispatch, so the tooltip resolves as button 1 and sits
+-- still rather than tracking the mouse. Button:Click() with no argument reports
+-- LeftButton, which is how a keybind comes out as button 1 on retail.
+function CleveRoids.GetActivatingButton()
+    return GetMouseButtonClicked() or "LeftButton"
+end
+
+-- True while a click dispatch is what is running this action. Backs bare
+-- [button] / [nobutton], which retail has no equivalent for.
+function CleveRoids.WasClickActivated()
+    return GetMouseButtonClicked() ~= nil
 end
 
 CleveRoids.kmods = {

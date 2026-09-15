@@ -5341,27 +5341,34 @@ end
 
 -- A list of Conditionals and their functions to validate them
 CleveRoids.Keywords = {
-    -- [button:N] — true while mouse button N is held (1=Left, 2=Right, 3=Middle,
-    -- 4/5=extra). Routed through Multi so OR/AND lists and repeated groups behave
-    -- like every other argument conditional ([button:1/2] = left or right).
-    -- [button] with no argument — true if any mapped mouse button is held.
+    -- [button:N] — N is the button that INVOKED this action (1=Left, 2=Right,
+    -- 3=Middle, 4/5=extra), not one held down as a modifier. That is retail's
+    -- meaning, and it is why a keybind press counts as button 1: retail activates
+    -- through the left-click path, so [button:1] passes for a keybind and a
+    -- left-click alike, while [button:2] passes only for an actual right-click.
+    -- Routed through Multi so OR/AND lists behave like every other argument
+    -- conditional ([button:1/2] = invoked by left or right).
+    --
+    -- Bare [button] / [nobutton] ask whether a click drove this at all -- the one
+    -- thing the underlying data says that retail's conditional cannot express,
+    -- and the practical "activated by a keybind, not a click" test.
     button = function(conditionals)
         if type(conditionals.button) ~= "table" then
-            return CleveRoids.AnyMouseButtonDown()
+            return CleveRoids.WasClickActivated()
         end
+        local invoking = CleveRoids.GetActivatingButton()
         return Multi(conditionals.button, function(button)
-            local name = CleveRoids.buttons[button]
-            return name and IsMouseButtonDown(name) or false
+            return CleveRoids.buttons[button] == invoking
         end, conditionals, "button")
     end,
 
     nobutton = function(conditionals)
         if type(conditionals.nobutton) ~= "table" then
-            return not CleveRoids.AnyMouseButtonDown()
+            return not CleveRoids.WasClickActivated()
         end
+        local invoking = CleveRoids.GetActivatingButton()
         return NegatedMulti(conditionals.nobutton, function(button)
-            local name = CleveRoids.buttons[button]
-            return not (name and IsMouseButtonDown(name))
+            return CleveRoids.buttons[button] ~= invoking
         end, conditionals, "nobutton")
     end,
 

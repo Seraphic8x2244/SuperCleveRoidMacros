@@ -45,8 +45,9 @@ CleveRoids.supported   = CleveRoids.hasTurtle
 -- "may we call C_Macro.SetMacroDisplay" guard, so the two can never disagree.
 --
 -- Feature-detect rather than version-check: SetMacroDisplay ships in ClassicAPI
--- v1.15.0, this addon's minimum, so a nil here means the client mod is missing
--- outright -- the case Core.lua's requirement check warns about but keeps running.
+-- v1.15.0, below this addon's minimum, so a nil here means the client mod is
+-- missing outright -- the case Core.lua's requirement check warns about but
+-- keeps running.
 CleveRoids.ClassicAPIMacroDisplay =
     (type(C_Macro) == "table" and C_Macro.SetMacroDisplay ~= nil) and true or false
 
