@@ -312,10 +312,9 @@ end
 -- Unit Health
 --------------------------------------------------------------------------------
 
--- Health deficit (max - current) for `unit` in one call. Falls back to
--- UnitHealthMax - UnitHealth without ClassicAPI.
-API.UnitHealthMissing = UnitHealthMissing or function(unit)
-    return (UnitHealthMax(unit) or 0) - (UnitHealth(unit) or 0)
+-- Health deficit (max - current) for `unit` in one call.
+function API.UnitHealthMissing(unit)
+    return UnitHealthMissing(unit)
 end
 
 --------------------------------------------------------------------------------
@@ -324,18 +323,18 @@ end
 
 -- Current power for a specific Enum.PowerType (0=Mana, 1=Rage, 2=Focus,
 -- 3=Energy, 4=Happiness), or the unit's primary power when powerType is omitted.
--- Display-divided (rage reads 0..100). Falls back to UnitMana without ClassicAPI.
-API.UnitPower = UnitPower or function(unit, powerType)
-    return UnitMana(unit)
+-- Display-divided (rage reads 0..100).
+function API.UnitPower(unit, powerType)
+    return UnitPower(unit, powerType)
 end
 
-API.UnitPowerMax = UnitPowerMax or function(unit, powerType)
-    return UnitManaMax(unit)
+function API.UnitPowerMax(unit, powerType)
+    return UnitPowerMax(unit, powerType)
 end
 
 -- Power deficit (max - current) for the type / primary power, in one call.
-API.UnitPowerMissing = UnitPowerMissing or function(unit, powerType)
-    return (UnitManaMax(unit) or 0) - (UnitMana(unit) or 0)
+function API.UnitPowerMissing(unit, powerType)
+    return UnitPowerMissing(unit, powerType)
 end
 
 -- Unit's primary power type as an integer (0=Mana .. 4=Happiness).
