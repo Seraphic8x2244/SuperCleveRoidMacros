@@ -2327,7 +2327,7 @@ lib.pendingPersonalDebuffs = lib.pendingPersonalDebuffs or {}
 
 -- CC (Crowd Control) pending tracking system
 -- Stores CC spells to verify they landed (for immunity detection)
--- Format: { [index] = { timestamp = GetTime(), targetGUID = guid, targetName = name, spellID = id, ccType = "stun" } }
+-- Format: { [index] = { timestamp = GetTime(), targetGUID = guid, targetName = name, spellID = id, ccType = "stun", immunityType = "stun" } }
 lib.pendingCCDebuffs = lib.pendingCCDebuffs or {}
 
 -- Shared debuff pending tracking system
@@ -3126,13 +3126,14 @@ delayedTrackingFrame:SetScript("OnUpdate", function()
                     pending.spellName or "Unknown", resolvedTargetName or "Unknown", pending.ccType or "Unknown")
                 )
               end
-            elseif resolvedTargetName and resolvedTargetName ~= "" and pending.ccType then
-              CleveRoids.RecordCCImmunity(resolvedTargetName, pending.ccType, nil, pending.spellName)
+            elseif resolvedTargetName and resolvedTargetName ~= "" and (pending.immunityType or pending.ccType) then
+              local learnedImmunityType = pending.immunityType or pending.ccType
+              CleveRoids.RecordCCImmunity(resolvedTargetName, learnedImmunityType, nil, pending.spellName)
 
               if debug then
                 DEFAULT_CHAT_FRAME:AddMessage(
                   _string_format("|cff00ff00[CC Immunity]|r %s is immune to %s (%s) - verified: debuff missing, only %d debuffs on target",
-                    resolvedTargetName, pending.ccType, pending.spellName or "Unknown", totalDebuffs)
+                    resolvedTargetName, learnedImmunityType, pending.spellName or "Unknown", totalDebuffs)
                 )
               end
             elseif debug then
@@ -3157,8 +3158,9 @@ delayedTrackingFrame:SetScript("OnUpdate", function()
           if (not resolvedTargetName or resolvedTargetName == "") and pending.targetGUID then
             resolvedTargetName = lib.guidToName[pending.targetGUID]
           end
-          if resolvedTargetName and pending.ccType then
-            CleveRoids.RemoveCCImmunity(resolvedTargetName, pending.ccType)
+          local learnedImmunityType = pending.immunityType or pending.ccType
+          if resolvedTargetName and learnedImmunityType then
+            CleveRoids.RemoveCCImmunity(resolvedTargetName, learnedImmunityType)
           end
           -- Track successful CC hit for DR detection
           if pending.targetGUID and pending.ccType then
@@ -3616,6 +3618,7 @@ ev:SetScript("OnEvent", function()
         -- CC IMMUNITY TRACKING: Check if this spell is a CC spell and track for immunity verification
         -- Uses the original spellID (not trackingSpellID) to detect CC type
         local ccType = CleveRoids.GetSpellCCType and CleveRoids.GetSpellCCType(spellID)
+        local immunityType = CleveRoids.GetSpellImmunityType and CleveRoids.GetSpellImmunityType(spellID)
 
         -- Debug: Show what GetSpellCCType returns for this spell
         if CleveRoids.debug then
@@ -3654,6 +3657,7 @@ ev:SetScript("OnEvent", function()
             spellID = spellID,
             spellName = spellName,
             ccType = ccType,
+            immunityType = immunityType or ccType,
             isHiddenCC = isHiddenCC,  -- Flag for hidden CC spells
           })
 
@@ -4370,6 +4374,7 @@ ev:SetScript("OnEvent", function()
 
       -- CC IMMUNITY TRACKING: Check if this spell is a CC spell
       local ccType = CleveRoids.GetSpellCCType and CleveRoids.GetSpellCCType(spellId)
+      local immunityType = CleveRoids.GetSpellImmunityType and CleveRoids.GetSpellImmunityType(spellId)
       if ccType then
         local isHiddenCC = lib.hiddenCCSpells and lib.hiddenCCSpells[spellId]
         if not isHiddenCC and _G.IsAuraHidden then
@@ -4390,6 +4395,7 @@ ev:SetScript("OnEvent", function()
           spellID = spellId,
           spellName = spellName,
           ccType = ccType,
+          immunityType = immunityType or ccType,
           isHiddenCC = isHiddenCC,
           spellGoHit = true,  -- We already know it hit
         })
@@ -6005,7 +6011,10 @@ local IMMUNITY_SCHOOLS = {
 -- CC (Crowd Control) immunity types
 -- These are stored with "cc_" prefix in CleveRoids_ImmunityData to avoid collision with damage schools
 local CC_IMMUNITY_TYPES = {
-    stun = true,       -- Cheap Shot, Kidney Shot, Bash, Gouge, Sap
+    stun = true,       -- Mechanic 12: Cheap Shot, Kidney Shot, Hammer of Justice
+    freeze = true,     -- Mechanic 13: frozen effects
+    incap = true,      -- Mechanic 14: Gouge, Repentance, Blast Wave
+    sap = true,        -- Mechanic 30: Sap
     fear = true,       -- Fear, Psychic Scream, Howl of Terror
     root = true,       -- Entangling Roots, Frost Nova
     silence = true,    -- Silence, Counterspell
@@ -6013,10 +6022,23 @@ local CC_IMMUNITY_TYPES = {
     charm = true,      -- Mind Control, Seduction
     polymorph = true,  -- Polymorph (all variants)
     banish = true,     -- Banish
+    shackle = true,    -- Shackle Undead
     horror = true,     -- Death Coil
     disorient = true,  -- Scatter Shot, Blind
     snare = true,      -- Hamstring, Wing Clip
 }
+
+local CC_IMMUNITY_ALIASES = {
+    knockout = "incap",
+    incapacitate = "incap",
+    incapacitated = "incap",
+}
+
+local function NormalizeCCImmunityType(ccType)
+    if not ccType then return nil end
+    local normalized = string.lower(ccType)
+    return CC_IMMUNITY_ALIASES[normalized] or normalized
+end
 
 -- Maps DBC mechanic IDs back to CC type names for immunity recording
 -- Inverse of CleveRoids.CCMechanics (defined in Conditionals.lua)
@@ -6037,6 +6059,28 @@ local MECHANIC_TO_CC_TYPE = {
     [24] = "horror",
     [27] = "disorient", -- daze → disorient
     [30] = "stun",     -- sap → stun
+}
+
+-- Mechanic-precise mapping used only for learned NPC immunity. Do not use
+-- CCMechanicGroups here: Vanilla can distinguish Stun (12), Freeze (13),
+-- Knockout/Incapacitate (14), and Sap (30) immunities independently.
+local MECHANIC_TO_IMMUNITY_TYPE = {
+    [1] = "charm",
+    [2] = "disorient",
+    [5] = "fear",
+    [7] = "root",
+    [9] = "silence",
+    [10] = "sleep",
+    [11] = "snare",
+    [12] = "stun",
+    [13] = "freeze",
+    [14] = "incap",
+    [17] = "polymorph",
+    [18] = "banish",
+    [20] = "shackle",
+    [24] = "horror",
+    [27] = "disorient", -- Preserve existing daze handling for now
+    [30] = "sap",
 }
 
 -- Spells with split damage types (initial hit vs DoT/debuff)
@@ -6583,6 +6627,49 @@ end
 -- Expose publicly for use by other modules
 CleveRoids.GetSpellCCType = GetSpellCCType
 
+-- Resolve the mechanic bucket used for learned NPC immunity. DBC spell/effect
+-- mechanics are authoritative; aura type is only a fallback for spells whose
+-- mechanic fields are empty.
+local function GetSpellImmunityType(spellID)
+    if not spellID or spellID <= 0 then return nil end
+
+    if GetSpellRecField then
+        local mechanic = GetSpellRecField(spellID, "mechanic")
+        if mechanic and mechanic > 0 and MECHANIC_TO_IMMUNITY_TYPE[mechanic] then
+            return MECHANIC_TO_IMMUNITY_TYPE[mechanic]
+        end
+
+        local effectMechanics = GetSpellRecField(spellID, "effectMechanic")
+        if effectMechanics then
+            for i = 1, 3 do
+                local em = effectMechanics[i]
+                if em and em > 0 and MECHANIC_TO_IMMUNITY_TYPE[em] then
+                    return MECHANIC_TO_IMMUNITY_TYPE[em]
+                end
+            end
+        end
+
+        local auraNames = GetSpellRecField(spellID, "effectApplyAuraName")
+        if auraNames then
+            for i = 1, 3 do
+                local an = auraNames[i]
+                if an and an > 0 and AURA_NAME_TO_CC_TYPE[an] then
+                    return AURA_NAME_TO_CC_TYPE[an]
+                end
+            end
+        end
+    end
+
+    local mechanic = CleveRoids.ClassicAPI.GetSpellMechanicByID(spellID)
+    if mechanic and mechanic > 0 and MECHANIC_TO_IMMUNITY_TYPE[mechanic] then
+        return MECHANIC_TO_IMMUNITY_TYPE[mechanic]
+    end
+
+    return nil
+end
+
+CleveRoids.GetSpellImmunityType = GetSpellImmunityType
+
 -- Record a CC immunity (permanent or buff-based)
 -- Parameters:
 --   npcName: Name of the NPC that is immune
@@ -6593,6 +6680,8 @@ local function RecordCCImmunity(npcName, ccType, conditionalBuff, spellName)
     if not npcName or not ccType or npcName == "" then
         return
     end
+
+    ccType = NormalizeCCImmunityType(ccType)
 
     -- Validate CC type
     if not CC_IMMUNITY_TYPES[ccType] then
@@ -6653,6 +6742,8 @@ local function RemoveCCImmunity(npcName, ccType)
         return
     end
 
+    ccType = NormalizeCCImmunityType(ccType)
+
     local key = "cc_" .. ccType
 
     if CleveRoids_ImmunityData[key] and CleveRoids_ImmunityData[key][npcName] then
@@ -6676,6 +6767,8 @@ local function CheckCCImmunity(unitId, ccType)
     if not unitId or not UnitExists(unitId) then
         return false
     end
+
+    ccType = NormalizeCCImmunityType(ccType)
 
     -- CC immunity only tracked for NPCs
     if UnitIsPlayer(unitId) then
@@ -7370,8 +7463,23 @@ function CleveRoids.CheckImmunity(unitId, spellOrSchool)
 
     -- Check if input is a CC type (stun, fear, root, etc.)
     local inputLower = string.lower(spellOrSchool)
-    if CC_IMMUNITY_TYPES[inputLower] then
-        return CheckCCImmunity(unitId, inputLower)
+    local ccInput = NormalizeCCImmunityType(inputLower)
+    if CC_IMMUNITY_TYPES[ccInput] then
+        return CheckCCImmunity(unitId, ccInput)
+    end
+
+    -- Spell-name queries should honour mechanic immunity as well as school
+    -- immunity. This makes bare [immune]/[noimmune] accurate for CC spells.
+    local ccSpellName = CleveRoids.StripRank(spellOrSchool)
+    if ccSpellName then
+        ccSpellName = string.gsub(ccSpellName, "_", " ")
+    end
+    local ccSpellID = GetSpellIdForName and GetSpellIdForName(ccSpellName)
+    if ccSpellID then
+        local immunityType = GetSpellImmunityType(ccSpellID)
+        if immunityType and CheckCCImmunity(unitId, immunityType) then
+            return true
+        end
     end
 
     -- Universal debuff-based immunities (Banish, etc.)
@@ -7625,11 +7733,11 @@ end
 -- List CC immunities
 function CleveRoids.ListCCImmunities(ccType)
     if ccType then
-        ccType = string.lower(ccType)
+        ccType = NormalizeCCImmunityType(ccType)
         local key = "cc_" .. ccType
 
         if not CC_IMMUNITY_TYPES[ccType] then
-            CleveRoids.Print("Invalid CC type. Use: stun, fear, root, silence, sleep, charm, polymorph, banish, horror, disorient, snare")
+            CleveRoids.Print("Invalid CC type. Use: stun, freeze, incap, sap, fear, root, silence, sleep, charm, polymorph, banish, shackle, horror, disorient, snare")
             return
         end
 
@@ -7676,11 +7784,11 @@ end
 -- Clear CC immunities
 function CleveRoids.ClearCCImmunities(ccType)
     if ccType then
-        ccType = string.lower(ccType)
+        ccType = NormalizeCCImmunityType(ccType)
         local key = "cc_" .. ccType
 
         if not CC_IMMUNITY_TYPES[ccType] then
-            CleveRoids.Print("Invalid CC type. Use: stun, fear, root, silence, sleep, charm, polymorph, banish, horror, disorient, snare")
+            CleveRoids.Print("Invalid CC type. Use: stun, freeze, incap, sap, fear, root, silence, sleep, charm, polymorph, banish, shackle, horror, disorient, snare")
             return
         end
 
@@ -7703,13 +7811,13 @@ end
 function CleveRoids.AddCCImmunity(npcName, ccType, buffName)
     if not npcName or not ccType then
         CleveRoids.Print("Usage: /cleveroid addccimmune <npc name> <cctype> [buff name]")
-        CleveRoids.Print("CC Types: stun, fear, root, silence, sleep, charm, polymorph, banish, horror, disorient, snare")
+        CleveRoids.Print("CC Types: stun, freeze, incap, sap, fear, root, silence, sleep, charm, polymorph, banish, shackle, horror, disorient, snare")
         return
     end
 
-    ccType = string.lower(ccType)
+    ccType = NormalizeCCImmunityType(ccType)
     if not CC_IMMUNITY_TYPES[ccType] then
-        CleveRoids.Print("Invalid CC type. Use: stun, fear, root, silence, sleep, charm, polymorph, banish, horror, disorient, snare")
+        CleveRoids.Print("Invalid CC type. Use: stun, freeze, incap, sap, fear, root, silence, sleep, charm, polymorph, banish, shackle, horror, disorient, snare")
         return
     end
 
@@ -7735,7 +7843,7 @@ function CleveRoids.RemoveCCImmunityCommand(npcName, ccType)
         return
     end
 
-    ccType = string.lower(ccType)
+    ccType = NormalizeCCImmunityType(ccType)
     local key = "cc_" .. ccType
     if CleveRoids_ImmunityData[key] and CleveRoids_ImmunityData[key][npcName] then
         CleveRoids_ImmunityData[key][npcName] = nil
@@ -8204,6 +8312,7 @@ local function ProcessSpellMissSelf(spellId, targetGuid, missInfo)
 
             -- Check DR before recording as permanent CC immunity
             local ccType = GetSpellCCType(spellId)
+            local immunityType = GetSpellImmunityType(spellId) or ccType
             if ccType and targetGuid then
                 local drEntry = lib.recentCCHits[targetGuid] and lib.recentCCHits[targetGuid][ccType]
                 if drEntry and (GetTime() - drEntry.lastHitTime) < 20 and drEntry.count >= 3 then
@@ -8223,8 +8332,8 @@ local function ProcessSpellMissSelf(spellId, targetGuid, missInfo)
             end
 
             -- Record as permanent immunity
-            if ccType then
-                RecordCCImmunity(targetName, ccType, nil, spellName)
+            if immunityType then
+                RecordCCImmunity(targetName, immunityType, nil, spellName)
             else
                 RecordImmunity(targetName, spellName, nil, spellId)
             end
