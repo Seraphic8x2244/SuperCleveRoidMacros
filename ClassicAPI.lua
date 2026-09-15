@@ -247,8 +247,8 @@ end
 -- Pummel / Earth Shock lockout) on the player, or 0 when not kicked. Read from
 -- C_LossOfControl, which synthesizes the lockout from the server's own
 -- SMSG_SPELL_COOLDOWN packet -- a state no debuff scan can see. Also returns the
--- seconds remaining (nil if ClassicAPI didn't observe the applying cast). Returns
--- 0 for a client without C_LossOfControl. Player-only (vanilla LoC is local-only).
+-- seconds remaining (nil if ClassicAPI didn't observe the applying cast).
+-- Player-only (vanilla LoC is local-only).
 function API.GetSchoolLockout()
     local n = C_LossOfControl.GetActiveLossOfControlDataCount() or 0
     for i = 1, n do

@@ -4462,12 +4462,8 @@ CleveRoids.Frame:RegisterEvent("UPDATE_SHAPESHIFT_FORM")
 CleveRoids.Frame:RegisterEvent("SPELL_UPDATE_COOLDOWN")
 CleveRoids.Frame:RegisterEvent("PLAYER_STARTED_MOVING")
 -- ClassicAPI loss-of-control (school-interrupt lockout) for [locked]/[nolocked].
--- Gated on the namespace so an older ClassicAPI without it doesn't error on an
--- unknown event.
-if type(C_LossOfControl) == "table" then
-    CleveRoids.Frame:RegisterEvent("LOSS_OF_CONTROL_ADDED")
-    CleveRoids.Frame:RegisterEvent("LOSS_OF_CONTROL_UPDATE")
-end
+CleveRoids.Frame:RegisterEvent("LOSS_OF_CONTROL_ADDED")
+CleveRoids.Frame:RegisterEvent("LOSS_OF_CONTROL_UPDATE")
 -- The unit state streams that drive icon refresh: GUID events when Nampower
 -- provides them (v2.39+, one event per unit change rather than one per token),
 -- else the stock per-token events. These cannot become RegisterUnitEvent calls
