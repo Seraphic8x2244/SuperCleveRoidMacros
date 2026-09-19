@@ -2,7 +2,10 @@
 
 ## Status
 
-Design only. No runtime code is changed by this document.
+Implemented on branch `design/temp-cc-immunity`.
+
+Runtime implementation is intentionally confined to `Utility.lua`; this
+document remains the contract for adding future curated rules.
 
 This design extends the CC/immunity model documented in
 `docs/CC-IMMUNITY-DR.md` with one deliberately small exception mechanism:
@@ -238,6 +241,20 @@ TempCCImmune rule
 Sartura's Whirlwind must not be added to the generic invulnerability list.
 Doing so could incorrectly suppress learning of unrelated real immunities
 observed during Whirlwind.
+
+## Implemented integration points
+
+The current implementation contains:
+
+- `TEMP_CC_IMMUNITIES` in `Utility.lua`;
+- a creature-entry resolver that accepts only normal `F130` creature GUIDs;
+- `IsTemporarilyCCImmune(unit, ccType)`, using
+  `C_UnitAuras.GetUnitAuraBySpellID` so only curated aura IDs are queried;
+- a live-state check in `CheckCCImmunity`;
+- a matching-mechanic guard in delayed missing-debuff immunity learning;
+- a matching-mechanic guard in Nampower `SPELL_MISS -> IMMUNE` learning.
+
+No SavedVariables format changes are introduced.
 
 ## First curated rule
 
