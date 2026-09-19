@@ -114,7 +114,9 @@ ID from becoming an unintended cross-encounter rule.
 The subsystem needs a stable creature entry ID.
 
 Nampower `GetUnitGUID(unit)` returns the unit GUID as a 16-digit hexadecimal
-string, for example `0xF130...`.
+string. Its own documentation uses the client creature form `0xF530...`;
+Vanilla/MaNGOS code also documents normal creature GUIDs as the `F130/F530`
+forms.
 
 vMaNGOS constructs object GUIDs as:
 
@@ -123,8 +125,9 @@ MAKE_NEW_GUID(low, entry, high)
 = low | (entry << 24) | (high << 48)
 ```
 
-For a normal creature (`HIGHGUID_UNIT = 0xF130`), the creature entry therefore
-occupies the middle 24 bits of the GUID.
+For normal creature GUIDs, the creature entry occupies the middle 24 bits in
+both `F130` and `F530` forms. The implementation accepts those two forms and
+rejects pet GUID forms such as `F140/F540`.
 
 Implementation should hide this behind one small helper, conceptually:
 
@@ -247,7 +250,7 @@ observed during Whirlwind.
 The current implementation contains:
 
 - `TEMP_CC_IMMUNITIES` in `Utility.lua`;
-- a creature-entry resolver that accepts only normal `F130` creature GUIDs;
+- a creature-entry resolver that accepts the normal `F130/F530` creature GUID forms and rejects pet forms;
 - `IsTemporarilyCCImmune(unit, ccType)`, using
   `C_UnitAuras.GetUnitAuraBySpellID` so only curated aura IDs are queried;
 - a live-state check in `CheckCCImmunity`;
