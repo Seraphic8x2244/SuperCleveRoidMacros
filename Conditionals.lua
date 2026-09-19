@@ -4867,7 +4867,8 @@ CleveRoids.CCMechanics = {
     slow        = 11,  -- Alias for snare
     stun        = 12,  -- Stun (Cheap Shot, Kidney Shot, Hammer of Justice)
     freeze      = 13,  -- Freeze effects
-    knockout    = 14,  -- Knockout (Gouge, Repentance)
+    knockout    = 14,  -- Knockout/Incapacitated (Gouge, Repentance, Sap)
+    sap         = 14,  -- Compatibility alias: Vanilla 1.12 Sap is mechanic 14
     bleed       = 15,  -- Rend, Garrote, Deep Wounds
     polymorph   = 17,  -- Polymorph (all variants)
     banish      = 18,  -- Banish (Warlock)
@@ -4876,7 +4877,6 @@ CleveRoids.CCMechanics = {
     horror      = 24,  -- Death Coil (Warlock), Intimidating Shout (horror)
     interrupt   = 26,  -- Interrupt mechanic
     daze        = 27,  -- Dazed effects
-    sap         = 30,  -- Sap/Sapped mechanic
 }
 
 -- CC types that count as "crowd controlled" (loss of control)
@@ -4889,12 +4889,11 @@ CleveRoids.CCTypesLossOfControl = {
     [10] = true,  -- sleep
     [12] = true,  -- stun (Cheap Shot, Kidney Shot, etc.)
     [13] = true,  -- freeze
-    [14] = true,  -- knockout/gouge
+    [14] = true,  -- knockout/incapacitated, including Sap
     [17] = true,  -- polymorph
     [18] = true,  -- banish
     [20] = true,  -- shackle
     [24] = true,  -- horror
-    [30] = true,  -- sap
 }
 
 -- Check if BuffLib is available with full mechanic support
