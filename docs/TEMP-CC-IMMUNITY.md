@@ -111,36 +111,22 @@ ID from becoming an unintended cross-encounter rule.
 
 ## Creature entry identity
 
-The subsystem needs a stable creature entry ID.
+The subsystem needs a stable creature entry ID and uses ClassicAPI's
+`UnitCreatureID(unit)` for it.
 
-Nampower `GetUnitGUID(unit)` returns the unit GUID as a 16-digit hexadecimal
-string. Its own documentation uses the client creature form `0xF530...`;
-Vanilla/MaNGOS code also documents normal creature GUIDs as the `F130/F530`
-forms.
+`UnitCreatureID` resolves normal and extended unit tokens (including raw GUID
+tokens) and returns the creature-template/NPC entry directly. This keeps GUID
+layout and client/server GUID-prefix details out of SCRM.
 
-vMaNGOS constructs object GUIDs as:
-
-```cpp
-MAKE_NEW_GUID(low, entry, high)
-= low | (entry << 24) | (high << 48)
-```
-
-For normal creature GUIDs, the creature entry occupies the middle 24 bits in
-both `F130` and `F530` forms. The implementation accepts those two forms and
-rejects pet GUID forms such as `F140/F540`.
-
-Implementation should hide this behind one small helper, conceptually:
+Implementation hides that dependency behind one small helper, conceptually:
 
 ```lua
-GetCreatureEntry(unit) -> entryID or nil
+GetCreatureEntry(unit) -> UnitCreatureID(unit)
 ```
 
-The rest of TempCCImmune must not know how the entry was obtained. If a future
-client/API provides a direct creature-entry accessor, only this helper needs to
-change.
-
-The helper must reject non-creature GUIDs rather than interpreting their middle
-bits as creature entries.
+The rest of TempCCImmune does not parse GUID strings or depend on localized NPC
+names. `UnitCreatureID` was added to ClassicAPI before the v1.15.8 minimum
+already required by SCRM.
 
 ## Aura lookup
 
@@ -250,7 +236,7 @@ observed during Whirlwind.
 The current implementation contains:
 
 - `TEMP_CC_IMMUNITIES` in `Utility.lua`;
-- a creature-entry resolver that accepts the normal `F130/F530` creature GUID forms and rejects pet forms;
+- a creature-entry resolver backed by ClassicAPI `UnitCreatureID(unit)`;
 - `IsTemporarilyCCImmune(unit, ccType)`, using
   `C_UnitAuras.GetUnitAuraBySpellID` so only curated aura IDs are queried;
 - a live-state check in `CheckCCImmunity`;
