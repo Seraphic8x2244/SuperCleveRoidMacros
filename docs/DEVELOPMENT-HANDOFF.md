@@ -7,13 +7,24 @@ Updated: 2026-09-19
 - Repository: `Seraphic8x2244/SuperCleveRoidMacros`
 - Branch: `design/temp-cc-immunity`
 - Base: `main` at `37ca7cef4012cc0d76b7e559ac9517c785dbae79`
-- Upstream `brues-code/SuperCleveRoidMacros:main`: also `37ca7cef4012cc0d76b7e559ac9517c785dbae79`
-- TOC version: `@project-version@` (repository has no published GitHub release/version tag to record here)
-- Latest branch commit before this handoff: `52da56262580c51dd6a9688c42284eb133c8dd34`
-- Branch relation before this handoff: 12 commits ahead, 0 behind `main`
+- Upstream `brues-code/SuperCleveRoidMacros:main`: also `37ca7cef4012cc0d76b7e559ac9517c785dbae79` at last verification
+- TOC version: `@project-version@` (repository has no fixed source-tree version string)
+- Latest functional/documentation commit before this handoff refresh:
+  `dc3c3263479d034b93886bd793f7cb10c3b578c1`
+- Branch relation before this handoff refresh: 19 commits ahead, 0 behind `main`
+- Branch delta: `Conditionals.lua`, `Utility.lua`,
+  `docs/CC-IMMUNITY-DR.md`, `docs/DEVELOPMENT-HANDOFF.md`,
+  and `docs/TEMP-CC-IMMUNITY.md`
 
 ## Recent branch commits
 
+- `dc3c3263` — Document temporary CC immunity implementation audit
+- `5f0af64a` — Localize split CC name fallback
+- `af5a8869` — Harden immunity guard and locale pattern lookup
+- `c5a71898` — Document locale-safe aura verification
+- `dff206db` — Avoid duplicate localized aura parsing
+- `a74578b6` — Localize aura-landed immunity verification
+- `5a29a222` — Add temporary CC development handoff
 - `52da5626` — Document temp CC audit findings
 - `af406a80` — Curate temporary immunity guard auras
 - `b56b2529` — Correct Vanilla Sap mechanic documentation
@@ -21,79 +32,98 @@ Updated: 2026-09-19
 - `2884149a` — Correct Vanilla Sap mechanic alias
 - `bc4a4811` — Use ClassicAPI creature identity in temp CC design
 - `3dee891e` — Use ClassicAPI creature IDs for temp CC immunity
-- Earlier commits on this branch add and implement `docs/TEMP-CC-IMMUNITY.md`.
 
 ## Completed
 
 ### TempCCImmune microsystem
 
-- Added a curated `TEMP_CC_IMMUNITIES` table in `Utility.lua`.
+- Added curated `TEMP_CC_IMMUNITIES` data in `Utility.lua`.
 - First rule: creature entry 15516 (Battleguard Sartura), aura 26083
   (Whirlwind), mechanic `stun`.
-- Creature identity uses ClassicAPI `UnitCreatureID(unit)`.
+- Creature identity uses ClassicAPI `UnitCreatureID(unit)`; manual GUID parsing
+  was removed.
 - Aura identity uses `C_UnitAuras.GetUnitAuraBySpellID(unit, auraID)`.
-- `CheckCCImmunity` treats a matching temporary immunity as live state.
+- `CheckCCImmunity` treats matching temporary immunity as live state.
 - Explicit Nampower `SPELL_MISS -> IMMUNE` learning skips a matching
   temporary CC immunity.
-- Delayed missing-debuff CC learning has the same matching-mechanic guard.
-- No TempCC state is persisted to SavedVariables.
+- Delayed missing-debuff CC learning uses the same matching-mechanic guard.
+- TempCC state is never persisted to SavedVariables.
 - No new runtime Lua module was added.
 
-### Audit corrections
+### CC / immunity audit corrections
 
-- Removed manual F130/F530 GUID parsing in favor of `UnitCreatureID`.
-- Corrected Vanilla 1.12 Sap handling: client `SpellMechanic.dbc` reports
-  Sap as mechanic 14 (incapacitated), so `sap` is now a compatibility alias
-  of `knockout`; the incorrect client mechanic-30 distinction was removed.
-- Corrected `docs/CC-IMMUNITY-DR.md` to distinguish the Vanilla client DBC
-  from vMaNGOS' broader server-side mechanic enum.
-- Replaced the misleading `INVULNERABILITY_SPELL_IDS` table with curated
-  `IMMUNITY_GUARD_AURA_IDS`.
-- Removed unrelated effects (including Sap, Forbearance, food/poison/etc.)
-  from that broad guard and added genuine Ice Block immunity.
-- Kept protection/reflection auras as conservative guards against poisoning
-  learned immunity data.
+- Corrected Vanilla 1.12 Sap handling. Client `SpellMechanic.dbc` reports Sap
+  as mechanic 14, so `sap` is a compatibility alias of `knockout`.
+- Removed the incorrect client mechanic-30 distinction while documenting why
+  vMaNGOS can still contain the broader server-side `MECHANIC_SAPPED = 30`
+  enum.
+- Replaced broad mechanic-25/invulnerability reasoning with the curated
+  `IMMUNITY_GUARD_AURA_IDS` table.
+- Removed unrelated effects from the broad immunity guard and retained explicit
+  known protection/reflection auras.
+- Added genuine Ice Block protection to that guard.
 
-### Locale audit
+### Locale audit and corrections
 
-The new TempCC logic is locale-independent: all decisions use numeric creature
-and aura IDs plus SCRM's canonical mechanic tokens. Encounter/spell names are
-comments or debug/display output only.
+- TempCC decisions are fully ID/mechanic based; English encounter/spell names
+  are comments or debug/display text only.
+- Aura-landed immunity verification no longer parses a hard-coded English
+  `"is afflicted by"` phrase. It derives patterns from Blizzard's localized
+  combat-message GlobalStrings.
+- Hidden-CC/bleed classification uses numeric spell IDs/mechanics rather than
+  English spell-name keys.
+- Duplicate localized aura parsing was removed/hardened.
+- Split-CC name fallback was localized.
+- Locale-safe aura verification and the TempCC implementation audit are
+  documented in the branch docs.
 
 ## Untested
 
-- No in-game Sartura validation yet because the character is AQ40-locked and
-  the encounter is awkward to reproduce.
-- Planned next-reset test:
-  1. `/cleveroid removeccimmune Battleguard Sartura stun`
-  2. normal HoJ macro should refuse during Whirlwind;
-  3. force a plain HoJ during Whirlwind and observe server `IMMUNE`;
-  4. SCRM must not learn permanent stun immunity;
-  5. after Whirlwind, the normal HoJ macro should become eligible again.
+No in-game Sartura validation has been performed because the current character
+is AQ40-locked and the encounter is awkward to reproduce.
 
-## Deferred / audit follow-ups
+Planned next-reset validation:
 
-- Legacy `ParseAfflictedCombatLog()` still parses the English phrase
-  `"is afflicted by"` and uses an English spell-name lookup table for
-  hidden-Pounce/bleed landing confirmation. This predates TempCC but is the
-  remaining immunity-verification localization issue identified by this audit.
-- Other older combat-log fallback parsers also contain English text patterns,
-  but they are outside the TempCC change and many are superseded by exact
-  Nampower events.
-- Decide whether any historical `cc_sap` SavedVariables need migration to
-  `cc_knockout`; automatic current-client learning should use mechanic 14.
-- Low-priority follow-up: review whether reflect handling should explicitly
-  cancel pending verification even though Nampower miss state already prevents
-  the CC delayed learner from recording.
-- Low-risk edge case: delayed verification checks the live TempCC aura; if a
-  very short immunity aura ended before the delayed check and the direct miss
-  path were unavailable, the explanation could be missed. Sartura's Whirlwind
-  is long enough that this does not affect the current case.
+1. Remove any stale learned test record:
+   `/cleveroid removeccimmune Battleguard Sartura stun`
+2. During Whirlwind, the normal HoJ macro using `[noimmune:stun]` should refuse
+   to cast.
+3. During that same Whirlwind, force a plain HoJ without the immunity
+   conditional.
+4. The server should return `IMMUNE`.
+5. SCRM must not create a permanent learned stun immunity for Sartura.
+6. After Whirlwind ends, the normal HoJ macro should become eligible again.
+7. After the encounter, confirm Sartura has not gained a permanent
+   `cc_stun` record.
+
+This single live test covers both live conditional behaviour and the explicit
+IMMUNE learning-suppression path.
+
+## Deferred / low-priority follow-ups
+
+- Historical SavedVariables may theoretically contain a legacy `cc_sap` key.
+  Current-client learning now canonicalizes Sap to `cc_knockout`. No automatic
+  migration has been added because silently rewriting user immunity data was
+  intentionally avoided.
+- Reflect handling records exact Nampower reflect state. A future cleanup could
+  explicitly cancel matching pending verification at the reflect handler too;
+  current miss/reason handling already prevents reflect from becoming permanent
+  immunity in the normal path.
+- Some older, non-TempCC combat-log fallback parsers elsewhere in `Utility.lua`
+  still contain English phrases (for example fade/resist tracking). They predate
+  this work and are not part of the TempCC/immunity-learning decision path now
+  under test.
+- The delayed verification fallback checks TempCC live state. If a hypothetical
+  very short temporary-immunity aura ended before delayed verification and no
+  explicit Nampower miss event were available, the explanation could be missed.
+  Sartura's Whirlwind duration makes this irrelevant to the current rule.
 
 ## Exact next step
 
-Make `ParseAfflictedCombatLog()` locale-safe by deriving its parse pattern
-from the client's localized aura combat-message GlobalStrings and classify the
-resolved spell numerically (hidden CC spell IDs / DBC bleed school) instead of
-using English spell-name keys. Then run a final branch-delta/static audit and
-leave the branch ready for the next AQ40 live test.
+No further code change is required before the next chat.
+
+Start the next development chat from this branch and handoff document. First
+verify whether upstream/main has moved since `37ca7cef`. Keep
+`design/temp-cc-immunity` unmerged until the next AQ40 reset provides the live
+Sartura validation above. If that test passes, perform one final branch-delta
+review and decide whether to merge/cherry-pick the completed work into `main`.
