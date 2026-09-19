@@ -61,11 +61,19 @@ local SPLIT_CC_SPELLS = {
     [54024] = true,  -- Master Strike (Level 0 variant)
 }
 
--- Name-based lookup for split CC spells (for combat log parsing where only name is available)
--- All weapon variants share the same display name, so we need to check by name too
-local SPLIT_CC_SPELL_NAMES = {
-    ["Master Strike"] = true,
-}
+-- Split-CC fallback when a custom variant has an unknown ID but keeps the
+-- base spell's display name. Resolve that name from the client so the fallback
+-- follows the current locale instead of hard-coding English.
+local function IsSplitCCSpell(spellID, spellName)
+    if spellID and SPLIT_CC_SPELLS[spellID] then
+        return true
+    end
+    if not spellName or not C_Spell or not C_Spell.GetSpellName then
+        return false
+    end
+    local masterStrikeName = C_Spell.GetSpellName(54023)
+    return masterStrikeName and spellName == masterStrikeName or false
+end
 
 -- GUID normalization: ensure all GUIDs are strings for consistent table key lookups
 -- In Lua, table["123"] is different from table[123], so we must normalize
@@ -8445,7 +8453,6 @@ local function ProcessSpellMissSelf(spellId, targetGuid, missInfo)
 
     -- Resolve spell name
     local spellName = type(spellId) == "number" and spellId > 0 and C_Spell.GetSpellName(spellId)
-    local baseName = spellName and string.gsub(spellName, "%s*%(.-%)%s*$", "") or nil
 
     -- ========================================================================
     -- IMMUNE / IMMUNE2 (missInfo 7/8)
@@ -8463,7 +8470,7 @@ local function ProcessSpellMissSelf(spellId, targetGuid, missInfo)
             CancelPendingVerification(targetName, spellName)
 
             -- Skip split CC spells (physical damage + resistable CC)
-            if SPLIT_CC_SPELLS[spellId] or (baseName and SPLIT_CC_SPELL_NAMES[baseName]) then
+            if IsSplitCCSpell(spellId, spellName) then
                 if CleveRoids.debug then
                     CleveRoids.Print("|cff00aaff[SPELL_MISS Split CC Skip]|r " .. spellName .. " CC immune on " .. targetName)
                 end
