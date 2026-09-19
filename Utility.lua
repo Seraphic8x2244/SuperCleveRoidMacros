@@ -2487,32 +2487,11 @@ local TEMP_CC_IMMUNITIES = {
     },
 }
 
--- Resolve a normal creature's template entry from its 1.12 GUID.
--- Nampower returns GUIDs as 0x + 16 hex digits. Creature GUIDs can use the
--- F130/F530 client forms; in both, the middle 24 bits are the creature entry:
--- F?30 EEEEEE LLLLLL. Pet forms (F140/F540) are deliberately rejected.
+-- Resolve the creature-template entry through ClassicAPI. This keeps GUID
+-- layout/client-token details out of the TempCCImmune subsystem.
 local function GetCreatureEntry(unit)
     if not unit then return nil end
-
-    local guid = CleveRoids.GetGUID(unit)
-    if not guid then
-        guid = CleveRoids.NormalizeGUID(unit)
-    end
-    if not guid or string.len(guid) ~= 18 then
-        return nil
-    end
-
-    local prefix = string.sub(guid, 1, 2)
-    if prefix ~= "0x" and prefix ~= "0X" then
-        return nil
-    end
-
-    local high = string.upper(string.sub(guid, 3, 6))
-    if high ~= "F130" and high ~= "F530" then
-        return nil
-    end
-
-    return tonumber(string.sub(guid, 7, 12), 16)
+    return UnitCreatureID(unit)
 end
 
 -- Return true when a curated aura currently explains this creature's immunity
