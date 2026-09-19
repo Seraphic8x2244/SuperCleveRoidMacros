@@ -2410,8 +2410,6 @@ local INVULNERABILITY_SPELL_IDS = {
     [5602] = true,   -- zzOLDBlessing of Righteousness
     [10280] = true,  -- zzOLDBlessing of Righteousness
     [10281] = true,  -- zzOLDBlessing of Righteousness
-    -- Rogue
-    [6770] = true,   -- Sap (invuln during effect)
     -- NPC/Misc
     [7992] = true,   -- Slowing Poison
     [11638] = true,  -- Radiation Poisoning
@@ -6078,8 +6076,7 @@ local IMMUNITY_SCHOOLS = {
 local CC_IMMUNITY_TYPES = {
     stun = true,       -- Mechanic 12: Cheap Shot, Kidney Shot, Hammer of Justice
     freeze = true,     -- Mechanic 13: frozen effects
-    knockout = true,   -- Mechanic 14: Gouge, Repentance, Blast Wave
-    sap = true,        -- Mechanic 30: Sap
+    knockout = true,   -- Mechanic 14: Gouge, Repentance, Sap, Blast Wave
     fear = true,       -- Fear, Psychic Scream, Howl of Terror
     root = true,       -- Entangling Roots, Frost Nova
     silence = true,    -- Silence, Counterspell
@@ -6095,6 +6092,7 @@ local CC_IMMUNITY_TYPES = {
 }
 
 local CC_IMMUNITY_ALIASES = {
+    sap = "knockout", -- Vanilla 1.12 Sap uses mechanic 14 (incapacitated)
     incap = "knockout",
     incapacitate = "knockout",
     incapacitated = "knockout",
@@ -6124,12 +6122,11 @@ local MECHANIC_TO_CC_TYPE = {
     [20] = "shackle",
     [24] = "horror",
     [27] = "daze",
-    [30] = "sap",
 }
 
 -- Mechanic-precise mapping used only for learned NPC immunity. Keep it
--- one-to-one: Vanilla can distinguish Stun (12), Freeze (13), Knockout (14)
--- and Sap (30) immunities independently, so never fold them together here.
+-- one-to-one by Vanilla 1.12 client mechanic. Sap is mechanic 14 and therefore
+-- aliases knockout/incapacitated; it is not a distinct mechanic in the 1.12 DBC.
 local MECHANIC_TO_IMMUNITY_TYPE = {
     [1] = "charm",
     [2] = "disorient",
@@ -6146,7 +6143,6 @@ local MECHANIC_TO_IMMUNITY_TYPE = {
     [20] = "shackle",
     [24] = "horror",
     [27] = "daze",
-    [30] = "sap",
 }
 
 -- Spells with split damage types (initial hit vs DoT/debuff)
@@ -7946,7 +7942,7 @@ end
 function CleveRoids.AddCCImmunity(npcName, ccType, buffName)
     if not npcName or not ccType then
         CleveRoids.Print("Usage: /cleveroid addccimmune <npc name> <cctype> [buff name]")
-        CleveRoids.Print("CC Types: stun, freeze, knockout, sap, fear, root, silence, sleep, charm, polymorph, banish, shackle, horror, disorient, daze, snare")
+        CleveRoids.Print("CC Types: stun, freeze, knockout (sap/incap aliases), fear, root, silence, sleep, charm, polymorph, banish, shackle, horror, disorient, daze, snare")
         return
     end
 
