@@ -212,24 +212,30 @@ school IMMUNE  -> unaffected; normal school-immunity logic continues
 Do not implement a broad `IsAnyTempCCImmune()` switch that disables immunity
 learning for the whole target.
 
-## Relationship to generic invulnerability handling
+## Relationship to the general immunity guard
 
-TempCCImmune is separate from the existing broad temporary-immunity guard.
+TempCCImmune is separate from the existing curated protection/reflection guard.
 
 The concepts mean different things:
 
 ```text
-generic invulnerability aura
-    explains a broad class of IMMUNE results while active
+general immunity-guard aura
+    makes a failed spell/debuff observation inconclusive while a known
+    protection or reflection effect is active
 
 TempCCImmune rule
     explains only the explicitly listed CC mechanic for one creature while
     one explicitly listed aura is active
 ```
 
-Sartura's Whirlwind must not be added to the generic invulnerability list.
+Sartura's Whirlwind must not be added to the general immunity-guard table.
 Doing so could incorrectly suppress learning of unrelated real immunities
 observed during Whirlwind.
+
+The September 2026 audit removed stale entries that had been incorrectly
+treated as generic immunity guards (including Sap and unrelated 25-second
+effects) and added Ice Block as an actual full-immunity aura. The guard list is
+now curated rather than derived from a DBC mechanic number.
 
 ## Implemented integration points
 
@@ -287,6 +293,25 @@ Preferred style:
 Do not add an entry merely because an `IMMUNE` event was observed. First
 exclude permanent creature immunity, DR, death, generic invulnerability and
 other existing safeguards.
+
+## Locale and portability audit
+
+TempCCImmune makes no decisions from localized game text:
+
+- creature identity is numeric via ClassicAPI `UnitCreatureID(unit)`;
+- aura identity is numeric via `C_UnitAuras.GetUnitAuraBySpellID`;
+- the table stores SCRM's canonical mechanic token (for example `stun`);
+- NPC/aura names in the table are comments only;
+- `C_Spell.GetSpellName` is used only for debug/display output.
+
+The subsystem therefore does not require English NPC names, English spell
+names, or English combat-log messages.
+
+A separate legacy combat-log fallback elsewhere in `Utility.lua` still parses
+the English phrase `"is afflicted by"` for hidden-Pounce/bleed confirmation.
+That path predates TempCCImmune and is not used to identify Sartura, her
+Whirlwind aura, or the requested CC mechanic. It remains a separate
+localization cleanup item rather than being folded into this microsystem.
 
 ## Validation plan
 
