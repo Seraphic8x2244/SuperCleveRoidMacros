@@ -355,3 +355,120 @@ existing immunity utility file:
 - one guard in each automatic CC-immunity learning route.
 
 No new Lua module is required for the initial implementation.
+
+## Implementation audit
+
+A post-implementation review checked the microsystem for portability and
+unintended coupling.
+
+### Locale safety
+
+The runtime decision path does not depend on English NPC or spell names.
+
+The curated rule is numeric/internal:
+
+```lua
+[15516] = {
+    [26083] = { stun = true },
+}
+```
+
+- creature identity uses entry ID `15516`;
+- aura identity uses spell ID `26083`;
+- CC identity uses SCRM's canonical internal mechanic key `stun`;
+- `Battleguard Sartura` and `Whirlwind` appear only in comments/documentation;
+- debug presentation obtains live names through `UnitName()` and
+  `C_Spell.GetSpellName()`, so displayed names follow the client locale.
+
+The subsystem therefore does not introduce an English-client requirement.
+
+### Aura lookup
+
+`IsTemporarilyCCImmune` uses
+`C_UnitAuras.GetUnitAuraBySpellID(unit, auraID)`.
+
+ClassicAPI's by-ID lookup searches both helpful and harmful aura ranges when no
+filter is supplied. The temporary-immunity table therefore does not need to
+classify a curated aura as a buff or debuff, and no localized aura name is
+required.
+
+Only aura IDs listed for the matched creature are queried; the implementation
+does not scan or classify the target's full aura set.
+
+### Creature identity
+
+The implementation resolves the creature template entry from the Nampower GUID
+and accepts the normal creature GUID forms `F130` and `F530`.
+
+Pet forms such as `F140/F540` are rejected. The rest of the subsystem sees
+only the resolved creature entry and is isolated from the GUID representation.
+
+### Learning-path parity
+
+Both automatic CC-immunity learning paths consult the same
+`IsTemporarilyCCImmune(unit, immunityType)` helper:
+
+1. Nampower `SPELL_MISS -> IMMUNE`;
+2. delayed verification when the expected CC aura did not appear.
+
+A matching temporary rule suppresses learning only for the matching mechanic.
+It does not disable unrelated CC or school-immunity learning while the aura is
+active.
+
+### Conditional-path behaviour
+
+`CheckCCImmunity` checks live TempCCImmune state before learned immunity data.
+
+For the Sartura rule, with no stale permanent record:
+
+```text
+outside Whirlwind -> stun immune false
+during Whirlwind  -> stun immune true
+after Whirlwind   -> stun immune false
+```
+
+This lets production macros avoid wasting stun abilities while the temporary
+immunity is active without persisting that state.
+
+### Persistence and stale data
+
+TempCCImmune itself writes nothing to SavedVariables and introduces no
+SavedVariables schema change.
+
+A stale permanent immunity learned by an older build remains authoritative
+after the temporary aura ends until it is removed by existing cleanup behaviour
+or explicitly with:
+
+```text
+/cleveroid removeccimmune Battleguard Sartura stun
+```
+
+The microsystem intentionally does not silently rewrite existing user data.
+
+### Conservative failure mode
+
+The first rule is deliberately specific to:
+
+```text
+creature entry 15516 + aura 26083 + stun
+```
+
+If a server implements the encounter differently, changes the aura spell ID, or
+does not expose that aura to the client, the rule simply fails to match and the
+existing immunity-learning logic continues.
+
+This can re-expose the original false-learning behaviour on that server, but it
+does not broaden the rule to unrelated creatures or mechanics. New server or
+encounter variants should be added as separately verified curated entries
+rather than inferred dynamically.
+
+### Audit conclusion
+
+The implementation is intentionally narrow, locale-independent, read-only, and
+mechanic-specific. No new English-name dependency, broad immunity suppression,
+DBC inference, or persistence coupling was introduced.
+
+The remaining validation is runtime confirmation that Sartura's `26083` aura
+is visible through the client's aura API during Whirlwind and that an explicit
+stun `IMMUNE` event does not create a permanent learned stun immunity.
+
