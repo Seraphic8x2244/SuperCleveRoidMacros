@@ -2488,8 +2488,9 @@ local TEMP_CC_IMMUNITIES = {
 }
 
 -- Resolve a normal creature's template entry from its 1.12 GUID.
--- Nampower returns GUIDs as 0x + 16 hex digits. For HIGHGUID_UNIT (F130),
--- the middle 24 bits are the creature entry: F130 EEEEEE LLLLLL.
+-- Nampower returns GUIDs as 0x + 16 hex digits. Creature GUIDs can use the
+-- F130/F530 client forms; in both, the middle 24 bits are the creature entry:
+-- F?30 EEEEEE LLLLLL. Pet forms (F140/F540) are deliberately rejected.
 local function GetCreatureEntry(unit)
     if not unit then return nil end
 
@@ -2505,7 +2506,9 @@ local function GetCreatureEntry(unit)
     if prefix ~= "0x" and prefix ~= "0X" then
         return nil
     end
-    if string.upper(string.sub(guid, 3, 6)) ~= "F130" then
+
+    local high = string.upper(string.sub(guid, 3, 6))
+    if high ~= "F130" and high ~= "F530" then
         return nil
     end
 
