@@ -8063,9 +8063,10 @@ immunityFrame:SetScript("OnEvent", function()
     if event == "RAW_COMBATLOG" or event == "CHAT_MSG_SPELL_FAILURE" or event == "CHAT_MSG_SPELL_SELF_DAMAGE" then
         ParseImmunityCombatLog()
     end
-    -- Check localized harmful-aura messages for hidden CC spells (e.g., Pounce stun).
-    -- These come through RAW_COMBATLOG and PERIODIC_CREATURE_DAMAGE
-    if event == "RAW_COMBATLOG" or event == "CHAT_MSG_SPELL_PERIODIC_CREATURE_DAMAGE" then
+    -- RAW_COMBATLOG harmful-aura messages are handled once by the unified
+    -- dispatcher below. Keep this legacy event frame only for the periodic
+    -- creature-damage channel that the unified RAW dispatcher does not receive.
+    if event == "CHAT_MSG_SPELL_PERIODIC_CREATURE_DAMAGE" then
         ParseAfflictedCombatLog()
     end
 end)
