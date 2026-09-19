@@ -304,14 +304,19 @@ TempCCImmune makes no decisions from localized game text:
 - NPC/aura names in the table are comments only;
 - `C_Spell.GetSpellName` is used only for debug/display output.
 
-The subsystem therefore does not require English NPC names, English spell
-names, or English combat-log messages.
+The subsystem therefore does not require English NPC names or English spell
+names.
 
-A separate legacy combat-log fallback elsewhere in `Utility.lua` still parses
-the English phrase `"is afflicted by"` for hidden-Pounce/bleed confirmation.
-That path predates TempCCImmune and is not used to identify Sartura, her
-Whirlwind aura, or the requested CC mechanic. It remains a separate
-localization cleanup item rather than being folded into this microsystem.
+The related aura-landed verifier used by hidden Pounce/bleed tracking was also
+made locale-safe during the audit. It now derives patterns from Blizzard's
+localized `AURAADDEDOTHERHARMFUL` /
+`AURAAPPLICATIONADDEDOTHERHARMFUL` GlobalStrings and resolves relevant
+pending effects from numeric spell IDs and mechanics. The previous English
+`"is afflicted by"` gate and English spell-name lookup table were removed.
+
+Other older combat-log fallbacks elsewhere in SCRM still contain language
+patterns for unrelated features. They are outside TempCCImmune and should be
+audited separately rather than expanding this microsystem.
 
 ## Validation plan
 
