@@ -2391,57 +2391,43 @@ local _pendingPersonalBuffer = {}
 local _pendingCCBuffer = {}
 local _pendingSharedBuffer = {}
 
--- Spells with INVULNERABILITY mechanic (mechanic 25) from BuffLib SpellData DBC
--- These grant temporary immunity and should not trigger permanent immunity recording
--- Source: BuffLib/SpellData.lua - extracted from DBC files
-local INVULNERABILITY_SPELL_IDS = {
-    -- Paladin
+-- Curated auras that make a failed spell/debuff observation inconclusive.
+-- These are real temporary protection or reflection effects, keyed by spell ID.
+-- Do not populate this from a DBC mechanic number: mechanic labels describe the
+-- spell/aura, not necessarily an effect that grants broad immunity.
+local IMMUNITY_GUARD_AURA_IDS = {
+    -- Full immunity
     [498] = true,    -- Divine Protection (Rank 1)
+    [5573] = true,   -- Divine Protection (Rank 2)
     [642] = true,    -- Divine Shield (Rank 1)
     [1020] = true,   -- Divine Shield (Rank 2)
+    [11958] = true,  -- Ice Block
+    [27619] = true,  -- Ice Block (alternate)
+
+    -- Physical protection. This guard is intentionally conservative: while
+    -- active, a missing/IMMUNE physical effect must not become permanent data.
     [1022] = true,   -- Blessing of Protection (Rank 1)
-    [5573] = true,   -- Divine Protection (Rank 2)
     [5599] = true,   -- Blessing of Protection (Rank 2)
     [10278] = true,  -- Blessing of Protection (Rank 3)
-    [25771] = true,  -- Forbearance (debuff after immunity)
-    -- Old/Unused Paladin
-    [1052] = true,   -- zzOLDBlessing of Righteousness
-    [5601] = true,   -- zzOLDBlessing of Righteousness
-    [5602] = true,   -- zzOLDBlessing of Righteousness
-    [10280] = true,  -- zzOLDBlessing of Righteousness
-    [10281] = true,  -- zzOLDBlessing of Righteousness
-    -- NPC/Misc
-    [7992] = true,   -- Slowing Poison
-    [11638] = true,  -- Radiation Poisoning
-    [14897] = true,  -- Slowing Poison
-    [16603] = true,  -- Demonfork
-    [16791] = true,  -- Furious Anger
-    [17407] = true,  -- Wound
-    [18208] = true,  -- Poison
-    [23230] = true,  -- Blood Fury
-    [24005] = true,  -- Food
-    [24707] = true,  -- Food
-    [24865] = true,  -- Sanctified Orb
-    [26263] = true,  -- Dim Sum
-    [28522] = true,  -- Icebolt
-    [29055] = true,  -- Refreshing Red Apple
-    [29325] = true,  -- Acid Volley
-    [29330] = true,  -- Sapphiron's Wing Buffet Despawn
-    -- Spell Reflection (no DBC mechanic, but grants immunity to reflected schools)
-    [9941] = true,   -- Spell Reflection
-    [9943] = true,   -- Spell Reflection
-    [10074] = true,  -- Spell Reflection
-    [11818] = true,  -- Spell Reflection
-    [21118] = true,  -- Spell Reflection
+
+    -- Spell Reflection
+    [9941] = true,
+    [9943] = true,
+    [10074] = true,
+    [11818] = true,
+    [21118] = true,
+
     -- School-specific Reflectors (Engineering items)
     [23097] = true,  -- Fire Reflector
     [23131] = true,  -- Frost Reflector
     [23132] = true,  -- Shadow Reflector
     [23178] = true,  -- Nature Reflector
     [23216] = true,  -- Arcane Reflector
+
     -- Multi-school Reflect (NPC abilities)
     [13022] = true,  -- Fire and Arcane Reflect
     [19595] = true,  -- Shadow and Frost Reflect
+
     -- Generic Reflection buffs
     [3651] = true,   -- Shield of Reflection
     [9906] = true,   -- Reflection
@@ -2457,19 +2443,17 @@ local INVULNERABILITY_SPELL_IDS = {
     [27564] = true,  -- Reflection
 }
 
--- Check if a unit has any immunity-granting buff active
--- Uses only spell IDs from DBC mechanic 25 (INVULNERABILITY) for reliability
--- Returns the buff name if found, nil otherwise
-local function HasImmunityGrantingBuff(unit)
+-- Return the active guard aura name, or nil. Names are display/debug only;
+-- all matching is by numeric spell ID and is therefore locale-independent.
+local function HasImmunityGuardAura(unit)
     if not UnitExists(unit) then return nil end
 
     for i = 1, 32 do
         local texture, stacks, spellID = UnitBuff(unit, i)
         if not texture then break end
 
-        if spellID and INVULNERABILITY_SPELL_IDS[spellID] then
-            local buffName = C_Spell.GetSpellName(spellID) or ("SpellID:" .. spellID)
-            return buffName
+        if spellID and IMMUNITY_GUARD_AURA_IDS[spellID] then
+            return C_Spell.GetSpellName(spellID) or ("SpellID:" .. spellID)
         end
     end
 
@@ -2747,7 +2731,7 @@ delayedTrackingFrame:SetScript("OnUpdate", function()
                 -- Guard: don't record immunity for player targets (PvP resists, trinkets, etc.)
                 local isPlayer = UnitIsPlayer(verifyUnit)
                 -- Guard: don't record if target has temporary immunity buff
-                local immunityBuff = not isPlayer and HasImmunityGrantingBuff(verifyUnit)
+                local immunityBuff = not isPlayer and HasImmunityGuardAura(verifyUnit)
                 if isPlayer then
                   if debug then
                     DEFAULT_CHAT_FRAME:AddMessage(
@@ -2891,7 +2875,7 @@ delayedTrackingFrame:SetScript("OnUpdate", function()
                 debuffVerified = false
                 local DEBUFF_CAP_THRESHOLD = 47
                 local isPlayer = UnitIsPlayer(nonBleedVerifyUnit)
-                local immunityBuff = not isPlayer and HasImmunityGrantingBuff(nonBleedVerifyUnit)
+                local immunityBuff = not isPlayer and HasImmunityGuardAura(nonBleedVerifyUnit)
                 if isPlayer then
                   if debug then
                     DEFAULT_CHAT_FRAME:AddMessage(
@@ -3104,7 +3088,7 @@ delayedTrackingFrame:SetScript("OnUpdate", function()
               )
             end
           -- Guard: don't record if target has temporary broad immunity buff
-          elseif HasImmunityGrantingBuff(ccVerifyUnit) then
+          elseif HasImmunityGuardAura(ccVerifyUnit) then
             if debug then
               DEFAULT_CHAT_FRAME:AddMessage(
                 _string_format("|cffaaaaaa[CC Skip]|r %s has immunity buff - not recording %s immunity",
@@ -3375,7 +3359,7 @@ delayedTrackingFrame:SetScript("OnUpdate", function()
           -- Guard: don't record immunity for player targets
           local sharedQueryUnit = pending.targetGUID and ResolveGUIDUnit(pending.targetGUID) or nil
           local isPlayer = sharedQueryUnit and UnitIsPlayer(sharedQueryUnit)
-          local sharedImmunityBuff = sharedQueryUnit and not isPlayer and HasImmunityGrantingBuff(sharedQueryUnit)
+          local sharedImmunityBuff = sharedQueryUnit and not isPlayer and HasImmunityGuardAura(sharedQueryUnit)
 
           -- SPLIT CC SPELLS: Skip immunity recording for spells with physical damage + resistable CC
           -- (e.g., Master Strike) - the physical damage lands but CC can be resisted independently
@@ -7420,7 +7404,7 @@ local function ParseImmunityCombatLog()
         -- Check if target is queryable for buff check
         local canQuery = UnitExists("target") and UnitName("target") == targetName
         if canQuery then
-            local immunityBuff = HasImmunityGrantingBuff("target")
+            local immunityBuff = HasImmunityGuardAura("target")
             if immunityBuff then
                 if CleveRoids.debug then
                     CleveRoids.Print("|cff00aaff[CombatLog Temp Skip]|r " .. targetName .. " has " .. immunityBuff)
@@ -8447,7 +8431,7 @@ local function ProcessSpellMissSelf(spellId, targetGuid, missInfo)
 
             -- Skip if target has a broad temporary immunity buff (Divine Shield, etc.)
             if queryUnit then
-                local immunityBuff = HasImmunityGrantingBuff(queryUnit)
+                local immunityBuff = HasImmunityGuardAura(queryUnit)
                 if immunityBuff then
                     if CleveRoids.debug then
                         CleveRoids.Print("|cff00aaff[SPELL_MISS Temp Skip]|r " .. targetName .. " has " .. immunityBuff)
