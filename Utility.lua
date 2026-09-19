@@ -2348,24 +2348,8 @@ lib.hiddenCCSpells = {
   [9827] = true,   -- Pounce (Rank 3)
 }
 
--- Reverse lookup: spell NAME -> immunity type for combat log tracking
--- Used by ParseAfflictedCombatLog to confirm spells landed via "afflicted by" messages
--- Format: { ["SpellName"] = { type = "cc" or "school", value = "stun" or "bleed" } }
-lib.trackedAfflictions = {
-  -- Hidden CC effects (no visible debuff, must use combat log)
-  ["Pounce"] = { type = "cc", value = "stun" },
-
-  -- Bleed effects (visible debuff, but combat log is more reliable)
-  ["Pounce Bleed"] = { type = "school", value = "bleed" },
-  ["Rake"] = { type = "school", value = "bleed" },
-  ["Rip"] = { type = "school", value = "bleed" },
-  ["Lacerate"] = { type = "school", value = "bleed" },
-  ["Garrote"] = { type = "school", value = "bleed" },
-  ["Rupture"] = { type = "school", value = "bleed" },
-  ["Deep Wound"] = { type = "school", value = "bleed" },
-  ["Deep Wounds"] = { type = "school", value = "bleed" },
-  ["Rend"] = { type = "school", value = "bleed" },
-}
+-- Aura-landed confirmation is resolved from the client's localized combat-message
+-- formats and numeric pending spell IDs; do not add English spell-name keys here.
 
 -- Frame for delayed personal debuff tracking and judgement scanning
 
@@ -7456,94 +7440,191 @@ local function ParseImmunityCombatLog()
     end
 end
 
--- Combat log parser for "afflicted by" messages
--- Tracks when CC effects (like Pounce stun) and bleeds successfully land
--- This confirms the effect worked and removes any false immunity records
+-- Build locale-safe Lua patterns from Blizzard's localized combat-log format
+-- strings. We format unique markers into the client's own string, escape the
+-- literal result, then turn only those markers back into captures.
+local function EscapeCombatPattern(text)
+    return string.gsub(text, "([%(%)%.%%%+%-%*%?%[%]%^%$])", "%%%1")
+end
+
+local function BuildLocalizedAuraPattern(formatString, hasCount)
+    if not formatString then return nil, nil end
+
+    local targetMarker = "__SCRM_TARGET_MARKER__"
+    local spellMarker = "__SCRM_SPELL_MARKER__"
+    local countMarker = 987654
+
+    local ok, sample
+    if hasCount then
+        ok, sample = pcall(string.format, formatString, targetMarker, spellMarker, countMarker)
+    else
+        ok, sample = pcall(string.format, formatString, targetMarker, spellMarker)
+    end
+    if not ok or not sample then return nil, nil end
+
+    local targetPos = string.find(sample, targetMarker, 1, true)
+    local spellPos = string.find(sample, spellMarker, 1, true)
+    if not targetPos or not spellPos then return nil, nil end
+
+    local pattern = EscapeCombatPattern(sample)
+    pattern = string.gsub(pattern, targetMarker, "(.-)", 1)
+    pattern = string.gsub(pattern, spellMarker, "(.+)", 1)
+    if hasCount then
+        pattern = string.gsub(pattern, tostring(countMarker), "%%d+", 1)
+    end
+
+    return "^" .. pattern .. "$", targetPos < spellPos
+end
+
+local AURA_ADDED_HARMFUL_PATTERN, AURA_ADDED_HARMFUL_TARGET_FIRST =
+    BuildLocalizedAuraPattern(_G.AURAADDEDOTHERHARMFUL, false)
+local AURA_STACK_ADDED_HARMFUL_PATTERN, AURA_STACK_ADDED_HARMFUL_TARGET_FIRST =
+    BuildLocalizedAuraPattern(_G.AURAAPPLICATIONADDEDOTHERHARMFUL, true)
+
+local function MatchLocalizedAfflictedMessage(message)
+    if not message then return nil, nil end
+
+    local function TryPattern(pattern, targetFirst)
+        if not pattern then return nil, nil end
+        local _, _, first, second = string.find(message, pattern)
+        if not first or not second then return nil, nil end
+        if targetFirst then
+            return first, second
+        end
+        return second, first
+    end
+
+    -- Try the stack-count form first because the plain form's spell capture can
+    -- otherwise absorb the trailing "(N)".
+    local targetName, spellName =
+        TryPattern(AURA_STACK_ADDED_HARMFUL_PATTERN, AURA_STACK_ADDED_HARMFUL_TARGET_FIRST)
+    if targetName then return targetName, spellName end
+
+    return TryPattern(AURA_ADDED_HARMFUL_PATTERN, AURA_ADDED_HARMFUL_TARGET_FIRST)
+end
+
+local function IsLocalizedAfflictedMessage(message)
+    local targetName = MatchLocalizedAfflictedMessage(message)
+    return targetName ~= nil
+end
+
+-- Resolve only afflictions relevant to immunity verification. Pending entries
+-- are authoritative and already carry numeric spell IDs. The spellbook lookup
+-- is a fallback for a landed tracked spell whose pending entry was consumed.
+local function ResolveTrackedAffliction(targetName, spellName)
+    if not targetName or not spellName then return nil, nil, nil end
+
+    if lib.pendingCCDebuffs then
+        for _, pending in pairs(lib.pendingCCDebuffs) do
+            if pending and pending.targetName == targetName and pending.spellID and pending.ccType then
+                local pendingName = C_Spell.GetSpellName(pending.spellID)
+                if pendingName == spellName then
+                    return "cc", pending.ccType, pending.spellID
+                end
+            end
+        end
+    end
+
+    if lib.pendingPersonalDebuffs then
+        for _, pending in pairs(lib.pendingPersonalDebuffs) do
+            if pending and pending.targetName == targetName and pending.spellID then
+                local pendingName = C_Spell.GetSpellName(pending.spellID)
+                if pendingName == spellName and GetSpellSchool(nil, pending.spellID) == "bleed" then
+                    return "school", "bleed", pending.spellID
+                end
+            end
+        end
+    end
+
+    local spellID = GetSpellIdForName and GetSpellIdForName(spellName)
+    if not spellID or spellID <= 0 then return nil, nil, nil end
+
+    if lib.hiddenCCSpells and lib.hiddenCCSpells[spellID] then
+        local ccType = GetSpellCCType(spellID)
+        if ccType then
+            return "cc", ccType, spellID
+        end
+    end
+
+    if GetSpellSchool(nil, spellID) == "bleed" then
+        return "school", "bleed", spellID
+    end
+
+    return nil, nil, nil
+end
+
+-- Locale-safe aura-landed parser used to confirm hidden CC and bleed effects.
+-- Parsing comes from Blizzard's localized GlobalStrings; classification comes
+-- from numeric spell IDs/mechanics, never English spell names.
 local function ParseAfflictedCombatLog()
     local message = arg1
     if not message then return end
 
-    -- Quick check: must contain "afflicted by"
-    if not string.find(message, "afflicted by") then return end
-
-    -- Pattern: "X is afflicted by Y" or "X is afflicted by Y (N)."
-    -- Handle both with and without trailing period
-    local _, _, targetName, spellName = string.find(message, "^(.-)%s+is afflicted by%s+(.+)")
+    local targetName, spellName = MatchLocalizedAfflictedMessage(message)
     if not targetName or not spellName then return end
 
-    -- Remove trailing period if present
-    spellName = string.gsub(spellName, "%.$", "")
-    -- Remove stack count like "(1)" from spell name
-    spellName = string.gsub(spellName, "%s*%(%d+%)$", "")
-
-    -- Check if this is a tracked spell (CC or bleed)
-    local affliction = lib.trackedAfflictions and lib.trackedAfflictions[spellName]
-    if not affliction then
-        return  -- Not a tracked spell, ignore
+    local afflictionType, afflictionValue, afflictionSpellID =
+        ResolveTrackedAffliction(targetName, spellName)
+    if not afflictionType or not afflictionValue then
+        return
     end
 
-    if affliction.type == "cc" then
+    if afflictionType == "cc" then
         -- CC effect landed - remove any false CC immunity
         if CleveRoids.debug then
             DEFAULT_CHAT_FRAME:AddMessage(
                 string.format("|cff00ff00[CC Landed]|r %s afflicted by %s (%s)",
-                    targetName, spellName, affliction.value)
+                    targetName, spellName, afflictionValue)
             )
         end
-        RemoveCCImmunity(targetName, affliction.value)
+        RemoveCCImmunity(targetName, afflictionValue)
 
-        -- Mark any pending CC verification for this target/spell as verified
-        -- This prevents false immunity recordings when "afflicted by" message arrives
-        -- before the verification delay completes (especially for hidden CC spells)
+        -- Mark the matching pending CC verification as landed.
         if lib.pendingCCDebuffs then
-            for _, pending in ipairs(lib.pendingCCDebuffs) do
-                if pending.targetName == targetName and
-                   pending.ccType == affliction.value and
+            for _, pending in pairs(lib.pendingCCDebuffs) do
+                if pending and pending.targetName == targetName and
+                   pending.ccType == afflictionValue and
                    not pending.verifiedByAffliction then
-                    pending.verifiedByAffliction = true
-                    if CleveRoids.debug then
-                        DEFAULT_CHAT_FRAME:AddMessage(
-                            string.format("|cff00aaff[CC Verified Early]|r %s on %s confirmed via 'afflicted by' message",
-                                pending.ccType, targetName)
-                        )
+                    local pendingName = pending.spellID and C_Spell.GetSpellName(pending.spellID)
+                    if pending.spellID == afflictionSpellID or pendingName == spellName then
+                        pending.verifiedByAffliction = true
+                        if CleveRoids.debug then
+                            DEFAULT_CHAT_FRAME:AddMessage(
+                                string.format("|cff00aaff[CC Verified Early]|r %s on %s confirmed by localized aura combat message",
+                                    pending.ccType, targetName)
+                            )
+                        end
+                        break
                     end
-                    break  -- Only mark one pending entry
                 end
             end
         end
 
-    elseif affliction.type == "school" then
-        -- School/bleed effect landed - remove any false school immunity
+    elseif afflictionType == "school" then
+        -- Bleed effect landed - remove any false bleed immunity
         if CleveRoids.debug then
             DEFAULT_CHAT_FRAME:AddMessage(
                 string.format("|cff00ff00[Bleed Landed]|r %s afflicted by %s (%s)",
-                    targetName, spellName, affliction.value)
+                    targetName, spellName, afflictionValue)
             )
         end
-        RemoveSpellImmunity(targetName, affliction.value)
+        RemoveSpellImmunity(targetName, afflictionValue)
 
-        -- Mark any pending bleed verification for this target/spell as verified
-        -- This prevents false immunity recordings when target dies before verification
-        -- (e.g., Rake lands, target dies at 0.1s, verification at 0.2s would miss it)
+        -- Mark the matching pending bleed verification as landed.
         if lib.pendingPersonalDebuffs then
-            for _, pending in ipairs(lib.pendingPersonalDebuffs) do
-                if pending.targetName == targetName and not pending.verifiedByAffliction then
-                    -- Check if this pending entry matches the affliction spell
-                    local pendingSpellName = pending.spellID and C_Spell.GetSpellName(pending.spellID)
-                    if pendingSpellName then
-                        -- Strip rank info for comparison
-                        pendingSpellName = string.gsub(pendingSpellName, "%s*%(.-%)%s*$", "")
-                        local afflictionSpellName = string.gsub(spellName, "%s*%(.-%)%s*$", "")
-                        if string.lower(pendingSpellName) == string.lower(afflictionSpellName) then
-                            pending.verifiedByAffliction = true
-                            if CleveRoids.debug then
-                                DEFAULT_CHAT_FRAME:AddMessage(
-                                    string.format("|cff00aaff[Bleed Verified Early]|r %s on %s confirmed via 'afflicted by' message",
-                                        pendingSpellName, targetName)
-                                )
-                            end
-                            break  -- Only mark one pending entry
+            for _, pending in pairs(lib.pendingPersonalDebuffs) do
+                if pending and pending.targetName == targetName and
+                   not pending.verifiedByAffliction then
+                    local pendingName = pending.spellID and C_Spell.GetSpellName(pending.spellID)
+                    if pending.spellID == afflictionSpellID or pendingName == spellName then
+                        pending.verifiedByAffliction = true
+                        if CleveRoids.debug then
+                            DEFAULT_CHAT_FRAME:AddMessage(
+                                string.format("|cff00aaff[Bleed Verified Early]|r %s on %s confirmed by localized aura combat message",
+                                    pendingName or spellName, targetName)
+                            )
                         end
+                        break
                     end
                 end
             end
@@ -7972,7 +8053,7 @@ end
 -- PERFORMANCE: Only use RAW_COMBATLOG and SPELL_FAILURE to avoid spam from damage events
 -- CHAT_MSG_SPELL_*_DAMAGE fires on EVERY hit/resist (100+ times/second in combat)
 -- EXCEPTION: CHAT_MSG_SPELL_SELF_DAMAGE is needed for immunity detection (includes "is immune" messages)
--- EXCEPTION: CHAT_MSG_SPELL_PERIODIC_CREATURE_DAMAGE is needed for "afflicted by" detection (hidden CC spells)
+-- EXCEPTION: CHAT_MSG_SPELL_PERIODIC_CREATURE_DAMAGE is needed for localized harmful-aura confirmation (hidden CC spells)
 local immunityFrame = CreateFrame("Frame", "CleveRoidsImmunityFrame")
 immunityFrame:RegisterEvent("RAW_COMBATLOG")
 immunityFrame:RegisterEvent("CHAT_MSG_SPELL_FAILURE")
@@ -7982,7 +8063,7 @@ immunityFrame:SetScript("OnEvent", function()
     if event == "RAW_COMBATLOG" or event == "CHAT_MSG_SPELL_FAILURE" or event == "CHAT_MSG_SPELL_SELF_DAMAGE" then
         ParseImmunityCombatLog()
     end
-    -- Check for "afflicted by" messages for hidden CC spells (e.g., Pounce stun)
+    -- Check localized harmful-aura messages for hidden CC spells (e.g., Pounce stun).
     -- These come through RAW_COMBATLOG and PERIODIC_CREATURE_DAMAGE
     if event == "RAW_COMBATLOG" or event == "CHAT_MSG_SPELL_PERIODIC_CREATURE_DAMAGE" then
         ParseAfflictedCombatLog()
@@ -9179,8 +9260,8 @@ unifiedCombatLogFrame:SetScript("OnEvent", function()
         ParseImmunityCombatLog()
     end
 
-    -- 3. "Afflicted by" detection for hidden CC (e.g., Pounce stun)
-    if find(msg, "afflicted by") then
+    -- 3. Localized harmful-aura detection for hidden CC / bleed confirmation
+    if IsLocalizedAfflictedMessage(msg) then
         ParseAfflictedCombatLog()
     end
 
