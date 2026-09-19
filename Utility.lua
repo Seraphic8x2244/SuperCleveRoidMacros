@@ -2478,6 +2478,68 @@ local function HasImmunityGrantingBuff(unit)
     return nil
 end
 
+-- Curated encounter auras that temporarily grant immunity to specific CC mechanics.
+-- Keyed by creature entry -> aura spell ID -> canonical immunity type.
+-- Keep this list deliberately small and evidence-backed; this is not DBC inference.
+local TEMP_CC_IMMUNITIES = {
+    [15516] = { -- Battleguard Sartura
+        [26083] = { stun = true }, -- Whirlwind: temporary stun immunity
+    },
+}
+
+-- Resolve a normal creature's template entry from its 1.12 GUID.
+-- Nampower returns GUIDs as 0x + 16 hex digits. For HIGHGUID_UNIT (F130),
+-- the middle 24 bits are the creature entry: F130 EEEEEE LLLLLL.
+local function GetCreatureEntry(unit)
+    if not unit then return nil end
+
+    local guid = CleveRoids.GetGUID(unit)
+    if not guid then
+        guid = CleveRoids.NormalizeGUID(unit)
+    end
+    if not guid or string.len(guid) ~= 18 then
+        return nil
+    end
+
+    local prefix = string.sub(guid, 1, 2)
+    if prefix ~= "0x" and prefix ~= "0X" then
+        return nil
+    end
+    if string.upper(string.sub(guid, 3, 6)) ~= "F130" then
+        return nil
+    end
+
+    return tonumber(string.sub(guid, 7, 12), 16)
+end
+
+-- Return true when a curated aura currently explains this creature's immunity
+-- to exactly the requested CC mechanic. Optional second return is the aura ID.
+local function IsTemporarilyCCImmune(unit, ccType)
+    if not unit or not ccType or not UnitExists(unit) then
+        return false
+    end
+
+    local creatureEntry = GetCreatureEntry(unit)
+    local auraRules = creatureEntry and TEMP_CC_IMMUNITIES[creatureEntry]
+    if not auraRules then
+        return false
+    end
+
+    if not C_UnitAuras or not C_UnitAuras.GetUnitAuraBySpellID then
+        return false
+    end
+
+    for auraID, mechanics in pairs(auraRules) do
+        if mechanics[ccType] and C_UnitAuras.GetUnitAuraBySpellID(unit, auraID) then
+            return true, auraID
+        end
+    end
+
+    return false
+end
+
+CleveRoids.IsTemporarilyCCImmune = IsTemporarilyCCImmune
+
 -- PERFORMANCE: Throttling - run at 20Hz max instead of every frame (60+Hz)
 -- Minimum delay is 0.2s, so 20Hz (50ms) gives us 4 checks per minimum delay
 local _lastDelayedTrackingUpdate = 0
@@ -3041,6 +3103,9 @@ delayedTrackingFrame:SetScript("OnUpdate", function()
 
         -- If CC didn't land, check if it's immunity or debuff cap
         if not ccVerified and ccVerifyUnit and not _IsUnitDead(ccVerifyUnit) then
+          local learnedImmunityType = pending.immunityType or pending.ccType
+          local tempCCImmune, tempAuraID = IsTemporarilyCCImmune(ccVerifyUnit, learnedImmunityType)
+
           -- Guard: don't record immunity for player targets (PvP trinkets, resists, etc.)
           if UnitIsPlayer(ccVerifyUnit) then
             if debug then
@@ -3049,7 +3114,16 @@ delayedTrackingFrame:SetScript("OnUpdate", function()
                   pending.targetName or "Unknown", pending.ccType or "CC")
               )
             end
-          -- Guard: don't record if target has temporary immunity buff
+          -- Guard: a curated encounter aura explains this exact CC immunity.
+          elseif tempCCImmune then
+            if debug then
+              local auraName = C_Spell.GetSpellName(tempAuraID) or ("SpellID:" .. tostring(tempAuraID))
+              DEFAULT_CHAT_FRAME:AddMessage(
+                _string_format("|cff00aaff[CC Temp Skip]|r %s has %s - temporary %s immunity, not recording permanent immunity",
+                  pending.targetName or "Unknown", auraName, learnedImmunityType or "CC")
+              )
+            end
+          -- Guard: don't record if target has temporary broad immunity buff
           elseif HasImmunityGrantingBuff(ccVerifyUnit) then
             if debug then
               DEFAULT_CHAT_FRAME:AddMessage(
@@ -3127,8 +3201,7 @@ delayedTrackingFrame:SetScript("OnUpdate", function()
                     pending.spellName or "Unknown", resolvedTargetName or "Unknown", pending.drType or "Unknown")
                 )
               end
-            elseif resolvedTargetName and resolvedTargetName ~= "" and (pending.immunityType or pending.ccType) then
-              local learnedImmunityType = pending.immunityType or pending.ccType
+            elseif resolvedTargetName and resolvedTargetName ~= "" and learnedImmunityType then
               CleveRoids.RecordCCImmunity(resolvedTargetName, learnedImmunityType, nil, pending.spellName)
 
               if debug then
@@ -6850,6 +6923,11 @@ local function CheckCCImmunity(unitId, ccType)
         return false
     end
 
+    -- Curated temporary encounter immunity is live state, not learned state.
+    if IsTemporarilyCCImmune(unitId, ccType) then
+        return true
+    end
+
     local targetName = UnitName(unitId)
     -- Fallback to GUID->name cache if UnitName fails
     -- This happens when multiscan passes a GUID that isn't the current target
@@ -8365,8 +8443,8 @@ local function ProcessSpellMissSelf(spellId, targetGuid, missInfo)
                 return
             end
 
-            -- Resolve a queryable unit for buff checks
-            -- Try current target first, then GUID via extended tokens
+            -- Resolve a queryable unit for temporary-immunity checks.
+            -- Try current target first, then GUID via extended tokens.
             local queryUnit = nil
             if UnitExists("target") and UnitName("target") == targetName then
                 queryUnit = "target"
@@ -8374,7 +8452,22 @@ local function ProcessSpellMissSelf(spellId, targetGuid, missInfo)
                 queryUnit = targetGuid
             end
 
-            -- Skip if target has temporary immunity buff (Divine Shield, etc.)
+            local ccType = GetSpellCCType(spellId)
+            local immunityType = GetSpellImmunityType(spellId) or ccType
+
+            -- A curated encounter aura can explain this exact CC IMMUNE result.
+            if queryUnit and immunityType then
+                local tempCCImmune, tempAuraID = IsTemporarilyCCImmune(queryUnit, immunityType)
+                if tempCCImmune then
+                    if CleveRoids.debug then
+                        local auraName = C_Spell.GetSpellName(tempAuraID) or ("SpellID:" .. tostring(tempAuraID))
+                        CleveRoids.Print("|cff00aaff[SPELL_MISS Temp CC Skip]|r " .. targetName .. " has " .. auraName .. " - temporary " .. immunityType .. " immunity")
+                    end
+                    return
+                end
+            end
+
+            -- Skip if target has a broad temporary immunity buff (Divine Shield, etc.)
             if queryUnit then
                 local immunityBuff = HasImmunityGrantingBuff(queryUnit)
                 if immunityBuff then
@@ -8386,8 +8479,6 @@ local function ProcessSpellMissSelf(spellId, targetGuid, missInfo)
             end
 
             -- Check NPC-applicable DR before recording permanent CC immunity.
-            local ccType = GetSpellCCType(spellId)
-            local immunityType = GetSpellImmunityType(spellId) or ccType
             local drType = GetSpellImmunityDRType(spellId)
             if drType and targetGuid then
                 local drEntry = lib.recentCCHits[targetGuid] and lib.recentCCHits[targetGuid][drType]
