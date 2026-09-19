@@ -2429,14 +2429,14 @@ local IMMUNITY_GUARD_AURA_IDS = {
 
 -- Return the active guard aura name, or nil. Names are display/debug only;
 -- all matching is by numeric spell ID and is therefore locale-independent.
+-- These checks only run after a failed/IMMUNE observation, so direct ID lookups
+-- are preferable to a slot scan and also see auras outside the visible slots.
 local function HasImmunityGuardAura(unit)
     if not UnitExists(unit) then return nil end
+    if not C_UnitAuras or not C_UnitAuras.GetUnitAuraBySpellID then return nil end
 
-    for i = 1, 32 do
-        local texture, stacks, spellID = UnitBuff(unit, i)
-        if not texture then break end
-
-        if spellID and IMMUNITY_GUARD_AURA_IDS[spellID] then
+    for spellID in pairs(IMMUNITY_GUARD_AURA_IDS) do
+        if C_UnitAuras.GetUnitAuraBySpellID(unit, spellID, "HELPFUL") then
             return C_Spell.GetSpellName(spellID) or ("SpellID:" .. spellID)
         end
     end
@@ -7470,7 +7470,7 @@ local function BuildLocalizedAuraPattern(formatString, hasCount)
     pattern = string.gsub(pattern, targetMarker, "(.-)", 1)
     pattern = string.gsub(pattern, spellMarker, "(.+)", 1)
     if hasCount then
-        pattern = string.gsub(pattern, tostring(countMarker), "%%d+", 1)
+        pattern = string.gsub(pattern, tostring(countMarker), function() return "%d+" end, 1)
     end
 
     return "^" .. pattern .. "$", targetPos < spellPos
