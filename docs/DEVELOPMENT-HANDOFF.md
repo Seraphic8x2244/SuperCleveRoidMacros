@@ -10,16 +10,17 @@ Updated: 2026-09-21
 - Upstream `brues-code/SuperCleveRoidMacros:main`: also `37ca7cef4012cc0d76b7e559ac9517c785dbae79` at last verification
 - TOC version: `@project-version@` (repository has no fixed source-tree version string)
 - Current branch head before this handoff refresh:
-  `67afa94272cfbef4abc1fada3631f00b8334047b` (`Restructure immunity design and inference plan`)
+  `84a66224b53c33ec0cdb34f0843e5f2b64f39a30` (`Record generalized immunity design status`)
 - Latest runtime-related commit remains:
   `e4dac9b24fd0b305fbd1dd7208564cee8b6dba44`
-- Branch relation before this handoff refresh: 26 commits ahead, 0 behind `main`
+- Branch relation before this handoff refresh: 27 commits ahead, 0 behind `main`
 - Branch delta: `Conditionals.lua`, `Utility.lua`,
   `docs/CC-IMMUNITY-DR.md`, `docs/DEVELOPMENT-HANDOFF.md`,
   and `docs/TEMP-CC-IMMUNITY.md`
 
 ## Recent branch commits
 
+- `84a66224` — Record generalized immunity design status
 - `67afa942` — Restructure immunity design and inference plan
 - `3f5c64c0` — Refresh immunity learner design handoff
 - `b19bd2d7` — Refresh temp CC immunity handoff
@@ -160,12 +161,11 @@ than adding polling/scanning overhead.
 
 ## Exact next step
 
-Keep runtime code unchanged until the generalized learner's two highest-risk
-semantics are resolved: (1) identify the exact Vanilla effect/aura basis for
-broad `spellimmune` (starting with Blackwing Spellbinder and the discussed ZG /
-Stratholme Spell Shield cases), and (2) define conservative promotion rules from
-candidate evidence to confirmed broad immunity so multiple narrow school
-immunities cannot masquerade as `spellimmune`. Then implement the smallest
-observation/inference layer using the existing Nampower miss/hit and debuff/CC
-verification paths. Keep the branch unmerged until the planned Sartura live
-validation is completed.
+Create a fifth review document, `docs/CC-DR-IMMUNITY-REWORK.md`, that consolidates
+`CC-IMMUNITY-DR.md`, `TEMP-CC-IMMUNITY.md`, `DEVELOPMENT-HANDOFF.md`, and
+`CLASSICAPI-TODO.md`. Keep the CC/DR/immunity rework as the main body, preserve
+only the useful design journey, remove duplicate rationale, and compress the
+unrelated ClassicAPI backlog into an appendix so no tracked information is lost.
+Do not delete the four source documents yet. After review, compare the draft
+against all four originals, revise any omissions, then delete the originals.
+Runtime code remains unchanged during this documentation pass.
