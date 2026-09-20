@@ -1,6 +1,6 @@
 # Development Handoff
 
-Updated: 2026-09-19
+Updated: 2026-09-20
 
 ## Current state
 
@@ -10,14 +10,18 @@ Updated: 2026-09-19
 - Upstream `brues-code/SuperCleveRoidMacros:main`: also `37ca7cef4012cc0d76b7e559ac9517c785dbae79` at last verification
 - TOC version: `@project-version@` (repository has no fixed source-tree version string)
 - Latest functional/documentation commit before this handoff refresh:
-  `dc3c3263479d034b93886bd793f7cb10c3b578c1`
-- Branch relation before this handoff refresh: 19 commits ahead, 0 behind `main`
+  `e4dac9b24fd0b305fbd1dd7208564cee8b6dba44`
+- Branch relation before this handoff refresh: 23 commits ahead, 0 behind `main`
 - Branch delta: `Conditionals.lua`, `Utility.lua`,
   `docs/CC-IMMUNITY-DR.md`, `docs/DEVELOPMENT-HANDOFF.md`,
   and `docs/TEMP-CC-IMMUNITY.md`
 
 ## Recent branch commits
 
+- `e4dac9b2` — Record Anti-Magic Shield guard update
+- `9201d451` — Document Anti-Magic Shield immunity guard
+- `20d2e9ce` — Guard Anti-Magic Shield immunity variants
+- `013df0ea` — Refresh temp CC development handoff
 - `dc3c3263` — Document temporary CC immunity implementation audit
 - `5f0af64a` — Localize split CC name fallback
 - `af5a8869` — Harden immunity guard and locale pattern lookup
@@ -128,8 +132,10 @@ IMMUNE learning-suppression path.
 
 No further code change is required before the next chat.
 
-Start the next development chat from this branch and handoff document. First
-verify whether upstream/main has moved since `37ca7cef`. Keep
-`design/temp-cc-immunity` unmerged until the next AQ40 reset provides the live
-Sartura validation above. If that test passes, perform one final branch-delta
-review and decide whether to merge/cherry-pick the completed work into `main`.
+Resume from `design/temp-cc-immunity` at `e4dac9b2`. `main` was re-verified on
+2026-09-20 and remains at `37ca7cef`, so the branch is 23 commits ahead and 0
+behind. Before changing runtime code, reproduce/identify the newly reported
+immunity issue and trace it through `CheckCCImmunity`, the explicit Nampower
+`SPELL_MISS -> IMMUNE` path, the delayed missing-debuff verifier, the curated
+general immunity guard, and `TempCCImmune`. Keep the branch unmerged until the
+planned Sartura live validation is completed.
