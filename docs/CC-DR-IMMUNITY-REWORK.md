@@ -1,20 +1,8 @@
 # CC, DR, Immunities and Temporary Immunities Rework
 
-> Review draft consolidating:
-> `CC-IMMUNITY-DR.md`, `TEMP-CC-IMMUNITY.md`,
-> `DEVELOPMENT-HANDOFF.md`, and `CLASSICAPI-TODO.md`.
-> Keep those four until this draft is compared and approved.
-
-## Status
-
-- Repo: `Seraphic8x2244/SuperCleveRoidMacros`
-- Branch: `design/temp-cc-immunity`
-- Base `main`: `37ca7cef4012cc0d76b7e559ac9517c785dbae79`
-- Latest runtime-related commit: `e4dac9b24fd0b305fbd1dd7208564cee8b6dba44`
-- TOC version: `@project-version@`
-- Runtime changes are in `Utility.lua` plus small `Conditionals.lua` changes.
-- Sartura TempCCImmune is implemented but not live-tested.
-- The generalized immunity learner is design only.
+> Review draft consolidating the branch's CC/immunity design work from
+> `CC-IMMUNITY-DR.md`, `TEMP-CC-IMMUNITY.md`, and
+> `DEVELOPMENT-HANDOFF.md`. Keep those source docs until final comparison.
 
 ## Journey
 
@@ -542,169 +530,17 @@ are settled.
 
 ---
 
-# Appendix — ClassicAPI backlog preserved from the old docs
-
-This is outside the CC/DR/immunity core but is retained so
-`CLASSICAPI-TODO.md` can eventually be deleted without losing work.
-
-## Policy
-
-ClassicAPI is mandatory for this fork. Do not maintain alternate fallback
-implementations for ClassicAPI-backed features.
-
-## C_UnitAuras
-
-Relevant API:
-`GetAuraDataBySpellName`, `GetUnitAuraBySpellID`,
-`GetAuraDataByIndex`.
-
-Important current behaviour:
-
-- numeric aura matching, dispel type, stacks, duration
-- non-player timing through `Aura::Source`
-- caster-modified duration
-- combo-point finisher duration
-- Carnage refresh support
-
-Known caveats:
-
-- pre-login auras may lack source/timing
-- max-stack refresh can be invisible
-- out-of-range group data is reduced
-
-Already done:
-- `[magic]`, `[curse]`, `[disease]`, `[poison]`, `[dispellable]`
-  and negations
-- `[magicbuff]`, `[dispellablebuff]` and negations
-
-Still useful:
-- spell-ID aura fast path
-- better cross-unit stacks
-- class-aware `[dispellable]`
-- optional type+name filters
-
-## Weapon enchant
-
-Done:
-- `GetWeaponEnchantInfo`
-- `[mhenchant]` / `[ohenchant]` + negations
-- ID/localized-name matching
-- `GetWeaponEnchant` / `GetEnchantName`
-
-Optional: route old `[mhimbue:Name]` through `GetEnchantName`.
-
-## Movement
-
-Done:
-- `GetUnitSpeed` + `IsFalling`
-- ClassicAPI-only `[moving]`
-- MonkeySpeed/Nampower movement fallback/100 Hz position buffer removed
-
-Do not use `IsSwimming` as "moving".
-
-## Action slots
-
-Done:
-- `GetActionInfo` wrapper
-- tooltip/texture heuristic removed
-- dead SuperWoW action-text copy removed
-
-Limitation: bag-instance item slots can have nil ID; current consumers need
-spells only.
-
-Optional: migrate remaining macro-slot `GetActionText` users.
-
-## C_Spell
-
-Potential use: cooldown/range/school/spellbook lookup.
-
-Do not blindly replace:
-- `[known]`: current name/rank/talent semantics are richer
-- `[usable]`/reactive: current Nampower path already fits
-- cast-time tooltip scans: DBC cast time is base only
-
-## Other remaining API opportunities
-
-- `C_Timer.After` / `NewTicker` for selected manual timers
-- `UnitGUID` / `UnitTokenFromGUID` for ComboPointTracker after GUID-format
-  compatibility check
-- `CastSpellNoToggle` / numeric spell-ID casting
-- `UnitStandState` / simple state helpers
-
-Already migrated:
-- native focus token + `[focus]`/`[nofocus]`
-- nameplate GUID counting
-- item cooldown
-- stealth / rogue form branch
-
-Trap:
-- `GetShapeshiftFormID` is a DBC form ID, not the 1-based
-  `[stance:N]`/`[form:N]` bar index.
-
-Keep existing implementations where better:
-- cast-time tooltip scans
-- UnitXP distance/facing/behind
-- Nampower item search
-- rich `[known]`
-- `[usable]` / reactive
-- `[rooted]`
-
-## libdebuff retirement
-
-ClassicAPI now covers much of the original remote-aura need. Re-base in stages;
-do not blindly delete libdebuff.
-
-Recorded footprint:
-
-```text
-28 public lib: methods
-~726 internal Utility.lua references
-8 consumer files
-Conditionals.lua 45
-Compatibility/pfUI.lua 39
-Core.lua 9
-```
-
-Likely replaceable:
-`GetDuration`, `GetDebuffCaster`, `IsOurDebuff`, `UnitBuff`,
-`UnitDebuff`, `FindPlayerDebuff`, `FindPlayerBuff`,
-`GetAllDebuffsOnTarget`, `GetCachedIcon`, `ApplyCarnageRefresh`,
-Dark Harvest timing helpers.
-
-Keep:
-`ShouldApplyDebuffRank`, `DidSpellFail`, `WasSpellReflected`,
-`DidTargetEvade`, `ProcessMissReason`, `IsPersonalDebuff`,
-`GetSpellRank`, `GetSpellBaseName`, `HasPendingCast`.
-
-Gate removal with a live difficult case such as Rip under Carnage:
-
-```text
-libdebuff:GetDuration(spellID)
-vs
-C_UnitAuras.GetUnitAuraBySpellID(...).duration
-and expirationTime - GetTime()
-```
-
-Also test pre-login and max-stack-refresh gaps.
-
-Marginal:
-- `[swimming]` could move to `IsSwimming()`
-- `[rooted]` has no ClassicAPI equivalent
-- weapon-imbue name matching can now use enchant ID -> localized name
-
 ---
 
 ## Review/delete procedure
 
 1. Review this draft.
-2. Compare it against all four originals.
-3. Restore any materially missing information.
-4. Remove any remaining duplicate wording.
-5. Confirm branch status, completed work, untested work, deferred work and exact
-   next step are represented here.
-6. Then delete:
+2. Compare it against the three source docs.
+3. Restore anything materially missing and remove remaining duplication.
+4. Then delete:
    - `docs/CC-IMMUNITY-DR.md`
    - `docs/TEMP-CC-IMMUNITY.md`
    - `docs/DEVELOPMENT-HANDOFF.md`
-   - `docs/CLASSICAPI-TODO.md`
-7. This file then becomes the design/status/handoff source of truth.
+5. Leave `docs/CLASSICAPI-TODO.md` untouched; it is pre-existing work from
+   `main` and unrelated to this rework.
+6. This file then becomes the design/handoff source of truth.
