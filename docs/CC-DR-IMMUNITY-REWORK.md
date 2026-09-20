@@ -26,8 +26,6 @@
 
 ---
 
----
-
 ## 2. Validation and open work
 
 ### Sartura
@@ -104,8 +102,6 @@ Preferred rule: confirm the narrowest explanation that fits the evidence.
 
 ---
 
----
-
 ## 3. Known limitations / deferred
 
 - Mouseover miss learning remains conservative when no queryable unit can be
@@ -117,8 +113,6 @@ Preferred rule: confirm the narrowest explanation that fits the evidence.
   direct miss event exists; Sartura is unaffected.
 - Do not split this into a new Lua module unless the learner grows enough to
   justify it.
-
----
 
 ---
 
@@ -167,8 +161,6 @@ This branch grew from several separate bugs that turned out to be one model prob
 
 The rework now covers CC classification, DR, permanent immunity learning,
 temporary immunity, and broad immunity inference.
-
----
 
 ---
 
@@ -306,8 +298,6 @@ silently rewrite user data.
 
 ---
 
----
-
 ## Appendix C — Temporary immunity
 
 ### C.1 TempCCImmune
@@ -390,8 +380,6 @@ debuff-cap ambiguity
 ```
 
 If explained, do not reinforce permanent immunity.
-
----
 
 ---
 
