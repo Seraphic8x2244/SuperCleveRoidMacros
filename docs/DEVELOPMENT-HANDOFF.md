@@ -62,6 +62,12 @@ Updated: 2026-09-19
 - Removed unrelated effects from the broad immunity guard and retained explicit
   known protection/reflection auras.
 - Added genuine Ice Block protection to that guard.
+- Added the Vanilla Anti-Magic Shield immunity family (7121, 19645, 24021) to
+  the general immunity guard so magic IMMUNE results while those auras are
+  active cannot poison permanent learned immunity.
+- Kept same-name-but-non-immune shields out of the guard; notably TBC Spell
+  Shield 33054 is damage reduction rather than immunity, and absorb shields do
+  not qualify.
 
 ### Locale audit and corrections
 
