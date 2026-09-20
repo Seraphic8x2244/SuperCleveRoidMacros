@@ -1,6 +1,6 @@
 # Development Handoff
 
-Updated: 2026-09-20
+Updated: 2026-09-21
 
 ## Current state
 
@@ -9,15 +9,18 @@ Updated: 2026-09-20
 - Base: `main` at `37ca7cef4012cc0d76b7e559ac9517c785dbae79`
 - Upstream `brues-code/SuperCleveRoidMacros:main`: also `37ca7cef4012cc0d76b7e559ac9517c785dbae79` at last verification
 - TOC version: `@project-version@` (repository has no fixed source-tree version string)
-- Latest functional/documentation commit before this handoff refresh:
+- Current branch head before this handoff refresh:
+  `b19bd2d7ae7ba066b136d5de889ce0e80550a487` (`Refresh temp CC immunity handoff`)
+- Latest runtime-related commit remains:
   `e4dac9b24fd0b305fbd1dd7208564cee8b6dba44`
-- Branch relation before this handoff refresh: 23 commits ahead, 0 behind `main`
+- Branch relation before this handoff refresh: 24 commits ahead, 0 behind `main`
 - Branch delta: `Conditionals.lua`, `Utility.lua`,
   `docs/CC-IMMUNITY-DR.md`, `docs/DEVELOPMENT-HANDOFF.md`,
   and `docs/TEMP-CC-IMMUNITY.md`
 
 ## Recent branch commits
 
+- `b19bd2d7` — Refresh temp CC immunity handoff
 - `e4dac9b2` — Record Anti-Magic Shield guard update
 - `9201d451` — Document Anti-Magic Shield immunity guard
 - `20d2e9ce` — Guard Anti-Magic Shield immunity variants
@@ -128,14 +131,26 @@ IMMUNE learning-suppression path.
   explicit Nampower miss event were available, the explanation could be missed.
   Sartura's Whirlwind duration makes this irrelevant to the current rule.
 
+## Current design direction
+
+A broader immunity-learning design discussion is now active. The key new
+observation is that one `IMMUNE` result can have multiple plausible causes:
+CC mechanic immunity, spell-school immunity, broad spell immunity, broad CC
+immunity, or absolute immunity. Blackwing Spellbinder is the motivating case:
+a magical stun such as Hammer of Justice can fail while a physical stun such as
+Cheap Shot or Charge Stun can still land. The proposed direction is to record
+observations first, maintain unresolved candidate explanations, and use later
+successful/immune observations to eliminate or reinforce candidates without
+adding new scanning or polling overhead.
+
+No runtime implementation of this generalized learner has been made yet.
+
 ## Exact next step
 
-No further code change is required before the next chat.
-
-Resume from `design/temp-cc-immunity` at `e4dac9b2`. `main` was re-verified on
-2026-09-20 and remains at `37ca7cef`, so the branch is 23 commits ahead and 0
-behind. Before changing runtime code, reproduce/identify the newly reported
-immunity issue and trace it through `CheckCCImmunity`, the explicit Nampower
-`SPELL_MISS -> IMMUNE` path, the delayed missing-debuff verifier, the curated
-general immunity guard, and `TempCCImmune`. Keep the branch unmerged until the
-planned Sartura live validation is completed.
+Restructure `docs/TEMP-CC-IMMUNITY.md` into `Observation`, `Goals`, `Done`, and
+`To-Do` sections without dropping existing TempCCImmune/audit/validation
+information. Add the generalized immunity model discussed on 2026-09-21,
+including school immunity, `spellimmune`, `ccimmune`, absolute `immune`, and a
+comparative observation/candidate/confirmation learner. Keep this as design
+work only until the inference rules and validation matrix are explicit. Keep
+the branch unmerged until the planned Sartura live validation is completed.
