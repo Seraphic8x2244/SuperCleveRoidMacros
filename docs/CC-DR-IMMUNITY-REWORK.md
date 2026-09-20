@@ -1,9 +1,5 @@
 # CC, DR, Immunities and Temporary Immunities Rework
 
-> Review draft consolidating the branch's CC/immunity design work from
-> `CC-IMMUNITY-DR.md`, `TEMP-CC-IMMUNITY.md`, and
-> `DEVELOPMENT-HANDOFF.md`. Keep those source docs until final comparison.
-
 ## Journey
 
 This branch grew from several separate bugs that turned out to be one model problem:
@@ -527,20 +523,3 @@ existing event
 
 No runtime change until `spellimmune` classification and confirmation rules
 are settled.
-
----
-
----
-
-## Review/delete procedure
-
-1. Review this draft.
-2. Compare it against the three source docs.
-3. Restore anything materially missing and remove remaining duplication.
-4. Then delete:
-   - `docs/CC-IMMUNITY-DR.md`
-   - `docs/TEMP-CC-IMMUNITY.md`
-   - `docs/DEVELOPMENT-HANDOFF.md`
-5. Leave `docs/CLASSICAPI-TODO.md` untouched; it is pre-existing work from
-   `main` and unrelated to this rework.
-6. This file then becomes the design/handoff source of truth.
