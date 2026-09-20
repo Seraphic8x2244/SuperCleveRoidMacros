@@ -33,7 +33,7 @@ no name spans two:
 [cc:stun]      -> mechanic 12 only
 [cc:freeze]    -> mechanic 13 only
 [cc:knockout]  -> mechanic 14 only
-[cc:sap]       -> mechanic 14 (compatibility alias)
+[cc:sap]       -> mechanic 30 only
 [cc:daze]      -> mechanic 27 only
 ```
 
@@ -47,7 +47,6 @@ Current aliases:
 slow                                  -> snare
 disoriented                           -> disorient
 grip                                  -> fumble    (mechanic 6 is DBC Fumble)
-sap                                   -> knockout  (Vanilla 1.12 mechanic 14)
 incap / incapacitate / incapacitated  -> knockout  (immunity input only)
 ```
 
@@ -84,17 +83,11 @@ itself:
 | Horror | 24 | `horror` |
 | Interrupt | 26 | `interrupt` |
 | Daze | 27 | `daze` |
+| Sapped | 30 | `sap` |
 
-The 1.12 client `SpellMechanic.dbc` contains 27 rows. In particular, Sap
-reports mechanic 14 (`incapacitated`) just like Gouge; there is no client
-mechanic-30 row to distinguish it. vMaNGOS retains later/extended mechanic
-enum constants such as `MECHANIC_SAPPED = 30`, but those server enum names
-must not be mistaken for the mechanic values in the Vanilla client DBC that
-SCRM actually reads.
-
-Mechanics 16, 19, 21, 22 and 25 (Bandage, Shield, Mount, Persuade,
-Invulnerability) are client DBC mechanics but are not crowd control, so they
-get no conditional.
+Mechanics 16, 19, 21, 22, 25, 28 and 29 (Bandage, Shield, Mount, Persuade,
+Invulnerability, Discovery, Immune Shield) are real DBC values but are not
+crowd control, so they get no conditional.
 
 ## Diminishing returns
 
@@ -149,14 +142,12 @@ in 1.12.
 
 ### Pools that exist but do not apply
 
-Recorded so nobody re-adds them to the safeguard. vMaNGOS' DR code groups
-server-side `MECHANIC_KNOCKOUT` and `MECHANIC_SAPPED` into
-`DIMINISHING_KNOCKOUT` (`SpellEntry.cpp:424-425`), but the Vanilla 1.12
-client reports player Sap as mechanic 14, so SCRM exposes `sap` only as an
-alias of `knockout`. Horror maps to `DIMINISHING_DEATHCOIL`
-(`SpellEntry.cpp:428-429`). These pools are `DRTYPE_PLAYER`.
-`DIMINISHING_LIMITONLY` is a PvP duration cap rather than a staged pool, and
-`DIMINISHING_NONE` is not a pool at all.
+Recorded so nobody re-adds them to the safeguard. Knockout and Sap are
+distinct mechanics that share `DIMINISHING_KNOCKOUT`
+(`SpellEntry.cpp:424-425`), and Horror maps to `DIMINISHING_DEATHCOIL`
+(`SpellEntry.cpp:428-429`). Both are `DRTYPE_PLAYER`. `DIMINISHING_LIMITONLY`
+is a PvP duration cap rather than a staged pool, and `DIMINISHING_NONE` is not
+a pool at all.
 
 ### The safeguard itself
 
