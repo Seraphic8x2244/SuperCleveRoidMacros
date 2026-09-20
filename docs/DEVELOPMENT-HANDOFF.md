@@ -10,16 +10,19 @@ Updated: 2026-09-21
 - Upstream `brues-code/SuperCleveRoidMacros:main`: also `37ca7cef4012cc0d76b7e559ac9517c785dbae79` at last verification
 - TOC version: `@project-version@` (repository has no fixed source-tree version string)
 - Current branch head before this handoff refresh:
-  `84a66224b53c33ec0cdb34f0843e5f2b64f39a30` (`Record generalized immunity design status`)
+  `d32928d4eff1a5ee86e6f835ab573acbf9475e18` (`Tighten consolidated CC DR immunity rework draft`)
 - Latest runtime-related commit remains:
   `e4dac9b24fd0b305fbd1dd7208564cee8b6dba44`
-- Branch relation before this handoff refresh: 27 commits ahead, 0 behind `main`
+- Branch relation before this handoff refresh: 30 commits ahead, 0 behind `main`
 - Branch delta: `Conditionals.lua`, `Utility.lua`,
   `docs/CC-IMMUNITY-DR.md`, `docs/DEVELOPMENT-HANDOFF.md`,
   and `docs/TEMP-CC-IMMUNITY.md`
 
 ## Recent branch commits
 
+- `d32928d4` — Tighten consolidated CC DR immunity rework draft
+- `80068a7a` — Draft consolidated CC DR immunity rework doc
+- `1a4e6039` — Record documentation consolidation pass
 - `84a66224` — Record generalized immunity design status
 - `67afa942` — Restructure immunity design and inference plan
 - `3f5c64c0` — Refresh immunity learner design handoff
@@ -161,11 +164,11 @@ than adding polling/scanning overhead.
 
 ## Exact next step
 
-Create a fifth review document, `docs/CC-DR-IMMUNITY-REWORK.md`, that consolidates
-`CC-IMMUNITY-DR.md`, `TEMP-CC-IMMUNITY.md`, `DEVELOPMENT-HANDOFF.md`, and
-`CLASSICAPI-TODO.md`. Keep the CC/DR/immunity rework as the main body, preserve
-only the useful design journey, remove duplicate rationale, and compress the
-unrelated ClassicAPI backlog into an appendix so no tracked information is lost.
-Do not delete the four source documents yet. After review, compare the draft
-against all four originals, revise any omissions, then delete the originals.
-Runtime code remains unchanged during this documentation pass.
+Review `docs/CC-DR-IMMUNITY-REWORK.md`. The draft is now 710 lines / ~2.6k words,
+with the CC/DR/immunity rework as the main body and the unrelated ClassicAPI
+backlog compressed into an appendix. The four source documents are still
+present. After review, perform a final source-by-source comparison against all
+four originals, restore any materially missing information, remove any remaining
+duplication, then delete the four originals and make the consolidated document
+the design/status/handoff source of truth. Runtime code remains unchanged during
+this documentation pass.
