@@ -10,16 +10,18 @@ Updated: 2026-09-21
 - Upstream `brues-code/SuperCleveRoidMacros:main`: also `37ca7cef4012cc0d76b7e559ac9517c785dbae79` at last verification
 - TOC version: `@project-version@` (repository has no fixed source-tree version string)
 - Current branch head before this handoff refresh:
-  `b19bd2d7ae7ba066b136d5de889ce0e80550a487` (`Refresh temp CC immunity handoff`)
+  `67afa94272cfbef4abc1fada3631f00b8334047b` (`Restructure immunity design and inference plan`)
 - Latest runtime-related commit remains:
   `e4dac9b24fd0b305fbd1dd7208564cee8b6dba44`
-- Branch relation before this handoff refresh: 24 commits ahead, 0 behind `main`
+- Branch relation before this handoff refresh: 26 commits ahead, 0 behind `main`
 - Branch delta: `Conditionals.lua`, `Utility.lua`,
   `docs/CC-IMMUNITY-DR.md`, `docs/DEVELOPMENT-HANDOFF.md`,
   and `docs/TEMP-CC-IMMUNITY.md`
 
 ## Recent branch commits
 
+- `67afa942` — Restructure immunity design and inference plan
+- `3f5c64c0` — Refresh immunity learner design handoff
 - `b19bd2d7` — Refresh temp CC immunity handoff
 - `e4dac9b2` — Record Anti-Magic Shield guard update
 - `9201d451` — Document Anti-Magic Shield immunity guard
@@ -145,12 +147,25 @@ adding new scanning or polling overhead.
 
 No runtime implementation of this generalized learner has been made yet.
 
+The branch-only `docs/TEMP-CC-IMMUNITY.md` has now been reorganized into
+`Observation`, `Goals`, `Done`, and `To-Do`. It preserves the existing Sartura
+TempCCImmune contract, implementation audit, locale notes, persistence notes,
+and live validation plan, while adding the generalized immunity vocabulary and
+comparative learner design. The new plan explicitly separates school immunity,
+`spellimmune`, `ccimmune`, exact CC mechanic immunity, and absolute `immune`;
+it also records the Blackwing Spellbinder HoJ-vs-physical-stun case, successful
+hits as negative evidence, typed temporary guards, candidate/disproved/confirmed
+states, and the constraint that the learner reuse existing event paths rather
+than adding polling/scanning overhead.
+
 ## Exact next step
 
-Restructure `docs/TEMP-CC-IMMUNITY.md` into `Observation`, `Goals`, `Done`, and
-`To-Do` sections without dropping existing TempCCImmune/audit/validation
-information. Add the generalized immunity model discussed on 2026-09-21,
-including school immunity, `spellimmune`, `ccimmune`, absolute `immune`, and a
-comparative observation/candidate/confirmation learner. Keep this as design
-work only until the inference rules and validation matrix are explicit. Keep
-the branch unmerged until the planned Sartura live validation is completed.
+Keep runtime code unchanged until the generalized learner's two highest-risk
+semantics are resolved: (1) identify the exact Vanilla effect/aura basis for
+broad `spellimmune` (starting with Blackwing Spellbinder and the discussed ZG /
+Stratholme Spell Shield cases), and (2) define conservative promotion rules from
+candidate evidence to confirmed broad immunity so multiple narrow school
+immunities cannot masquerade as `spellimmune`. Then implement the smallest
+observation/inference layer using the existing Nampower miss/hit and debuff/CC
+verification paths. Keep the branch unmerged until the planned Sartura live
+validation is completed.
