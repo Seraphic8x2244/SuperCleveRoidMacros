@@ -164,11 +164,12 @@ than adding polling/scanning overhead.
 
 ## Exact next step
 
-Review `docs/CC-DR-IMMUNITY-REWORK.md`. The draft is now 710 lines / ~2.6k words,
-with the CC/DR/immunity rework as the main body and the unrelated ClassicAPI
-backlog compressed into an appendix. The four source documents are still
-present. After review, perform a final source-by-source comparison against all
-four originals, restore any materially missing information, remove any remaining
-duplication, then delete the four originals and make the consolidated document
-the design/status/handoff source of truth. Runtime code remains unchanged during
-this documentation pass.
+Review `docs/CC-DR-IMMUNITY-REWORK.md`. The unrelated `CLASSICAPI-TODO.md` was
+confirmed unchanged from `main` and has been removed from the consolidation.
+The draft now consolidates only `CC-IMMUNITY-DR.md`, `TEMP-CC-IMMUNITY.md`, and
+`DEVELOPMENT-HANDOFF.md`; the transient status section was also removed. After
+review, perform a final source-by-source comparison against those three docs,
+restore any materially missing information, remove remaining duplication, then
+delete those three originals and make the consolidated document the design /
+handoff source of truth. Leave `CLASSICAPI-TODO.md` untouched. Runtime code
+remains unchanged during this documentation pass.
