@@ -2396,6 +2396,12 @@ local IMMUNITY_GUARD_AURA_IDS = {
     [11958] = true,  -- Ice Block
     [27619] = true,  -- Ice Block (alternate)
 
+    -- Magic immunity. These NPC auras make magic spells return IMMUNE rather
+    -- than merely absorbing or reducing their damage.
+    [7121] = true,   -- Anti-Magic Shield
+    [19645] = true,  -- Anti-Magic Shield (variant)
+    [24021] = true,  -- Anti-Magic Shield (variant)
+
     -- Physical protection. This guard is intentionally conservative: while
     -- active, a missing/IMMUNE physical effect must not become permanent data.
     [1022] = true,   -- Blessing of Protection (Rank 1)
