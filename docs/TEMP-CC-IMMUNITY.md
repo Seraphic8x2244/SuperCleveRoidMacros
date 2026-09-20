@@ -237,6 +237,12 @@ treated as generic immunity guards (including Sap and unrelated 25-second
 effects) and added Ice Block as an actual full-immunity aura. The guard list is
 now curated rather than derived from a DBC mechanic number.
 
+The same general guard now includes the Vanilla Anti-Magic Shield immunity
+family (spell IDs 7121, 19645 and 24021). Those auras grant magic-school
+immunity and can therefore explain an IMMUNE result without implying permanent
+NPC immunity. Similar names are not enough: absorb shields and damage-reduction
+effects are deliberately excluded, including the later TBC Spell Shield 33054.
+
 ## Implemented integration points
 
 The current implementation contains:
