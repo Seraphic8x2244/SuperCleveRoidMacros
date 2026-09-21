@@ -10,11 +10,13 @@ The durable design and historical reasoning remain in
 
 - Branch: `design/temp-cc-immunity`
 - Base: `main`
-- Branch head before this handoff refresh: `3e7eccb57858ca2a399c7fb302192859ab890f6e`
-- Branch relation before this handoff refresh: 64 ahead / 0 behind `main`
+- Branch head before this handoff refresh: `3942c67d762e4354df0a03f01c31ce1cd6b1cff8`
+- Branch relation before this handoff refresh: 66 ahead / 0 behind `main`
 - TOC version: `@project-version@`
 - Latest runtime-related commit: `3e7eccb57858ca2a399c7fb302192859ab890f6e`
 - Recent commits:
+  - `3942c67d` — Resolve spell immunity classification basis
+  - `b226bc67` — Record immunity framework step seven completion
   - `3e7eccb5` — Clarify school based spell immunity classification
   - `7ec46616` — Classify spell immunity dimensions
   - `b3c65497` — Record Hammer of Justice step seven invariants
