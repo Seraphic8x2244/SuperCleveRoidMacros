@@ -2394,6 +2394,7 @@ local IMMUNITY_AURAS = {
         [5573] = true,   -- Divine Protection (Rank 2)
         [642] = true,    -- Divine Shield (Rank 1)
         [1020] = true,   -- Divine Shield (Rank 2)
+        [13874] = true,  -- Divine Shield
         [11958] = true,  -- Ice Block
         [27619] = true,  -- Ice Block (alternate)
     },
