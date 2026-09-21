@@ -10,11 +10,13 @@ The durable design and historical reasoning remain in
 
 - Branch: `design/temp-cc-immunity`
 - Base: `main`
-- Branch head before this handoff refresh: `be8c4db63c0ee0f8eb9db78bdd0fb982b1288d94`
-- Branch relation before this handoff refresh: 48 ahead / 0 behind `main`
+- Branch head before this handoff refresh: `0b4e081e6f73e6b354c0d4f8c1c839590859ff5b`
+- Branch relation before this handoff refresh: 50 ahead / 0 behind `main`
 - TOC version: `@project-version@`
 - Latest runtime-related commit: `97383436f0c7ea3dead851c7c30914f3b8c08644`
 - Recent commits:
+  - `0b4e081e` — Track immunity query sources
+  - `695f05ef` — Record framework step three start
   - `be8c4db6` — Record immunity framework step two completion
   - `97383436` — Route spell mechanic checks through typed immunity query
   - `4241f918` — Centralize typed immunity queries
@@ -326,28 +328,56 @@ Static diff review completed. A local Lua compiler/runtime was not available in
 the tool environment, so in-game/runtime validation remains part of the later
 framework regression matrix.
 
-### Step 3 — separate source from type
+### Step 3 — separate source from type — DONE
 
-The query framework must distinguish **what immunity is** from **why it is
-currently true**.
+Implemented in `0b4e081e`.
 
-Sources include:
+The query framework now separates the immunity dimension from its source using
+optional second/third return values:
 
 ```text
-learned permanent fact
-manual/buff-conditioned record
-typed temporary aura
-TempCC encounter rule
-Banish/special live state
-DR
-reflection
-death/debuff-cap ambiguity
+boolean, source, detail
 ```
 
-DR, reflection, death and debuff-cap ambiguity are learning explanations. They
-are not persistent immunity facts.
+Existing boolean callers remain compatible.
 
-This separation is required before we type the current broad guard.
+Current source vocabulary:
+
+```text
+recorded
+    permanent SavedVariables fact
+    current storage cannot distinguish automatic learning from manual creation
+
+conditional
+    recorded immunity currently active because its recorded buff is present
+
+temporary_aura
+    reserved for Step 4 typed immunity auras
+
+temporary_cc
+    curated encounter-specific TempCC rule
+
+special
+    bespoke live state, currently Banish
+
+reflection
+dr
+death
+debuff_cap
+    explanation/guard sources for later learning-path integration
+```
+
+Current query integration:
+
+- TempCC returns `temporary_cc` plus the matching aura ID;
+- permanent exact CC/school records return `recorded`;
+- buff-conditioned exact CC/school records return `conditional` plus buff name;
+- Banish now enters typed school queries as `special` plus aura ID;
+- public boolean behaviour is preserved;
+- broad `spell` / `cc` / `all` remain inert;
+- `IMMUNITY_GUARD_AURA_IDS` is unchanged and remains Step 4.
+
+No persistence format or learning behaviour changed.
 
 ### Step 4 — replace the flat guard with `IMMUNITY_AURAS`
 
@@ -603,27 +633,31 @@ matrix before learner development begins.
 
 ## Exact next step
 
-**Step 3: separate immunity type from immunity source without changing learning
-behaviour.**
+**Step 4: replace the flat temporary learning guard with typed
+`IMMUNITY_AURAS[type][spellID] = true` buckets.**
 
-Introduce the minimum internal source/result structure needed so a typed query
-can distinguish why it is true or why an `IMMUNE` observation is inconclusive:
+Convert the existing `IMMUNITY_GUARD_AURA_IDS` entries into:
 
 ```text
-learned permanent
-manual/buff-conditioned
-temporary aura
-TempCC encounter rule
-special live state (Banish)
-reflection
-DR
-death/debuff-cap ambiguity
+all
+spell
+physical
+reflect
 ```
 
-Do not type or replace `IMMUNITY_GUARD_AURA_IDS` yet; that remains Step 4.
+using only the currently verified IDs.
 
-Step 3 should establish the interface/source vocabulary only, then adapt the
-current exact school/CC/TempCC/Banish query paths where useful without changing
-their returned boolean behaviour.
+Requirements:
 
-After Step 3, update this document before beginning Step 4.
+- multiple ranks / variants / alternate applications remain one-line
+  `[spellID] = true` additions;
+- preserve numeric by-ID `C_UnitAuras` lookups;
+- preserve the current "any matching guard makes learning inconclusive"
+  behaviour while learning callers are migrated;
+- typed queries may begin reporting live `all`, `spell`, and `physical`
+  from these auras;
+- `reflect` must remain a source/explanation, never an immunity type;
+- TempCC remains separate;
+- do not add new aura IDs during the structural conversion.
+
+After Step 4, update this document before beginning Step 5.
