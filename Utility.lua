@@ -6050,7 +6050,7 @@ local IMMUNITY_SCHOOLS = {
     shadow = 6,
     arcane = 7,
     bleed = 8,
-    unknown = 9,  -- For spells where we can't determine the school
+    unknown = 9,  -- Storage fallback only; not a queryable immunity dimension
 }
 
 -- CC (Crowd Control) immunity types
@@ -6073,6 +6073,29 @@ local CC_IMMUNITY_TYPES = {
     snare = true,      -- Hamstring, Wing Clip
 }
 
+-- Broad immunity dimensions. These are framework types only at this stage;
+-- existing query/learning behaviour does not consume them yet.
+local BROAD_IMMUNITY_TYPES = {
+    spell = true,
+    cc = true,
+    all = true,
+}
+
+-- Canonical internal immunity vocabulary. Keep "unknown" out of this table:
+-- it is a storage fallback for unresolved schools, not an immunity dimension.
+local IMMUNITY_TYPES = {}
+for school in pairs(IMMUNITY_SCHOOLS) do
+    if school ~= "unknown" then
+        IMMUNITY_TYPES[school] = true
+    end
+end
+for ccType in pairs(CC_IMMUNITY_TYPES) do
+    IMMUNITY_TYPES[ccType] = true
+end
+for broadType in pairs(BROAD_IMMUNITY_TYPES) do
+    IMMUNITY_TYPES[broadType] = true
+end
+
 local CC_IMMUNITY_ALIASES = {
     sap = "knockout", -- Vanilla 1.12 Sap uses mechanic 14 (incapacitated)
     incap = "knockout",
@@ -6080,10 +6103,21 @@ local CC_IMMUNITY_ALIASES = {
     incapacitated = "knockout",
 }
 
-local function NormalizeCCImmunityType(ccType)
-    if not ccType then return nil end
-    local normalized = string.lower(ccType)
+-- Normalize all immunity tokens through one path. Validation is deliberately
+-- separate so existing CC callers keep their previous lower-case/alias behaviour.
+local function NormalizeImmunityType(immunityType)
+    if not immunityType then return nil end
+    local normalized = string.lower(immunityType)
     return CC_IMMUNITY_ALIASES[normalized] or normalized
+end
+
+local function IsValidImmunityType(immunityType)
+    local normalized = NormalizeImmunityType(immunityType)
+    return normalized and IMMUNITY_TYPES[normalized] == true or false
+end
+
+local function NormalizeCCImmunityType(ccType)
+    return NormalizeImmunityType(ccType)
 end
 
 -- Maps DBC mechanic IDs back to CC type names for immunity recording
