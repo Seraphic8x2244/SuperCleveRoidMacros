@@ -10,11 +10,13 @@ The durable design and historical reasoning remain in
 
 - Branch: `design/temp-cc-immunity`
 - Base: `main`
-- Branch head before this handoff refresh: `0b4e081e6f73e6b354c0d4f8c1c839590859ff5b`
-- Branch relation before this handoff refresh: 50 ahead / 0 behind `main`
+- Branch head before this handoff refresh: `adb62e8d8443ca7493295246c6d03c9ebc62aee3`
+- Branch relation before this handoff refresh: 52 ahead / 0 behind `main`
 - TOC version: `@project-version@`
 - Latest runtime-related commit: `0b4e081e6f73e6b354c0d4f8c1c839590859ff5b`
 - Recent commits:
+  - `adb62e8d` — Correct framework runtime head
+  - `0eba3721` — Record immunity framework step three completion
   - `0b4e081e` — Track immunity query sources
   - `695f05ef` — Record framework step three start
   - `be8c4db6` — Record immunity framework step two completion
