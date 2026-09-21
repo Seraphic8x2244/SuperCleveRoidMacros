@@ -13,7 +13,7 @@ The durable design and historical reasoning remain in
 - Branch head before this handoff refresh: `0b4e081e6f73e6b354c0d4f8c1c839590859ff5b`
 - Branch relation before this handoff refresh: 50 ahead / 0 behind `main`
 - TOC version: `@project-version@`
-- Latest runtime-related commit: `97383436f0c7ea3dead851c7c30914f3b8c08644`
+- Latest runtime-related commit: `0b4e081e6f73e6b354c0d4f8c1c839590859ff5b`
 - Recent commits:
   - `0b4e081e` — Track immunity query sources
   - `695f05ef` — Record framework step three start
