@@ -178,7 +178,7 @@ temporary immunity, and broad immunity inference.
 | `immunityType` | Exact DBC mechanic stored for learned NPC CC immunity |
 | DR type | Vanilla DR pool; internal only |
 | school | fire/frost/nature/shadow/arcane/holy, plus physical/bleed |
-| `spellimmune` | broad magical/spell immunity |
+| `spellimmune` | broad immunity to the six non-physical Vanilla spell schools; school-mask based, not DmgClass based |
 | `ccimmune` | broad immunity to CC mechanics |
 | `immune` | absolute/broad immunity |
 | temporary explanation | live aura/DR/death/reflection/etc. that explains an `IMMUNE` now |
@@ -477,16 +477,24 @@ for learning-guard purposes.
 
 ### D.6 `spellimmune` classification
 
-Do not define `spellimmune` as "ability has a Spell.dbc row"; physical melee
-abilities also do.
+The Vanilla basis is school immunity, not "has a Spell.dbc row" and not
+`DmgClass`.
 
-The classifier must allow:
+vMaNGOS checks spell/mechanic immunity before the hit table. A broad magic
+school-immunity mask covers Holy, Fire, Nature, Frost, Shadow and Arcane while
+leaving Physical outside it. This explains the required regression split:
 
 ```text
-HoJ -> blocked
-Cheap Shot -> not blocked
-Charge Stun -> not blocked
+HoJ          -> Holy + stun -> blocked by spellimmune or stunimmune
+Cheap Shot   -> Physical + stun -> not blocked by spellimmune
+Charge Stun  -> Physical + stun -> not blocked by spellimmune
+Fireball     -> Fire -> blocked by spellimmune
 ```
+
+Anti-Magic Shield is the live typed example of this six-school immunity model.
+Blackwing Spellbinder remains the permanent-regression example; its exact
+underlying aura ID may still be worth identifying, but the classifier primitive
+is resolved.
 
 Verify whether the correct primitive is school mask, aura type, attributes, or
 another server/DBC property before coding.
