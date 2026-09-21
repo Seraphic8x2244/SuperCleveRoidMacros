@@ -10,11 +10,12 @@ The durable design and historical reasoning remain in
 
 - Branch: `design/temp-cc-immunity`
 - Base: `main`
-- Branch head before this handoff refresh: `af3dc5116c9c13fe7a8c8cc6ba761a94a5ee487e`
-- Branch relation before this handoff refresh: 60 ahead / 0 behind `main`
+- Branch head before this handoff refresh: `b17a36696df6bb2a25486b89452fe9fb9e15cb48`
+- Branch relation before this handoff refresh: 61 ahead / 0 behind `main`
 - TOC version: `@project-version@`
 - Latest runtime-related commit: `af3dc5116c9c13fe7a8c8cc6ba761a94a5ee487e`
 - Recent commits:
+  - `b17a3669` — Record immunity framework step six completion
   - `af3dc511` — Compose typed immunity precedence
   - `fabd382a` — Record framework step six start
   - `68f9385e` — Complete framework step five verification
@@ -523,6 +524,20 @@ environment, so runtime validation remains outstanding.
 
 ### Step 7 — implement action/spell dimension classification
 
+Working HoJ invariants supplied for this stage:
+
+```text
+Hammer of Justice
+    checks both spell/magic immunity and stun immunity
+    cannot miss, dodge, parry, or ordinary spell-resist
+    can receive a stun-resist result (for example Orc racial contribution)
+    returns IMMUNE against broad magic-immune targets such as Blackwing Spellbinder
+```
+
+These are classification constraints, not a request to reproduce HoJ's entire
+hit table. The Step 7 helper should model **which immunity dimensions can block
+the action**, not unrelated avoidance/resistance outcomes.
+
 Add a helper conceptually like:
 
 ```lua
@@ -716,7 +731,8 @@ Fireball:
 ```
 
 Before hard-coding the `spell` classification rule, research the exact Vanilla
-basis using Blackwing Spellbinder as the primary regression case:
+basis using Blackwing Spellbinder as the primary regression case. Live user
+validation is deferred; continue from code/data evidence for now:
 
 - HoJ / magical stuns should be spell-relevant;
 - Cheap Shot / Charge should not be spell-relevant;
