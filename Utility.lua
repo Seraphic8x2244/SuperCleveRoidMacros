@@ -7694,6 +7694,53 @@ local function SchoolImmune(unitId, school, targetName)
     return CleveRoids.ClassicAPI.GetAuraDataBySpellName(unitId, data.buff, "HELPFUL") and true or false
 end
 
+-- Resolve one canonical immunity dimension. Broad framework types deliberately
+-- have no source yet and therefore return false until later framework steps.
+-- "unknown" is intentionally excluded: legacy unknown-school/spell-specific
+-- records remain on the existing CheckImmunity path.
+local function CheckImmunityType(unitId, immunityType)
+    if not unitId or not UnitExists(unitId) then
+        return false
+    end
+
+    local normalized = NormalizeImmunityType(immunityType)
+    if not normalized or not IsValidImmunityType(normalized) then
+        return false
+    end
+
+    if CC_IMMUNITY_TYPES[normalized] then
+        return CheckCCImmunity(unitId, normalized)
+    end
+
+    if BROAD_IMMUNITY_TYPES[normalized] then
+        return false
+    end
+
+    if not IMMUNITY_SCHOOLS[normalized] or normalized == "unknown" then
+        return false
+    end
+
+    -- Learned school immunity is NPC-specific. Live special states such as
+    -- Banish remain on the existing CheckImmunity path until source handling
+    -- is centralized in the next framework stages.
+    if UnitIsPlayer(unitId) then
+        return false
+    end
+
+    local targetName = UnitName(unitId)
+    if not targetName or targetName == "" or targetName == "Unknown" then
+        local normalizedGuid = CleveRoids.NormalizeGUID(unitId)
+        if normalizedGuid and lib and lib.guidToName then
+            targetName = lib.guidToName[normalizedGuid]
+        end
+    end
+    if not targetName or targetName == "" then
+        return false
+    end
+
+    return SchoolImmune(unitId, normalized, targetName)
+end
+
 -- Check if a unit is immune to a spell, damage school, or CC type
 -- Supports: CheckImmunity(unitId, "Flame Shock") or CheckImmunity(unitId, "fire") or CheckImmunity(unitId, "stun")
 function CleveRoids.CheckImmunity(unitId, spellOrSchool)
@@ -7707,9 +7754,9 @@ function CleveRoids.CheckImmunity(unitId, spellOrSchool)
 
     -- Check if input is a CC type (stun, fear, root, etc.)
     local inputLower = string.lower(spellOrSchool)
-    local ccInput = NormalizeCCImmunityType(inputLower)
-    if CC_IMMUNITY_TYPES[ccInput] then
-        return CheckCCImmunity(unitId, ccInput)
+    local normalizedInput = NormalizeImmunityType(inputLower)
+    if normalizedInput and CC_IMMUNITY_TYPES[normalizedInput] then
+        return CheckImmunityType(unitId, normalizedInput)
     end
 
     -- Spell-name queries should honour mechanic immunity as well as school
@@ -7765,6 +7812,12 @@ function CleveRoids.CheckImmunity(unitId, spellOrSchool)
         end
     end
 
+    -- Exact canonical school queries now use the typed path. Keep "unknown"
+    -- on the legacy spell-specific storage path for compatibility.
+    if inputLower ~= "unknown" and IMMUNITY_SCHOOLS[inputLower] then
+        return CheckImmunityType(unitId, inputLower)
+    end
+
     -- Only works on NPCs for NPC-specific immunities
     if UnitIsPlayer(unitId) then
         return false
@@ -7807,8 +7860,8 @@ function CleveRoids.CheckImmunity(unitId, spellOrSchool)
 
             -- Initial school (e.g. physical for Rake's opening hit), then the DoT's
             -- school (e.g. bleed). Immunity to either component skips the spell.
-            local initialImmune = SchoolImmune(unitId, initialSchool, targetName)
-            local debuffImmune = SchoolImmune(unitId, debuffSchool, targetName)
+            local initialImmune = CheckImmunityType(unitId, initialSchool)
+            local debuffImmune = CheckImmunityType(unitId, debuffSchool)
 
             -- Return true if immune to EITHER component
             if initialImmune or debuffImmune then
@@ -7828,6 +7881,10 @@ function CleveRoids.CheckImmunity(unitId, spellOrSchool)
         school = GetSpellSchool(spellOrSchool)
         if not school then
             school = "unknown"  -- If we can't determine school, check unknown category
+        end
+
+        if school ~= "unknown" and IMMUNITY_SCHOOLS[school] then
+            return CheckImmunityType(unitId, school)
         end
     end
 
