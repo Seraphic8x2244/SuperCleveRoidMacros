@@ -496,8 +496,6 @@ Blackwing Spellbinder remains the permanent-regression example; its exact
 underlying aura ID may still be worth identifying, but the classifier primitive
 is resolved.
 
-Verify whether the correct primitive is school mask, aura type, attributes, or
-another server/DBC property before coding.
 
 ### D.7 Event footprint
 
