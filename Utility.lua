@@ -7760,27 +7760,16 @@ local function GetBanishAuraID(unitId)
     return nil
 end
 
--- Resolve one canonical immunity dimension. Broad framework types deliberately
--- have no source yet and therefore return false until later framework steps.
--- "unknown" is intentionally excluded: legacy unknown-school/spell-specific
--- records remain on the existing CheckImmunity path.
-local function CheckImmunityType(unitId, immunityType)
-    if not unitId or not UnitExists(unitId) then
-        return false
-    end
-
-    local normalized = NormalizeImmunityType(immunityType)
-    if not normalized or not IsValidImmunityType(normalized) then
-        return false
-    end
-
+-- Resolve only the requested immunity dimension, without applying broader
+-- composition. Keeping this primitive separate prevents recursive composition
+-- and gives deterministic source precedence in CheckImmunityType below.
+local function CheckExactImmunityType(unitId, normalized)
     if CC_IMMUNITY_TYPES[normalized] then
         return CheckCCImmunity(unitId, normalized)
     end
 
-    -- Step 4: typed temporary aura sources are queryable only by their exact
-    -- semantic bucket. Cross-type composition (for example all -> physical)
-    -- is intentionally deferred to the composition step.
+    -- Typed temporary aura sources that map directly to this dimension.
+    -- "physical" is a school dimension with a dedicated live-aura bucket.
     if normalized == "all" or normalized == "spell" or normalized == "physical" then
         local auraID = GetActiveImmunityAura(unitId, normalized)
         if auraID then
@@ -7788,6 +7777,8 @@ local function CheckImmunityType(unitId, immunityType)
         end
     end
 
+    -- Broad types with no direct source yet remain false. In particular, "cc"
+    -- is a framework dimension but has no typed live/persistent source yet.
     if BROAD_IMMUNITY_TYPES[normalized] then
         return false
     end
@@ -7820,6 +7811,46 @@ local function CheckImmunityType(unitId, immunityType)
     end
 
     return SchoolImmune(unitId, normalized, targetName)
+end
+
+-- Resolve one canonical immunity dimension with explicit composition.
+-- Source precedence is most-specific first:
+--   requested dimension -> broad CC (for exact CC only) -> absolute "all".
+-- This preserves precise explanations such as Sartura's temporary stun while
+-- still allowing broader immunities to block narrower typed queries.
+local function CheckImmunityType(unitId, immunityType)
+    if not unitId or not UnitExists(unitId) then
+        return false
+    end
+
+    local normalized = NormalizeImmunityType(immunityType)
+    if not normalized or not IsValidImmunityType(normalized) then
+        return false
+    end
+
+    local immune, source, detail = CheckExactImmunityType(unitId, normalized)
+    if immune then
+        return true, source, detail
+    end
+
+    -- Broad CC immunity blocks every exact CC mechanic, but an exact temporary
+    -- mechanic (TempCC) never implies broad CC in the opposite direction.
+    if CC_IMMUNITY_TYPES[normalized] then
+        immune, source, detail = CheckExactImmunityType(unitId, "cc")
+        if immune then
+            return true, source, detail
+        end
+    end
+
+    -- Absolute immunity composes over every canonical dimension except itself.
+    if normalized ~= "all" then
+        immune, source, detail = CheckExactImmunityType(unitId, "all")
+        if immune then
+            return true, source, detail
+        end
+    end
+
+    return false
 end
 
 -- Check if a unit is immune to a spell, damage school, or CC type
