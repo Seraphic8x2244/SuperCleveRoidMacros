@@ -6789,9 +6789,10 @@ CleveRoids.GetSpellImmunityType = GetSpellImmunityType
 
 -- Vanilla broad magic/spell immunity is school-based, not DmgClass-based.
 -- The server checks spell/mechanic immunity before entering the hit table, so
--- a Holy DmgClass=NONE spell such as Hammer of Justice is still blocked by a
--- six-school magic-immunity mask, while Physical abilities such as Cheap Shot
--- and Charge Stun are not. Keep this classification numeric/DBC-driven.
+-- Hammer of Justice's Holy school is enough for a six-school magic-immunity
+-- mask to block it regardless of its later hit-roll behaviour, while Physical
+-- abilities such as Cheap Shot and Charge Stun are not blocked by that mask.
+-- Keep this classification numeric/DBC-driven.
 local MAGIC_IMMUNITY_SCHOOLS = {
     holy = true,
     fire = true,
