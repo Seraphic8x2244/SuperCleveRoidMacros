@@ -10,11 +10,12 @@ The durable design and historical reasoning remain in
 
 - Branch: `design/temp-cc-immunity`
 - Base: `main`
-- Branch head before this handoff refresh: `3bdeb163a5ebc1ff97458dc60b163a0dc0dd11c5`
-- Branch relation before this handoff refresh: 54 ahead / 0 behind `main`
+- Branch head before this handoff refresh: `18a1cfaab3a09cf944ae0dfee8942666330a2647`
+- Branch relation before this handoff refresh: 55 ahead / 0 behind `main`
 - TOC version: `@project-version@`
 - Latest runtime-related commit: `3bdeb163a5ebc1ff97458dc60b163a0dc0dd11c5`
 - Recent commits:
+  - `18a1cfaa` — Record immunity framework step four completion
   - `3bdeb163` — Type temporary immunity aura guards
   - `9f4016ad` — Record framework step four start
   - `adb62e8d` — Correct framework runtime head
