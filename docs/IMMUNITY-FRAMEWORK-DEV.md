@@ -10,11 +10,14 @@ The durable design and historical reasoning remain in
 
 - Branch: `design/temp-cc-immunity`
 - Base: `main`
-- Branch head before this handoff refresh: `d5216f6a893f6acbb2340a327777714381f968d8`
-- Branch relation before this handoff refresh: 69 ahead / 0 behind `main`
+- Branch head before this handoff refresh: `09632d813ca1c355233ee931f3f5c3692bd7e673`
+- Branch relation before this handoff refresh: 71 ahead / 0 behind `main`
 - TOC version: `@project-version@`
 - Latest runtime-related commit: `d5216f6a893f6acbb2340a327777714381f968d8`
 - Recent commits:
+  - `09632d81` — Record spell dimension query integration
+  - `331277c5` — Record immunity framework step eight completion
+  - `d5216f6a` — Route spell immunity checks through dimensions
   - `d5216f6a` — Route spell immunity checks through dimensions
   - `d134d493` — Remove resolved spell immunity research note
   - `b3e339a1` — Record framework step eight start
