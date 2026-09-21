@@ -10,11 +10,14 @@ The durable design and historical reasoning remain in
 
 - Branch: `design/temp-cc-immunity`
 - Base: `main`
-- Branch head before this handoff refresh: `3942c67d762e4354df0a03f01c31ce1cd6b1cff8`
-- Branch relation before this handoff refresh: 66 ahead / 0 behind `main`
+- Branch head before this handoff refresh: `d5216f6a893f6acbb2340a327777714381f968d8`
+- Branch relation before this handoff refresh: 69 ahead / 0 behind `main`
 - TOC version: `@project-version@`
-- Latest runtime-related commit: `3e7eccb57858ca2a399c7fb302192859ab890f6e`
+- Latest runtime-related commit: `d5216f6a893f6acbb2340a327777714381f968d8`
 - Recent commits:
+  - `d5216f6a` — Route spell immunity checks through dimensions
+  - `d134d493` — Remove resolved spell immunity research note
+  - `b3e339a1` — Record framework step eight start
   - `3942c67d` — Resolve spell immunity classification basis
   - `b226bc67` — Record immunity framework step seven completion
   - `3e7eccb5` — Clarify school based spell immunity classification
@@ -582,16 +585,52 @@ queries through the full dimension list is Step 8.
 Live validation is deferred. Static/code/data evidence is sufficient to continue
 the framework sequence for now.
 
-### Step 8 — route existing public checks through dimensions
+### Step 8 — route existing public checks through dimensions — DONE
 
-Once action classification is sound:
+Implemented in `d5216f6a`.
 
-- spell-name `CheckImmunity` checks all relevant dimensions
-- exact `[immune:stun]` still means exact stun immunity
-- exact school queries still mean that school
-- bare spell-aware `[immune]` can use the action's complete dimension set
+Added internal action resolver:
 
-Do not add new conditionals yet.
+```lua
+CheckSpellImmunityDimensions(unitId, spellID)
+```
+
+It consumes the ordered list from `GetSpellImmunityDimensions` and checks each
+dimension exactly once with `CheckExactImmunityType`.
+
+Current spell-name / bare-action behaviour:
+
+```text
+Hammer of Justice
+    holy -> spell -> stun -> cc -> all
+
+Cheap Shot
+    physical -> stun -> cc -> all
+
+Charge Stun
+    physical -> stun -> cc -> all
+
+Fireball
+    fire -> spell -> all
+```
+
+The first matching dimension wins, which preserves narrow-to-broad provenance
+for Step 9.
+
+Explicit typed queries are unchanged:
+
+- `[immune:stun]` remains a typed stun query and uses Step 6 composition;
+- `[immune:fire]` remains a typed fire query;
+- no `[immune:spell]`, `[immune:cc]`, or `[immune:all]` grammar has been
+  added yet;
+- legacy `unknown` spell-specific storage remains on its compatibility path.
+
+Banish continues to resolve as a special school source through the dimension
+check. Reflection is absent from the dimension list and cannot become immunity.
+
+No learning or SavedVariables schema changed.
+
+Static diff review completed. Live validation remains deferred.
 
 ### Step 9 — add reason/debug visibility
 
@@ -713,37 +752,27 @@ matrix before learner development begins.
 
 ## Exact next step
 
-**Step 8: route spell-aware public immunity checks through the dimension helper.**
+**Step 9: add reason/debug visibility for typed immunity decisions.**
 
-Use `GetSpellImmunityDimensions(spellID)` for spell-name/bare-action queries so
-one action can be blocked by any relevant dimension.
+Use the source/dimension data already returned by the framework so debug output
+can explain **why** an action is considered immune.
 
-Required behaviour:
+Target quality:
 
 ```text
-Hammer of Justice
-    blocked by holy OR spell OR stun OR cc OR all
-
-Cheap Shot
-    blocked by physical OR stun OR cc OR all
-
-Charge Stun
-    blocked by physical OR stun OR cc OR all
-
-Fireball
-    blocked by fire OR spell OR all
+Hammer of Justice -> immune: spell (Anti-Magic Shield 7121)
+Cheap Shot        -> immune: physical (Blessing of Protection 1022)
+Hammer of Justice -> immune: stun (Sartura Whirlwind 26083)
+Fireball          -> immune: fire (recorded)
 ```
 
-Preserve exact explicit queries:
+Requirements:
 
-- `[immune:stun]` means the stun dimension (with Step 6 broad composition),
-  not "every dimension of the currently selected spell";
-- `[immune:fire]` remains a fire query;
-- no new macro grammar is added.
+- no extra polling or aura scans;
+- no public conditional grammar changes;
+- no learning changes;
+- names are display/debug only; identity remains numeric/type-based;
+- preserve existing debug gating so normal users do not receive extra spam;
+- expose the winning dimension, source, and detail where available.
 
-When routing a spell/action through multiple dimensions, preserve deterministic
-reason precedence and do not let `reflect` become immunity.
-
-Do not add comparative learning in Step 8.
-
-After Step 8, update this document before beginning Step 9.
+After Step 9, update this document before Step 10 regression validation.
