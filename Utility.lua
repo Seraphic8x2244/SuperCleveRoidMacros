@@ -2383,75 +2383,100 @@ local _pendingPersonalBuffer = {}
 local _pendingCCBuffer = {}
 local _pendingSharedBuffer = {}
 
--- Curated auras that make a failed spell/debuff observation inconclusive.
--- These are real temporary protection or reflection effects, keyed by spell ID.
--- Do not populate this from a DBC mechanic number: mechanic labels describe the
+-- Curated temporary protection/reflection auras, grouped by semantic effect.
+-- Multiple ranks, NPC variants, and alternate applications are intentionally
+-- represented as one-line spell-ID additions inside the relevant bucket.
+-- Do not populate this from DBC mechanic numbers: mechanic labels describe the
 -- spell/aura, not necessarily an effect that grants broad immunity.
-local IMMUNITY_GUARD_AURA_IDS = {
-    -- Full immunity
-    [498] = true,    -- Divine Protection (Rank 1)
-    [5573] = true,   -- Divine Protection (Rank 2)
-    [642] = true,    -- Divine Shield (Rank 1)
-    [1020] = true,   -- Divine Shield (Rank 2)
-    [11958] = true,  -- Ice Block
-    [27619] = true,  -- Ice Block (alternate)
+local IMMUNITY_AURAS = {
+    all = {
+        [498] = true,    -- Divine Protection (Rank 1)
+        [5573] = true,   -- Divine Protection (Rank 2)
+        [642] = true,    -- Divine Shield (Rank 1)
+        [1020] = true,   -- Divine Shield (Rank 2)
+        [11958] = true,  -- Ice Block
+        [27619] = true,  -- Ice Block (alternate)
+    },
 
-    -- Magic immunity. These NPC auras make magic spells return IMMUNE rather
-    -- than merely absorbing or reducing their damage.
-    [7121] = true,   -- Anti-Magic Shield
-    [19645] = true,  -- Anti-Magic Shield (variant)
-    [24021] = true,  -- Anti-Magic Shield (variant)
+    spell = {
+        -- These NPC auras make magic spells return IMMUNE rather than merely
+        -- absorbing or reducing their damage.
+        [7121] = true,   -- Anti-Magic Shield
+        [19645] = true,  -- Anti-Magic Shield (variant)
+        [24021] = true,  -- Anti-Magic Shield (variant)
+    },
 
-    -- Physical protection. This guard is intentionally conservative: while
-    -- active, a missing/IMMUNE physical effect must not become permanent data.
-    [1022] = true,   -- Blessing of Protection (Rank 1)
-    [5599] = true,   -- Blessing of Protection (Rank 2)
-    [10278] = true,  -- Blessing of Protection (Rank 3)
+    physical = {
+        [1022] = true,   -- Blessing of Protection (Rank 1)
+        [5599] = true,   -- Blessing of Protection (Rank 2)
+        [10278] = true,  -- Blessing of Protection (Rank 3)
+    },
 
-    -- Spell Reflection
-    [9941] = true,
-    [9943] = true,
-    [10074] = true,
-    [11818] = true,
-    [21118] = true,
+    reflect = {
+        -- Spell Reflection
+        [9941] = true,
+        [9943] = true,
+        [10074] = true,
+        [11818] = true,
+        [21118] = true,
 
-    -- School-specific Reflectors (Engineering items)
-    [23097] = true,  -- Fire Reflector
-    [23131] = true,  -- Frost Reflector
-    [23132] = true,  -- Shadow Reflector
-    [23178] = true,  -- Nature Reflector
-    [23216] = true,  -- Arcane Reflector
+        -- School-specific Reflectors (Engineering items)
+        [23097] = true,  -- Fire Reflector
+        [23131] = true,  -- Frost Reflector
+        [23132] = true,  -- Shadow Reflector
+        [23178] = true,  -- Nature Reflector
+        [23216] = true,  -- Arcane Reflector
 
-    -- Multi-school Reflect (NPC abilities)
-    [13022] = true,  -- Fire and Arcane Reflect
-    [19595] = true,  -- Shadow and Frost Reflect
+        -- Multi-school Reflect (NPC abilities)
+        [13022] = true,  -- Fire and Arcane Reflect
+        [19595] = true,  -- Shadow and Frost Reflect
 
-    -- Generic Reflection buffs
-    [3651] = true,   -- Shield of Reflection
-    [9906] = true,   -- Reflection
-    [10831] = true,  -- Reflection Field
-    [17106] = true,  -- Reflection
-    [17107] = true,  -- Reflection
-    [17108] = true,  -- Reflection
-    [20223] = true,  -- Magic Reflection
-    [20619] = true,  -- Magic Reflection
-    [22067] = true,  -- Reflection
-    [23920] = true,  -- Shield Reflection
-    [23921] = true,  -- Shield Reflection
-    [27564] = true,  -- Reflection
+        -- Generic Reflection buffs
+        [3651] = true,   -- Shield of Reflection
+        [9906] = true,   -- Reflection
+        [10831] = true,  -- Reflection Field
+        [17106] = true,  -- Reflection
+        [17107] = true,  -- Reflection
+        [17108] = true,  -- Reflection
+        [20223] = true,  -- Magic Reflection
+        [20619] = true,  -- Magic Reflection
+        [22067] = true,  -- Reflection
+        [23920] = true,  -- Shield Reflection
+        [23921] = true,  -- Shield Reflection
+        [27564] = true,  -- Reflection
+    },
 }
 
--- Return the active guard aura name, or nil. Names are display/debug only;
--- all matching is by numeric spell ID and is therefore locale-independent.
--- These checks only run after a failed/IMMUNE observation, so direct ID lookups
--- are preferable to a slot scan and also see auras outside the visible slots.
-local function HasImmunityGuardAura(unit)
+local IMMUNITY_AURA_GUARD_ORDER = { "all", "spell", "physical", "reflect" }
+
+-- Return the active aura spell ID for one semantic bucket, or nil.
+-- Matching is numeric and locale-independent; direct by-ID lookup also sees
+-- auras outside the visible slots.
+local function GetActiveImmunityAura(unit, auraType)
     if not UnitExists(unit) then return nil end
     if not C_UnitAuras or not C_UnitAuras.GetUnitAuraBySpellID then return nil end
 
-    for spellID in pairs(IMMUNITY_GUARD_AURA_IDS) do
+    local auraIDs = IMMUNITY_AURAS[auraType]
+    if not auraIDs then return nil end
+
+    for spellID in pairs(auraIDs) do
         if C_UnitAuras.GetUnitAuraBySpellID(unit, spellID, "HELPFUL") then
-            return C_Spell.GetSpellName(spellID) or ("SpellID:" .. spellID)
+            return spellID
+        end
+    end
+
+    return nil
+end
+
+-- Compatibility learning guard: any listed temporary protection or reflection
+-- still makes a failed/IMMUNE observation inconclusive. Reflection is returned
+-- as its own bucket and is never promoted to an immunity type.
+local function HasImmunityGuardAura(unit)
+    for _, auraType in ipairs(IMMUNITY_AURA_GUARD_ORDER) do
+        local spellID = GetActiveImmunityAura(unit, auraType)
+        if spellID then
+            local spellName = C_Spell.GetSpellName(spellID) or ("SpellID:" .. spellID)
+            return spellName, auraType, spellID
         end
     end
 
@@ -7751,6 +7776,16 @@ local function CheckImmunityType(unitId, immunityType)
 
     if CC_IMMUNITY_TYPES[normalized] then
         return CheckCCImmunity(unitId, normalized)
+    end
+
+    -- Step 4: typed temporary aura sources are queryable only by their exact
+    -- semantic bucket. Cross-type composition (for example all -> physical)
+    -- is intentionally deferred to the composition step.
+    if normalized == "all" or normalized == "spell" or normalized == "physical" then
+        local auraID = GetActiveImmunityAura(unitId, normalized)
+        if auraID then
+            return true, IMMUNITY_SOURCE.temporary_aura, auraID
+        end
     end
 
     if BROAD_IMMUNITY_TYPES[normalized] then
