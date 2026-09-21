@@ -10,11 +10,13 @@ The durable design and historical reasoning remain in
 
 - Branch: `design/temp-cc-immunity`
 - Base: `main`
-- Branch head before this handoff refresh: `68f9385e8c1ce0eb7f52e20346fa63c4f736e2f1`
-- Branch relation before this handoff refresh: 58 ahead / 0 behind `main`
+- Branch head before this handoff refresh: `af3dc5116c9c13fe7a8c8cc6ba761a94a5ee487e`
+- Branch relation before this handoff refresh: 60 ahead / 0 behind `main`
 - TOC version: `@project-version@`
-- Latest runtime-related commit: `3bdeb163a5ebc1ff97458dc60b163a0dc0dd11c5`
+- Latest runtime-related commit: `af3dc5116c9c13fe7a8c8cc6ba761a94a5ee487e`
 - Recent commits:
+  - `af3dc511` — Compose typed immunity precedence
+  - `fabd382a` — Record framework step six start
   - `68f9385e` — Complete framework step five verification
   - `10184be3` — Record immunity framework step five completion
   - `a7ce4661` — Record framework step five start
@@ -474,45 +476,50 @@ does not contain broad `cc`, the Sartura rule is still only
 `CleveRoids_ImmunityData`, and the two automatic-learning guards remain in
 the delayed verifier and direct Nampower miss path.
 
-### Step 6 — define composition / precedence
+### Step 6 — define composition / precedence — DONE
 
-For a query about one dimension:
+Implemented in `af3dc511`.
 
-```text
-all applies to everything
-spell applies only to actions classified as spell/magic delivery
-cc applies to every CC mechanic
-school applies only to that school
-exact CC applies only to that mechanic
-```
-
-For a spell/action decision, relevant dimensions are composed rather than
-collapsed.
-
-Conceptual examples:
+Composition is now split into two layers:
 
 ```text
-Hammer of Justice:
-    all
-    spell
-    holy
-    cc
-    stun
+CheckExactImmunityType
+    checks only the requested dimension/source
 
-Cheap Shot:
-    all
-    physical
-    cc
-    stun
-
-Fireball:
-    all
-    spell
-    fire
+CheckImmunityType
+    applies broader blockers in deterministic precedence
 ```
 
-Do not implement `spell` delivery classification by assuming every Spell.dbc
-entry is a spell-delivery action.
+Source precedence is:
+
+```text
+requested exact dimension
+ -> broad cc (only when requested type is an exact CC mechanic)
+ -> all
+```
+
+Current semantics:
+
+- exact CC mechanics still resolve TempCC / recorded exact immunity first;
+- broad `cc` can block every exact CC mechanic once a direct `cc` source
+  exists;
+- `all` blocks every canonical immunity dimension except that querying
+  `all` only checks `all` itself;
+- school queries do not automatically imply `spell`;
+- `spell` queries do not automatically imply a school;
+- action-level combinations such as HoJ = holy + spell + stun + cc + all are
+  deferred to Step 7/8;
+- `reflect` never participates in immunity composition;
+- TempCC remains one-way exact: temporary `stun` can satisfy a `stun` query
+  but cannot create `cc`;
+- Banish remains a special exact-school source and does not become `all`.
+
+The exact-first order preserves the most specific provenance for later debug
+output. For example Sartura Whirlwind reports `temporary_cc / 26083` for a
+stun query rather than a broader aura if both are present.
+
+Static diff review completed. No Lua interpreter is available in the tool
+environment, so runtime validation remains outstanding.
 
 ### Step 7 — implement action/spell dimension classification
 
@@ -669,43 +676,54 @@ matrix before learner development begins.
 
 ## Exact next step
 
-**Step 6: implement immunity composition / precedence rules.**
+**Step 7: determine and implement spell/action immunity dimensions.**
 
-The framework now has exact types and typed live sources. Step 6 defines how a
-query about one action is blocked by broader immunity dimensions.
+Add a helper conceptually like:
 
-Required semantics:
-
-```text
-all
-    applies to every relevant action/dimension
-
-spell
-    applies only to actions classified as magical/spell-delivery
-
-cc
-    applies to every exact CC mechanic
-
-school
-    applies only to that exact school
-
-exact CC
-    applies only to that exact mechanic
+```lua
+GetSpellImmunityDimensions(spellID)
 ```
 
-For typed immunity queries, composition should become explicit and predictable.
-At minimum:
+It must describe the dimensions relevant to one attempted action without
+assuming every Spell.dbc entry is a magical/spell-delivery action.
 
-- querying an exact CC mechanic should also honor broad `cc` and `all`;
-- querying a school should also honor `all`;
-- querying `physical` should honor `all`;
-- querying `spell` should honor `all`;
-- `reflect` must never compose as immunity;
-- TempCC exact mechanics must remain exact and must not imply broad `cc`;
-- Banish remains a special live-state source, not `all`.
+Required examples:
 
-Do **not** implement full spell/action dimension classification yet; that is
-Step 7. Step 6 should establish composition for already-known typed dimensions
-without guessing whether arbitrary Spell.dbc entries are `spell`.
+```text
+Hammer of Justice:
+    holy
+    spell
+    stun
+    cc
+    all
 
-After Step 6, update this document before beginning Step 7.
+Cheap Shot:
+    physical
+    stun
+    cc
+    all
+
+Charge Stun:
+    physical
+    stun
+    cc
+    all
+
+Fireball:
+    fire
+    spell
+    all
+```
+
+Before hard-coding the `spell` classification rule, research the exact Vanilla
+basis using Blackwing Spellbinder as the primary regression case:
+
+- HoJ / magical stuns should be spell-relevant;
+- Cheap Shot / Charge should not be spell-relevant;
+- identify whether the reliable primitive is school mask, prevention type,
+  damage class, aura/effect data, spell attributes, server-side immunity logic,
+  or a conservative combination.
+
+Do not build comparative learning in Step 7.
+
+After Step 7, update this document before beginning Step 8.
