@@ -466,6 +466,12 @@ Also verified:
 
 This is static verification only. Live Sartura validation remains outstanding.
 
+Step 5 verification was repeated against head `a7ce4661`: the exact CC table
+does not contain broad `cc`, the Sartura rule is still only
+`15516 -> 26083 -> stun`, neither TempCC definition nor helper writes
+`CleveRoids_ImmunityData`, and the two automatic-learning guards remain in
+the delayed verifier and direct Nampower miss path.
+
 ### Step 6 — define composition / precedence
 
 For a query about one dimension:
