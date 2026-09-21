@@ -10,11 +10,12 @@ The durable design and historical reasoning remain in
 
 - Branch: `design/temp-cc-immunity`
 - Base: `main`
-- Branch head before this handoff refresh: `18a1cfaab3a09cf944ae0dfee8942666330a2647`
-- Branch relation before this handoff refresh: 55 ahead / 0 behind `main`
+- Branch head before this handoff refresh: `a7ce4661c6f331f31f2b993d8c67cdb50af2d624`
+- Branch relation before this handoff refresh: 56 ahead / 0 behind `main`
 - TOC version: `@project-version@`
 - Latest runtime-related commit: `3bdeb163a5ebc1ff97458dc60b163a0dc0dd11c5`
 - Recent commits:
+  - `a7ce4661` — Record framework step five start
   - `18a1cfaa` — Record immunity framework step four completion
   - `3bdeb163` — Type temporary immunity aura guards
   - `9f4016ad` — Record framework step four start
@@ -423,22 +424,47 @@ Static review confirmed the old flat-table symbol no longer exists and every
 previous guard ID occurs exactly once in the new table. No Lua interpreter is
 available in the tool environment, so runtime validation remains outstanding.
 
-### Step 5 — integrate TempCC with typed queries
+### Step 5 — integrate TempCC with typed queries — DONE
 
-Keep the TempCC table unchanged.
+Verified against current runtime; **no runtime change was required**.
 
-Make the common query path able to consume it for exact CC mechanics.
-
-Expected Sartura answers during Whirlwind:
+Current path:
 
 ```text
-stun -> true
-cc   -> false
-spell -> false
-all  -> false
+CheckImmunityType(unit, exactCC)
+ -> CheckCCImmunity(unit, exactCC)
+ -> IsTemporarilyCCImmune(unit, exactCC)
+ -> true, temporary_cc, auraID
 ```
 
-A specific temporary stun must not imply broad `cc`.
+The ordering is important:
+
+- exact canonical CC mechanics are checked before broad types;
+- `cc` is a broad type, not an exact CC mechanic;
+- `spell` and `all` have no relationship to TempCC;
+- therefore one TempCC mechanic cannot promote any broad category.
+
+Verified Sartura semantics from the code path during aura 26083:
+
+```text
+stun  -> true  (source: temporary_cc, detail: 26083)
+cc    -> false
+spell -> false
+all   -> false
+```
+
+Also verified:
+
+- `TEMP_CC_IMMUNITIES` remains `creature entry -> aura ID -> exact mechanic`;
+- TempCC is not stored in SavedVariables;
+- TempCC is not flattened into `IMMUNITY_AURAS`;
+- delayed missing-CC verification still calls `IsTemporarilyCCImmune` before
+  permanent learning;
+- direct Nampower `SPELL_MISS -> IMMUNE` still calls
+  `IsTemporarilyCCImmune` before permanent learning;
+- no other automatic TempCC-learning guard exists or was removed.
+
+This is static verification only. Live Sartura validation remains outstanding.
 
 ### Step 6 — define composition / precedence
 
@@ -635,33 +661,43 @@ matrix before learner development begins.
 
 ## Exact next step
 
-**Step 5: verify and formalize TempCC integration through the typed query
-framework.**
+**Step 6: implement immunity composition / precedence rules.**
 
-Keep `TEMP_CC_IMMUNITIES` unchanged:
+The framework now has exact types and typed live sources. Step 6 defines how a
+query about one action is blocked by broader immunity dimensions.
 
-```text
-creature entry -> aura ID -> exact CC mechanic
-```
-
-The common typed path already reaches TempCC through `CheckCCImmunity`; Step 5
-should make that relationship explicit and verify no broad category is implied.
-
-Required Sartura semantics during Whirlwind:
+Required semantics:
 
 ```text
-stun  -> true  (source: temporary_cc, detail: 26083)
-cc    -> false
-spell -> false
-all   -> false
+all
+    applies to every relevant action/dimension
+
+spell
+    applies only to actions classified as magical/spell-delivery
+
+cc
+    applies to every exact CC mechanic
+
+school
+    applies only to that exact school
+
+exact CC
+    applies only to that exact mechanic
 ```
 
-Requirements:
+For typed immunity queries, composition should become explicit and predictable.
+At minimum:
 
-- no TempCC persistence changes;
-- no flattening TempCC into `IMMUNITY_AURAS`;
-- no implication from one exact temporary mechanic to broad `cc`;
-- preserve both automatic-learning guards;
-- only make runtime code changes if needed to satisfy those invariants.
+- querying an exact CC mechanic should also honor broad `cc` and `all`;
+- querying a school should also honor `all`;
+- querying `physical` should honor `all`;
+- querying `spell` should honor `all`;
+- `reflect` must never compose as immunity;
+- TempCC exact mechanics must remain exact and must not imply broad `cc`;
+- Banish remains a special live-state source, not `all`.
 
-After Step 5, update this document before beginning Step 6.
+Do **not** implement full spell/action dimension classification yet; that is
+Step 7. Step 6 should establish composition for already-known typed dimensions
+without guessing whether arbitrary Spell.dbc entries are `spell`.
+
+After Step 6, update this document before beginning Step 7.
