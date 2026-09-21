@@ -10,11 +10,14 @@ The durable design and historical reasoning remain in
 
 - Branch: `design/temp-cc-immunity`
 - Base: `main`
-- Branch head before this handoff refresh: `2eb22cbab8c7af10b1b3543339700c900ecd441a`
-- Branch relation before this handoff refresh: 73 ahead / 0 behind `main`
+- Branch head before this handoff refresh: `3d1ee2e541a51ee83d6a3b9d3b8eb8c71a6cd967`
+- Branch relation before this handoff refresh: 78 ahead / 0 behind `main`
 - TOC version: `@project-version@`
-- Latest runtime-related commit: `2eb22cbab8c7af10b1b3543339700c900ecd441a`
+- Latest runtime-related commit: `b93293fc15bb4ebd106bd3869752a119fb6c4c61`
 - Recent commits:
+  - `3d1ee2e5` — Document Divine Shield 13874
+  - `b93293fc` — Add Divine Shield 13874 immunity aura
+  - `da621fc9` — Record Divine Shield 13874 follow-up
   - `2eb22cba` — Expose immunity decision reasons
   - `3c51d77a` — Record framework step nine start
   - `09632d81` — Record spell dimension query integration
@@ -53,24 +56,23 @@ The durable design and historical reasoning remain in
 
 ### Current handoff note — 2026-09-21
 
-- Requested data-only follow-up: add spell **13874 (Divine Shield)** to
-  `IMMUNITY_AURAS.all`.
+- Completed data-only follow-up: spell **13874 (Divine Shield)** is now in
+  `IMMUNITY_AURAS.all`; existing Divine Shield IDs 642 and 1020 are unchanged.
 - Source: vMaNGOS/core explicitly identifies 13874 as Divine Shield in
   `sql/old_migrations/20210521134028_world.sql` (Anvilrage Officer correction)
-  and also uses it for Vanilla NPC Divine Shield casts.
-- Existing Divine Shield IDs 642 and 1020 remain unchanged.
-- Do **not** add 13007 (Divine Protection) or 6356 (Spell Immunity) in this
-  follow-up; their provenance/semantics can be revisited separately.
-- Completed framework work remains unchanged; this is only an additional
-  verified temporary full-immunity aura ID.
+  and uses 13874 for Vanilla NPC Divine Shield casts.
+- `docs/CC-DR-IMMUNITY-REWORK.md` now lists Divine Shield as
+  `642, 1020, 13874`.
+- No 13007 (Divine Protection) or 6356 (Spell Immunity) was added in this
+  follow-up; those remain separate research leads if revisited.
 - Untested work remains the existing Sartura/framework live regression matrix,
-  plus an in-game confirmation that aura 13874 is visible through ClassicAPI
-  when encountered.
+  plus in-game confirmation that aura 13874 is visible through ClassicAPI when
+  encountered.
 - Deferred work remains comparative immunity learning, evidence persistence,
   SavedVariables changes, and new public immunity grammar.
-- Exact next step: add `[13874] = true -- Divine Shield` to
-  `IMMUNITY_AURAS.all`, update the verified-ID documentation, statically
-  confirm no unrelated changes, then commit the data-only follow-up.
+- Exact next step: resume the planned learner stage with the observation-only
+  `ObserveImmunity(target, spellID, result)` layer; do not infer or persist
+  broad immunity yet. Live framework validation remains parallel outstanding.
 
 ## Stage scope
 
@@ -185,6 +187,7 @@ local IMMUNITY_AURAS = {
     all = {
         [642] = true,
         [1020] = true,
+        [13874] = true,
         -- more verified ranks / variants
     },
 
