@@ -20,7 +20,6 @@ The durable design and historical reasoning remain in
   - `09632d81` — Record spell dimension query integration
   - `331277c5` — Record immunity framework step eight completion
   - `d5216f6a` — Route spell immunity checks through dimensions
-  - `d5216f6a` — Route spell immunity checks through dimensions
   - `d134d493` — Remove resolved spell immunity research note
   - `b3e339a1` — Record framework step eight start
   - `3942c67d` — Resolve spell immunity classification basis
