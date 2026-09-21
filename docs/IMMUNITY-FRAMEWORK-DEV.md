@@ -10,11 +10,12 @@ The durable design and historical reasoning remain in
 
 - Branch: `design/temp-cc-immunity`
 - Base: `main`
-- Branch head before this handoff refresh: `bad340d7212ba892f5680aad0927fb0c0738fddd`
-- Branch relation before this handoff refresh: 41 ahead / 0 behind `main`
+- Branch head before this handoff refresh: `7dd3cc927f0be5ffad037fed46363f3a8e118777`
+- Branch relation before this handoff refresh: 42 ahead / 0 behind `main`
 - TOC version: `@project-version@`
 - Latest runtime-related commit: `e4dac9b24fd0b305fbd1dd7208564cee8b6dba44`
 - Recent documentation commits:
+  - `7dd3cc92` — Refresh immunity framework recovery snapshot
   - `bad340d7` — Link immunity framework development stage
   - `690da05a` — Add immunity framework development handoff
   - `5896f6cb` — Clean consolidated rework section breaks
