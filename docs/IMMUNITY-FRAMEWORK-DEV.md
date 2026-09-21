@@ -51,6 +51,27 @@ The durable design and historical reasoning remain in
 - Current runtime diff is limited to `Utility.lua` and `Conditionals.lua`.
 - The generalized comparative learner is **not** part of this stage.
 
+### Current handoff note — 2026-09-21
+
+- Requested data-only follow-up: add spell **13874 (Divine Shield)** to
+  `IMMUNITY_AURAS.all`.
+- Source: vMaNGOS/core explicitly identifies 13874 as Divine Shield in
+  `sql/old_migrations/20210521134028_world.sql` (Anvilrage Officer correction)
+  and also uses it for Vanilla NPC Divine Shield casts.
+- Existing Divine Shield IDs 642 and 1020 remain unchanged.
+- Do **not** add 13007 (Divine Protection) or 6356 (Spell Immunity) in this
+  follow-up; their provenance/semantics can be revisited separately.
+- Completed framework work remains unchanged; this is only an additional
+  verified temporary full-immunity aura ID.
+- Untested work remains the existing Sartura/framework live regression matrix,
+  plus an in-game confirmation that aura 13874 is visible through ClassicAPI
+  when encountered.
+- Deferred work remains comparative immunity learning, evidence persistence,
+  SavedVariables changes, and new public immunity grammar.
+- Exact next step: add `[13874] = true -- Divine Shield` to
+  `IMMUNITY_AURAS.all`, update the verified-ID documentation, statically
+  confirm no unrelated changes, then commit the data-only follow-up.
+
 ## Stage scope
 
 Build the immunity framework first.
