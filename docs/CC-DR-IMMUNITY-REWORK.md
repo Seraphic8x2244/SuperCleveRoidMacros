@@ -118,6 +118,10 @@ Preferred rule: confirm the narrowest explanation that fits the evidence.
 
 ## 4. Implementation target
 
+Active framework-stage implementation/recovery notes:
+`docs/IMMUNITY-FRAMEWORK-DEV.md`.
+
+
 Keep TempCC small:
 
 ```text
