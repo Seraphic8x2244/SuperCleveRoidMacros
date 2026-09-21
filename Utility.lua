@@ -6787,6 +6787,90 @@ end
 
 CleveRoids.GetSpellImmunityType = GetSpellImmunityType
 
+-- Vanilla broad magic/spell immunity is school-based, not DmgClass-based.
+-- The server checks spell/mechanic immunity before entering the hit table, so
+-- a Holy DmgClass=NONE spell such as Hammer of Justice is still blocked by a
+-- six-school magic-immunity mask, while Physical abilities such as Cheap Shot
+-- and Charge Stun are not. Keep this classification numeric/DBC-driven.
+local MAGIC_IMMUNITY_SCHOOLS = {
+    holy = true,
+    fire = true,
+    nature = true,
+    frost = true,
+    shadow = true,
+    arcane = true,
+}
+
+local function AddSpellImmunityDimension(dimensions, ordered, immunityType)
+    if immunityType and not dimensions[immunityType] then
+        dimensions[immunityType] = true
+        table.insert(ordered, immunityType)
+    end
+end
+
+-- Return the immunity dimensions that can independently block this action.
+-- First return is a set for membership checks; optional second return preserves
+-- deterministic narrow-to-broad ordering for query/debug use.
+--
+-- Examples:
+--   Hammer of Justice -> holy, spell, stun, cc, all
+--   Cheap Shot        -> physical, stun, cc, all
+--   Charge Stun       -> physical, stun, cc, all
+--   Fireball          -> fire, spell, all
+local function GetSpellImmunityDimensions(spellID)
+    local dimensions = {}
+    local ordered = {}
+
+    if not spellID or spellID <= 0 then
+        return dimensions, ordered
+    end
+
+    -- Spell.dbc School is authoritative for the broad magic-school question.
+    -- Do not use DmgClass here: DmgClass controls the later hit table, whereas
+    -- school immunity is checked before that roll.
+    local school = nil
+    if GetSpellRecField then
+        local dbcSchool = GetSpellRecField(spellID, "school")
+        school = dbcSchool ~= nil and SCHOOL_NAMES[dbcSchool] or nil
+    end
+
+    -- Degraded fallback only. Normal supported Nampower builds have the DBC
+    -- field above; this keeps the helper useful if direct field access is absent.
+    if not school then
+        school = GetSpellSchool(nil, spellID)
+        if school == "bleed" then
+            -- Vanilla bleed spells still carry Physical as their DBC school.
+            school = "physical"
+        end
+    end
+
+    if school and IMMUNITY_SCHOOLS[school] and school ~= "unknown" then
+        AddSpellImmunityDimension(dimensions, ordered, school)
+        if MAGIC_IMMUNITY_SCHOOLS[school] then
+            AddSpellImmunityDimension(dimensions, ordered, "spell")
+        end
+    end
+
+    -- Bleed is an additional SCRM mechanic dimension layered on top of its
+    -- Physical DBC school. This lets either physical-school immunity or a
+    -- demonstrated bleed immunity block the relevant action.
+    if IsBleedByMechanic(spellID) then
+        AddSpellImmunityDimension(dimensions, ordered, "physical")
+        AddSpellImmunityDimension(dimensions, ordered, "bleed")
+    end
+
+    local ccType = GetSpellImmunityType(spellID)
+    if ccType and CC_IMMUNITY_TYPES[ccType] then
+        AddSpellImmunityDimension(dimensions, ordered, ccType)
+        AddSpellImmunityDimension(dimensions, ordered, "cc")
+    end
+
+    AddSpellImmunityDimension(dimensions, ordered, "all")
+    return dimensions, ordered
+end
+
+CleveRoids.GetSpellImmunityDimensions = GetSpellImmunityDimensions
+
 -- NPC immunity learning only needs DR groups that can actually diminish creatures.
 -- vMaNGOS 1.12 marks controlled stun, triggered stun, and Kidney Shot as DRTYPE_ALL;
 -- the other staged DR groups are player-only and must not suppress NPC immunity learning.
