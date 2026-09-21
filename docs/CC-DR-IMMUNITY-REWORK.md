@@ -359,7 +359,7 @@ Current verified groups:
 | Type | IDs |
 |---|---|
 | Divine Protection | 498, 5573 |
-| Divine Shield | 642, 1020 |
+| Divine Shield | 642, 1020, 13874 |
 | Ice Block | 11958, 27619 |
 | Anti-Magic Shield | 7121, 19645, 24021 |
 | Blessing of Protection | 1022, 5599, 10278 |
