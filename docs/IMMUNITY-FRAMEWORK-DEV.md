@@ -10,11 +10,14 @@ The durable design and historical reasoning remain in
 
 - Branch: `design/temp-cc-immunity`
 - Base: `main`
-- Branch head before this handoff refresh: `b17a36696df6bb2a25486b89452fe9fb9e15cb48`
-- Branch relation before this handoff refresh: 61 ahead / 0 behind `main`
+- Branch head before this handoff refresh: `3e7eccb57858ca2a399c7fb302192859ab890f6e`
+- Branch relation before this handoff refresh: 64 ahead / 0 behind `main`
 - TOC version: `@project-version@`
-- Latest runtime-related commit: `af3dc5116c9c13fe7a8c8cc6ba761a94a5ee487e`
+- Latest runtime-related commit: `3e7eccb57858ca2a399c7fb302192859ab890f6e`
 - Recent commits:
+  - `3e7eccb5` — Clarify school based spell immunity classification
+  - `7ec46616` — Classify spell immunity dimensions
+  - `b3c65497` — Record Hammer of Justice step seven invariants
   - `b17a3669` — Record immunity framework step six completion
   - `af3dc511` — Compose typed immunity precedence
   - `fabd382a` — Record framework step six start
@@ -117,9 +120,9 @@ all
     absolute immunity; blocks every relevant action
 
 spell
-    broad magical/spell-delivery immunity
-    does not automatically block physical abilities merely because they have a
-    Spell.dbc record
+    broad non-physical school immunity (Holy/Fire/Nature/Frost/Shadow/Arcane)
+    follows Vanilla school-immunity masks, not DmgClass and not the mere fact
+    that an ability has a Spell.dbc row
 
 cc
     broad immunity to all CC mechanics
@@ -522,43 +525,60 @@ stun query rather than a broader aura if both are present.
 Static diff review completed. No Lua interpreter is available in the tool
 environment, so runtime validation remains outstanding.
 
-### Step 7 — implement action/spell dimension classification
+### Step 7 — implement action/spell dimension classification — DONE
 
-Working HoJ invariants supplied for this stage:
+Implemented in `7ec46616`, with wording cleanup in `3e7eccb5`.
+
+Research conclusion:
+
+- vMaNGOS checks `IsImmuneToSpell` before the later hit table;
+- school immunity is matched against the spell's school mask;
+- broad magic immunity therefore follows the six non-physical schools:
+  Holy, Fire, Nature, Frost, Shadow, Arcane;
+- `DmgClass` is not the classifier for broad magic immunity;
+- physical abilities remain outside broad `spell` even though they are Spell.dbc
+  rows;
+- Blackwing Spellbinder's observed split (Cheap Shot/Charge land, HoJ/grenades
+  IMMUNE) fits this school-based model;
+- Anti-Magic Shield likewise uses a six-school immunity mask.
+
+Working HoJ invariants remain:
 
 ```text
 Hammer of Justice
-    checks both spell/magic immunity and stun immunity
-    cannot miss, dodge, parry, or ordinary spell-resist
-    can receive a stun-resist result (for example Orc racial contribution)
-    returns IMMUNE against broad magic-immune targets such as Blackwing Spellbinder
+    holy + spell + stun + cc + all
+    broad magic immunity can block it before any later hit-roll logic
+    stun immunity can also block it independently
 ```
 
-These are classification constraints, not a request to reproduce HoJ's entire
-hit table. The Step 7 helper should model **which immunity dimensions can block
-the action**, not unrelated avoidance/resistance outcomes.
-
-Add a helper conceptually like:
+Implemented helper:
 
 ```lua
-GetSpellImmunityDimensions(spellID)
+CleveRoids.GetSpellImmunityDimensions(spellID)
 ```
 
-It should describe which dimensions can block that action.
+It returns:
 
-This step requires resolving the Vanilla `spellimmune` primitive, beginning
-with Blackwing Spellbinder.
+1. a membership set, and
+2. an ordered narrow-to-broad dimension list.
 
-Required distinction:
+Expected examples:
 
 ```text
-HoJ        -> spell-relevant
-Cheap Shot -> not spell-relevant
-Charge     -> not spell-relevant
+Hammer of Justice -> holy, spell, stun, cc, all
+Cheap Shot        -> physical, stun, cc, all
+Charge Stun       -> physical, stun, cc, all
+Fireball          -> fire, spell, all
 ```
 
-Research whether the correct basis is school mask, aura effect, attributes, or
-another DBC/server property before hard-coding a rule.
+Bleeds are represented as Physical DBC school plus the additional SCRM
+`bleed` dimension when the Vanilla bleed mechanic is present.
+
+Step 7 does **not** change public `[immune]` behaviour yet. Routing spell-name
+queries through the full dimension list is Step 8.
+
+Live validation is deferred. Static/code/data evidence is sufficient to continue
+the framework sequence for now.
 
 ### Step 8 — route existing public checks through dimensions
 
@@ -691,55 +711,37 @@ matrix before learner development begins.
 
 ## Exact next step
 
-**Step 7: determine and implement spell/action immunity dimensions.**
+**Step 8: route spell-aware public immunity checks through the dimension helper.**
 
-Add a helper conceptually like:
+Use `GetSpellImmunityDimensions(spellID)` for spell-name/bare-action queries so
+one action can be blocked by any relevant dimension.
 
-```lua
-GetSpellImmunityDimensions(spellID)
-```
-
-It must describe the dimensions relevant to one attempted action without
-assuming every Spell.dbc entry is a magical/spell-delivery action.
-
-Required examples:
+Required behaviour:
 
 ```text
-Hammer of Justice:
-    holy
-    spell
-    stun
-    cc
-    all
+Hammer of Justice
+    blocked by holy OR spell OR stun OR cc OR all
 
-Cheap Shot:
-    physical
-    stun
-    cc
-    all
+Cheap Shot
+    blocked by physical OR stun OR cc OR all
 
-Charge Stun:
-    physical
-    stun
-    cc
-    all
+Charge Stun
+    blocked by physical OR stun OR cc OR all
 
-Fireball:
-    fire
-    spell
-    all
+Fireball
+    blocked by fire OR spell OR all
 ```
 
-Before hard-coding the `spell` classification rule, research the exact Vanilla
-basis using Blackwing Spellbinder as the primary regression case. Live user
-validation is deferred; continue from code/data evidence for now:
+Preserve exact explicit queries:
 
-- HoJ / magical stuns should be spell-relevant;
-- Cheap Shot / Charge should not be spell-relevant;
-- identify whether the reliable primitive is school mask, prevention type,
-  damage class, aura/effect data, spell attributes, server-side immunity logic,
-  or a conservative combination.
+- `[immune:stun]` means the stun dimension (with Step 6 broad composition),
+  not "every dimension of the currently selected spell";
+- `[immune:fire]` remains a fire query;
+- no new macro grammar is added.
 
-Do not build comparative learning in Step 7.
+When routing a spell/action through multiple dimensions, preserve deterministic
+reason precedence and do not let `reflect` become immunity.
 
-After Step 7, update this document before beginning Step 8.
+Do not add comparative learning in Step 8.
+
+After Step 8, update this document before beginning Step 9.
