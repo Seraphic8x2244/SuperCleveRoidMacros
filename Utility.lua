@@ -7768,7 +7768,7 @@ function CleveRoids.CheckImmunity(unitId, spellOrSchool)
     local ccSpellID = GetSpellIdForName and GetSpellIdForName(ccSpellName)
     if ccSpellID then
         local immunityType = GetSpellImmunityType(ccSpellID)
-        if immunityType and CheckCCImmunity(unitId, immunityType) then
+        if immunityType and CheckImmunityType(unitId, immunityType) then
             return true
         end
     end
