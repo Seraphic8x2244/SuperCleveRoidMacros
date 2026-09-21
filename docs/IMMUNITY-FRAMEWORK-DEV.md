@@ -10,11 +10,13 @@ The durable design and historical reasoning remain in
 
 - Branch: `design/temp-cc-immunity`
 - Base: `main`
-- Branch head before this handoff refresh: `09632d813ca1c355233ee931f3f5c3692bd7e673`
-- Branch relation before this handoff refresh: 71 ahead / 0 behind `main`
+- Branch head before this handoff refresh: `2eb22cbab8c7af10b1b3543339700c900ecd441a`
+- Branch relation before this handoff refresh: 73 ahead / 0 behind `main`
 - TOC version: `@project-version@`
-- Latest runtime-related commit: `d5216f6a893f6acbb2340a327777714381f968d8`
+- Latest runtime-related commit: `2eb22cbab8c7af10b1b3543339700c900ecd441a`
 - Recent commits:
+  - `2eb22cba` — Expose immunity decision reasons
+  - `3c51d77a` — Record framework step nine start
   - `09632d81` — Record spell dimension query integration
   - `331277c5` — Record immunity framework step eight completion
   - `d5216f6a` — Route spell immunity checks through dimensions
@@ -635,41 +637,92 @@ No learning or SavedVariables schema changed.
 
 Static diff review completed. Live validation remains deferred.
 
-### Step 9 — add reason/debug visibility
+### Step 9 — add reason/debug visibility — DONE
 
-Before learning is expanded, expose enough debug information to prove which
-dimension/source blocked an action.
+Implemented in `2eb22cba`.
 
-Desired debugging quality:
+`CleveRoids.CheckImmunity` remains boolean-compatible but can now additionally
+return:
 
 ```text
-HoJ -> immune: spell (Anti-Magic Shield 7121)
-Cheap Shot -> no matching immunity
-HoJ -> immune: temporary stun (Sartura Whirlwind 26083)
+true, winningDimension, source, detail
 ```
 
-Exact wording is not important; source/type visibility is.
+Existing conditional callers remain safe because Lua ignores unused return
+values. `Conditionals.lua` still consumes only the first boolean for
+`[immune]` and `[noimmune]`.
 
-### Step 10 — regression validation
+Added an explicit on-demand diagnostic:
 
-Framework validation before learner work:
+```lua
+CleveRoids.DebugCheckImmunity(unitId, spellOrSchool)
+```
 
-- [ ] existing learned fire/frost/etc. immunity still works
-- [ ] existing exact CC immunity still works
-- [ ] CC aliases still normalize identically
-- [ ] Sartura temporary stun behaviour is unchanged
-- [ ] Divine Shield / Divine Protection / Ice Block resolve as `all`
-- [ ] Anti-Magic Shield resolves as `spell`, not `all`
-- [ ] Blessing of Protection resolves as `physical`, not `spell`
-- [ ] reflection protects learning but is not reported as immunity
-- [ ] Banish behaviour is preserved or cleanly absorbed by the new framework
-- [ ] direct Nampower learning guard still works
-- [ ] delayed verification guard still works
-- [ ] DR guard still works
-- [ ] no new SavedVariables schema
-- [ ] no new polling / high-frequency scan
+This is intentionally **not** printed automatically during macro evaluation,
+avoiding chat spam from frequently evaluated conditionals.
 
-Only after this matrix passes should the comparative learner start.
+Example diagnostic quality:
+
+```text
+Hammer of Justice -> immune: spell [temporary_aura] (Anti-Magic Shield 7121)
+Cheap Shot        -> immune: physical [temporary_aura] (Blessing of Protection 1022)
+Hammer of Justice -> immune: stun [temporary_cc] (Whirlwind 26083)
+Fireball          -> immune: fire [recorded]
+```
+
+Numeric aura IDs remain authoritative; localized names are display-only.
+
+No learning, persistence, polling, or public macro grammar changed.
+
+### Step 10 — regression validation — STATIC PASS COMPLETE / LIVE PENDING
+
+A static regression pass was completed against the current framework.
+
+- [x] existing recorded fire/frost/etc. immunity path still resolves through
+  `SchoolImmune`
+- [x] existing exact CC immunity path still resolves through
+  `CheckCCImmunity`
+- [x] CC aliases are unchanged: `sap/incap/incapacitate/incapacitated ->
+  knockout`
+- [x] Sartura remains exactly `15516 -> 26083 -> stun`
+- [x] Divine Shield / Divine Protection / Ice Block are in `IMMUNITY_AURAS.all`
+- [x] Anti-Magic Shield is only in `IMMUNITY_AURAS.spell`
+- [x] Blessing of Protection is only in `IMMUNITY_AURAS.physical`
+- [x] reflection IDs remain only in `IMMUNITY_AURAS.reflect` and never enter
+  immunity dimensions
+- [x] Banish remains a `special` exact-school source, not `all`
+- [x] direct Nampower `SPELL_MISS -> IMMUNE` still checks TempCC, typed
+  protection/reflection guard, and DR before permanent learning
+- [x] delayed missing-CC verification still checks TempCC and the temporary
+  protection/reflection guard before permanent learning
+- [x] NPC stun DR classification remains Kidney / controlled / triggered
+- [x] no new immunity SavedVariables schema was added
+- [x] no new polling / high-frequency scan was added
+- [x] pre-framework vs current `OnUpdate` handler count is unchanged: 5
+- [x] pre-framework vs current `CleveRoids_ImmunityData` init/reset shape is
+  unchanged
+- [x] `Conditionals.lua` remains compatible with additional reason return
+  values because it consumes only the first boolean
+
+Live/in-game validation remains outstanding and cannot be replaced by static
+inspection:
+
+- [ ] Sartura Whirlwind toggles live `stun` exactly as expected
+- [ ] forced HoJ during Whirlwind returns IMMUNE without writing permanent
+  `cc_stun`
+- [ ] aura 26083 is queryable through ClassicAPI on the target server/client
+- [ ] live `all` aura checks behave for Divine Shield / Divine Protection /
+  Ice Block
+- [ ] live Anti-Magic Shield blocks six-school actions but not Physical actions
+- [ ] live Blessing of Protection blocks Physical actions but not magic-school
+  actions
+- [ ] live reflection continues to suppress learning without reporting immunity
+- [ ] Blackwing Spellbinder regression can eventually confirm HoJ IMMUNE while
+  Cheap Shot/Charge remain eligible
+
+Framework implementation may continue into the observation/learner stage while
+these live checks remain explicit validation debt; do not treat the live matrix
+as passed until it has actually been exercised in game.
 
 ---
 
@@ -680,7 +733,7 @@ Do not break these while refactoring:
 1. **No false permanent learning from temporary state.**
 2. **TempCC is mechanic-specific.**
 3. **Reflection is not immunity.**
-4. **Spell immunity is not school immunity.**
+4. **Broad spell immunity is not the same as any single-school immunity.**
 5. **Spell immunity is not exact CC immunity.**
 6. **Broad CC immunity is not a collection of observed exact CC failures.**
 7. **Absolute immunity is distinct from spell and physical protection.**
@@ -707,9 +760,9 @@ Do not start these yet:
 - aliases such as `spellimmune`
 - generalized inference from Blackwing Spellbinder observations
 
-The Blackwing Spellbinder research needed to correctly classify `spell`
-delivery belongs to framework Step 7; the **learner** built from those
-observations does not.
+The Step 7 classifier research is complete: broad `spell` is the six
+non-physical Vanilla schools. Comparative inference from observations remains
+deferred to the learner stage.
 
 ---
 
@@ -755,27 +808,37 @@ matrix before learner development begins.
 
 ## Exact next step
 
-**Step 9: add reason/debug visibility for typed immunity decisions.**
+**Start the learner stage with an observation-only layer; do not infer or
+persist broad immunity yet.**
 
-Use the source/dimension data already returned by the framework so debug output
-can explain **why** an action is considered immune.
+First learner milestone:
 
-Target quality:
+```lua
+ObserveImmunity(target, spellID, result)
+```
+
+It should only normalize existing event information into an evidence
+observation containing the action's immunity dimensions and the outcome.
+
+Initial outcomes:
 
 ```text
-Hammer of Justice -> immune: spell (Anti-Magic Shield 7121)
-Cheap Shot        -> immune: physical (Blessing of Protection 1022)
-Hammer of Justice -> immune: stun (Sartura Whirlwind 26083)
-Fireball          -> immune: fire (recorded)
+IMMUNE
+LANDED / SUCCESS
 ```
 
 Requirements:
 
-- no extra polling or aura scans;
-- no public conditional grammar changes;
-- no learning changes;
-- names are display/debug only; identity remains numeric/type-based;
-- preserve existing debug gating so normal users do not receive extra spam;
-- expose the winning dimension, source, and detail where available.
+- reuse existing Nampower / landed-effect events;
+- no new polling;
+- no candidate promotion rules yet;
+- no SavedVariables changes;
+- no public macro grammar changes;
+- no automatic broad `spell` / `cc` / `all` records;
+- temporary explanations (TempCC, typed immunity auras, reflection, DR, death,
+  debuff-cap ambiguity) must be attached or filtered before an observation can
+  later become permanent evidence.
 
-After Step 9, update this document before Step 10 regression validation.
+Live framework validation remains a parallel outstanding task.
+
+Before learner coding, use this document as the recovery source of truth.
