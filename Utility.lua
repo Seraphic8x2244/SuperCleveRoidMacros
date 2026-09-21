@@ -7938,6 +7938,26 @@ local function CheckImmunityType(unitId, immunityType)
     return false
 end
 
+-- Resolve a whole attempted action against its ordered immunity dimensions.
+-- Use exact-dimension checks here because GetSpellImmunityDimensions already
+-- includes the relevant broad cc/all entries in deterministic order.
+-- Optional returns expose the winning dimension/source for Step 9 debugging.
+local function CheckSpellImmunityDimensions(unitId, spellID)
+    if not unitId or not UnitExists(unitId) or not spellID or spellID <= 0 then
+        return false
+    end
+
+    local _, ordered = GetSpellImmunityDimensions(spellID)
+    for _, immunityType in ipairs(ordered) do
+        local immune, source, detail = CheckExactImmunityType(unitId, immunityType)
+        if immune then
+            return true, immunityType, source, detail
+        end
+    end
+
+    return false
+end
+
 -- Check if a unit is immune to a spell, damage school, or CC type
 -- Supports: CheckImmunity(unitId, "Flame Shock") or CheckImmunity(unitId, "fire") or CheckImmunity(unitId, "stun")
 function CleveRoids.CheckImmunity(unitId, spellOrSchool)
@@ -7956,16 +7976,16 @@ function CleveRoids.CheckImmunity(unitId, spellOrSchool)
         return CheckImmunityType(unitId, normalizedInput)
     end
 
-    -- Spell-name queries should honour mechanic immunity as well as school
-    -- immunity. This makes bare [immune]/[noimmune] accurate for CC spells.
-    local ccSpellName = CleveRoids.StripRank(spellOrSchool)
-    if ccSpellName then
-        ccSpellName = string.gsub(ccSpellName, "_", " ")
+    -- Spell-name / bare-action queries consume the complete ordered immunity
+    -- dimension set. Explicit school/CC tokens still use their exact typed path.
+    local actionSpellName = CleveRoids.StripRank(spellOrSchool)
+    if actionSpellName then
+        actionSpellName = string.gsub(actionSpellName, "_", " ")
     end
-    local ccSpellID = GetSpellIdForName and GetSpellIdForName(ccSpellName)
-    if ccSpellID then
-        local immunityType = GetSpellImmunityType(ccSpellID)
-        if immunityType and CheckImmunityType(unitId, immunityType) then
+    local actionSpellID = GetSpellIdForName and GetSpellIdForName(actionSpellName)
+    if actionSpellID then
+        local actionImmune = CheckSpellImmunityDimensions(unitId, actionSpellID)
+        if actionImmune then
             return true
         end
     end
@@ -7983,7 +8003,7 @@ function CleveRoids.CheckImmunity(unitId, spellOrSchool)
         end
     end
 
-    -- Exact canonical school queries now use the typed path. Keep "unknown"
+    -- Explicit canonical school queries use the typed path. Keep "unknown"
     -- on the legacy spell-specific storage path for compatibility.
     if inputLower ~= "unknown" and IMMUNITY_SCHOOLS[inputLower] then
         return CheckImmunityType(unitId, inputLower)
