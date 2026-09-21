@@ -10,13 +10,14 @@ The durable design and historical reasoning remain in
 
 - Branch: `design/temp-cc-immunity`
 - Base: `main`
-- Branch head before this handoff refresh: `7dd3cc927f0be5ffad037fed46363f3a8e118777`
-- Branch relation before this handoff refresh: 42 ahead / 0 behind `main`
+- Branch head before this handoff refresh: `18c1f5070bc6c2994af4a514862b12abc0474791`
+- Branch relation before this handoff refresh: 44 ahead / 0 behind `main`
 - TOC version: `@project-version@`
-- Latest runtime-related commit: `e4dac9b24fd0b305fbd1dd7208564cee8b6dba44`
-- Recent documentation commits:
+- Latest runtime-related commit: `18c1f5070bc6c2994af4a514862b12abc0474791`
+- Recent commits:
+  - `18c1f507` — Add canonical immunity type framework
+  - `f2b5f684` — Record framework step one start
   - `7dd3cc92` — Refresh immunity framework recovery snapshot
-  - `bad340d7` — Link immunity framework development stage
   - `690da05a` — Add immunity framework development handoff
   - `5896f6cb` — Clean consolidated rework section breaks
 - Current runtime diff is limited to `Utility.lua` and `Conditionals.lua`.
@@ -273,7 +274,7 @@ Do not change the public conditional grammar during this stage.
 
 ## Implementation order
 
-### Step 1 — canonical framework types
+### Step 1 — canonical framework types — DONE
 
 Add one internal canonical immunity-type layer covering:
 
@@ -285,15 +286,20 @@ cc
 all
 ```
 
-Requirements:
+Implemented in `18c1f507`:
 
-- reuse existing canonical CC normalization
-- preserve existing school keys
-- no SavedVariables migration
-- no behaviour change yet
-- one place should answer whether a token is a valid immunity type
+- added `BROAD_IMMUNITY_TYPES` for `spell`, `cc`, and `all`;
+- added one canonical `IMMUNITY_TYPES` registry built from schools, exact CC,
+  and broad types;
+- deliberately excluded `unknown` because it is a storage fallback, not a
+  queryable dimension;
+- added `NormalizeImmunityType` and `IsValidImmunityType`;
+- routed existing `NormalizeCCImmunityType` through the shared normalizer so
+  CC aliases/lower-casing remain unchanged;
+- no SavedVariables, query, learning, or macro behaviour changed.
 
-Do not duplicate the same type list across several new helpers.
+Static diff review completed. Runtime validation is still covered by the later
+framework regression matrix.
 
 ### Step 2 — centralize typed queries
 
@@ -598,18 +604,26 @@ matrix before learner development begins.
 
 ## Exact next step
 
-**Step 1: implement the canonical immunity-type layer without changing runtime
+**Step 2: centralize typed immunity queries without changing existing public
 behaviour.**
 
-Start from the existing `IMMUNITY_SCHOOLS`, `CC_IMMUNITY_TYPES`, and
-`NormalizeCCImmunityType` definitions in `Utility.lua`.
+Introduce one internal typed query path, conceptually:
 
-Add `spell`, `cc`, and `all` as recognized internal immunity dimensions
-through one canonical validation/normalization path, while preserving:
+```lua
+CheckImmunityType(unit, immunityType)
+```
 
-- current school keys
-- current exact CC keys and aliases
-- current SavedVariables layout
-- current `CheckImmunity` behaviour
+First route the existing exact school and exact CC checks through it while
+preserving:
 
-After Step 1, update this document before beginning Step 2.
+- `CleveRoids.CheckImmunity(unit, spellOrSchool)`;
+- `CheckCCImmunity` compatibility;
+- current TempCC behaviour;
+- current learned school/CC SavedVariables;
+- current Banish behaviour;
+- current learning paths.
+
+`spell`, `cc`, and `all` must remain false unless an already-known source
+explicitly supports them; do not type the temporary aura guard until Step 4.
+
+After Step 2, update this document before beginning Step 3.
