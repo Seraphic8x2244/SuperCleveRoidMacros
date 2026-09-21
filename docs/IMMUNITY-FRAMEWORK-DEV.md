@@ -10,11 +10,13 @@ The durable design and historical reasoning remain in
 
 - Branch: `design/temp-cc-immunity`
 - Base: `main`
-- Branch head before this handoff refresh: `18c1f5070bc6c2994af4a514862b12abc0474791`
-- Branch relation before this handoff refresh: 44 ahead / 0 behind `main`
+- Branch head before this handoff refresh: `97383436f0c7ea3dead851c7c30914f3b8c08644`
+- Branch relation before this handoff refresh: 47 ahead / 0 behind `main`
 - TOC version: `@project-version@`
-- Latest runtime-related commit: `18c1f5070bc6c2994af4a514862b12abc0474791`
+- Latest runtime-related commit: `97383436f0c7ea3dead851c7c30914f3b8c08644`
 - Recent commits:
+  - `97383436` — Route spell mechanic checks through typed immunity query
+  - `4241f918` — Centralize typed immunity queries
   - `18c1f507` — Add canonical immunity type framework
   - `f2b5f684` — Record framework step one start
   - `7dd3cc92` — Refresh immunity framework recovery snapshot
@@ -301,31 +303,27 @@ Implemented in `18c1f507`:
 Static diff review completed. Runtime validation is still covered by the later
 framework regression matrix.
 
-### Step 2 — centralize typed queries
+### Step 2 — centralize typed queries — DONE
 
-Introduce one internal typed query path, conceptually:
+Implemented in `4241f918` + `97383436`:
 
-```lua
-CheckImmunityType(unit, immunityType)
-```
+- added internal `CheckImmunityType(unit, immunityType)`;
+- exact CC input now routes through the typed path;
+- CC mechanic checks derived from spell names route through the typed path;
+- exact canonical school queries route through the typed path;
+- split physical/bleed checks route through the typed path;
+- learned school lookup still uses the existing SavedVariables layout;
+- TempCC still resolves through existing `CheckCCImmunity`;
+- broad `spell`, `cc`, and `all` deliberately return false;
+- Banish remains on its existing special live-state path;
+- legacy `unknown` school/spell-specific records remain on the old compatibility
+  path because `unknown` is storage, not a canonical dimension.
 
-It should become the common internal path for:
+No public conditional grammar, learning path, or SavedVariables schema changed.
 
-```text
-exact school
-exact CC mechanic
-spell
-cc
-all
-```
-
-Compatibility requirements:
-
-- keep `CleveRoids.CheckImmunity(unit, spellOrSchool)`
-- keep `CheckCCImmunity` available while callers still use it
-- preserve existing current school/CC behaviour
-- broad types initially return false unless supported by a known live/learned
-  source
+Static diff review completed. A local Lua compiler/runtime was not available in
+the tool environment, so in-game/runtime validation remains part of the later
+framework regression matrix.
 
 ### Step 3 — separate source from type
 
@@ -604,26 +602,27 @@ matrix before learner development begins.
 
 ## Exact next step
 
-**Step 2: centralize typed immunity queries without changing existing public
+**Step 3: separate immunity type from immunity source without changing learning
 behaviour.**
 
-Introduce one internal typed query path, conceptually:
+Introduce the minimum internal source/result structure needed so a typed query
+can distinguish why it is true or why an `IMMUNE` observation is inconclusive:
 
-```lua
-CheckImmunityType(unit, immunityType)
+```text
+learned permanent
+manual/buff-conditioned
+temporary aura
+TempCC encounter rule
+special live state (Banish)
+reflection
+DR
+death/debuff-cap ambiguity
 ```
 
-First route the existing exact school and exact CC checks through it while
-preserving:
+Do not type or replace `IMMUNITY_GUARD_AURA_IDS` yet; that remains Step 4.
 
-- `CleveRoids.CheckImmunity(unit, spellOrSchool)`;
-- `CheckCCImmunity` compatibility;
-- current TempCC behaviour;
-- current learned school/CC SavedVariables;
-- current Banish behaviour;
-- current learning paths.
+Step 3 should establish the interface/source vocabulary only, then adapt the
+current exact school/CC/TempCC/Banish query paths where useful without changing
+their returned boolean behaviour.
 
-`spell`, `cc`, and `all` must remain false unless an already-known source
-explicitly supports them; do not type the temporary aura guard until Step 4.
-
-After Step 2, update this document before beginning Step 3.
+After Step 3, update this document before beginning Step 4.
