@@ -10,11 +10,12 @@ The durable design and historical reasoning remain in
 
 - Branch: `design/temp-cc-immunity`
 - Base: `main`
-- Branch head before this handoff refresh: `97383436f0c7ea3dead851c7c30914f3b8c08644`
-- Branch relation before this handoff refresh: 47 ahead / 0 behind `main`
+- Branch head before this handoff refresh: `be8c4db63c0ee0f8eb9db78bdd0fb982b1288d94`
+- Branch relation before this handoff refresh: 48 ahead / 0 behind `main`
 - TOC version: `@project-version@`
 - Latest runtime-related commit: `97383436f0c7ea3dead851c7c30914f3b8c08644`
 - Recent commits:
+  - `be8c4db6` — Record immunity framework step two completion
   - `97383436` — Route spell mechanic checks through typed immunity query
   - `4241f918` — Centralize typed immunity queries
   - `18c1f507` — Add canonical immunity type framework
