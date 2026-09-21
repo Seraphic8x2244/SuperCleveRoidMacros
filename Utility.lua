@@ -6081,6 +6081,20 @@ local BROAD_IMMUNITY_TYPES = {
     all = true,
 }
 
+-- Why an immunity query succeeded, or why a future IMMUNE observation may be
+-- inconclusive. Boolean callers ignore these optional return values.
+local IMMUNITY_SOURCE = {
+    recorded = "recorded",           -- SavedVariables fact; manual vs learned is not distinguishable
+    conditional = "conditional",     -- SavedVariables fact active only with its recorded buff
+    temporary_aura = "temporary_aura",
+    temporary_cc = "temporary_cc",
+    special = "special",             -- bespoke live state such as Banish
+    reflection = "reflection",       -- explanation/guard, not immunity
+    dr = "dr",                       -- explanation/guard, not permanent immunity
+    death = "death",                 -- explanation/guard, not immunity
+    debuff_cap = "debuff_cap",       -- explanation/guard, not immunity
+}
+
 -- Canonical internal immunity vocabulary. Keep "unknown" out of this table:
 -- it is a storage fallback for unresolved schools, not an immunity dimension.
 local IMMUNITY_TYPES = {}
@@ -6918,8 +6932,9 @@ local function CheckCCImmunity(unitId, ccType)
     end
 
     -- Curated temporary encounter immunity is live state, not learned state.
-    if IsTemporarilyCCImmune(unitId, ccType) then
-        return true
+    local tempCCImmune, tempAuraID = IsTemporarilyCCImmune(unitId, ccType)
+    if tempCCImmune then
+        return true, IMMUNITY_SOURCE.temporary_cc, tempAuraID
     end
 
     local targetName = UnitName(unitId)
@@ -6944,12 +6959,16 @@ local function CheckCCImmunity(unitId, ccType)
     end
 
     if immunityData == true then
-        -- Permanent immunity
-        return true
+        -- Permanent recorded immunity. Existing storage cannot distinguish
+        -- automatic learning from a manual/user-created record.
+        return true, IMMUNITY_SOURCE.recorded
     elseif type(immunityData) == "table" and immunityData.buff then
-        -- Buff-based immunity: check if the buff is currently active
+        -- Buff-based recorded immunity: check if the buff is currently active.
         local buffs = GetUnitBuffs(unitId)
-        return buffs[immunityData.buff] == true
+        if buffs[immunityData.buff] == true then
+            return true, IMMUNITY_SOURCE.conditional, immunityData.buff
+        end
+        return false
     end
 
     return false
@@ -7688,10 +7707,32 @@ local function SchoolImmune(unitId, school, targetName)
     local schoolData = school and CleveRoids_ImmunityData[school]
     local data = schoolData and schoolData[targetName]
     if not data then return false end
-    if data == true then return true end
+    if data == true then
+        return true, IMMUNITY_SOURCE.recorded
+    end
     if type(data) ~= "table" then return false end
-    if not data.buff then return true end
-    return CleveRoids.ClassicAPI.GetAuraDataBySpellName(unitId, data.buff, "HELPFUL") and true or false
+    if not data.buff then
+        return true, IMMUNITY_SOURCE.recorded
+    end
+    if CleveRoids.ClassicAPI.GetAuraDataBySpellName(unitId, data.buff, "HELPFUL") then
+        return true, IMMUNITY_SOURCE.conditional, data.buff
+    end
+    return false
+end
+
+-- Banish is an existing bespoke live state: while active, the target is
+-- treated as immune to every tracked damage school. Keep it separate from
+-- broad "all" immunity because Banish has its own game semantics.
+local BANISH_AURA_IDS = { 710, 18647 }
+
+local function GetBanishAuraID(unitId)
+    local API = CleveRoids.ClassicAPI
+    for _, spellID in ipairs(BANISH_AURA_IDS) do
+        if API.GetUnitAuraBySpellID(unitId, spellID) then
+            return spellID
+        end
+    end
+    return nil
 end
 
 -- Resolve one canonical immunity dimension. Broad framework types deliberately
@@ -7720,9 +7761,14 @@ local function CheckImmunityType(unitId, immunityType)
         return false
     end
 
-    -- Learned school immunity is NPC-specific. Live special states such as
-    -- Banish remain on the existing CheckImmunity path until source handling
-    -- is centralized in the next framework stages.
+    -- Existing special live states are sources, not stored immunity facts.
+    -- Banish currently applies to all tracked damage-school dimensions.
+    local banishAuraID = GetBanishAuraID(unitId)
+    if banishAuraID then
+        return true, IMMUNITY_SOURCE.special, banishAuraID
+    end
+
+    -- Recorded school immunity is NPC-specific.
     if UnitIsPlayer(unitId) then
         return false
     end
@@ -7773,41 +7819,15 @@ function CleveRoids.CheckImmunity(unitId, spellOrSchool)
         end
     end
 
-    -- Universal debuff-based immunities (Banish, etc.)
-    -- Banish makes target immune to most damage schools (not all spells)
-    do
-        -- Banish: 710 = Rank 1, 18647 = Rank 2. One by-spellID lookup each --
-        -- C_UnitAuras walks the whole aura array, so it finds the debuff even when
-        -- it has overflowed into an NPC's buff slots (no manual slot scan / overflow gate).
-        local API = CleveRoids.ClassicAPI
-        local hasBanish = (API.GetUnitAuraBySpellID(unitId, 710)
-            or API.GetUnitAuraBySpellID(unitId, 18647)) and true or false
-
-        -- If Banished, check what's being tested for immunity
-        if hasBanish then
-            -- Banished targets are immune to all damage schools
-            -- (but Banish itself can be recast immediately)
-            local banishImmuneSchools = {
-                fire = true,
-                frost = true,
-                nature = true,
-                shadow = true,
-                arcane = true,
-                holy = true,
-                physical = true,
-                bleed = true
-            }
-
-            if banishImmuneSchools[inputLower] then
+    -- Preserve the existing spell-name behaviour for special live states
+    -- before the NPC-only recorded-immunity path. Exact school queries below
+    -- already flow directly through CheckImmunityType.
+    if not IMMUNITY_SCHOOLS[inputLower] then
+        local specialSchool = GetSpellSchool(spellOrSchool)
+        if specialSchool and specialSchool ~= "unknown" then
+            local specialImmune, source = CheckImmunityType(unitId, specialSchool)
+            if specialImmune and source == IMMUNITY_SOURCE.special then
                 return true
-            end
-
-            -- For specific spells, determine their school and check
-            if not IMMUNITY_SCHOOLS[inputLower] then
-                local spellSchool = GetSpellSchool(spellOrSchool)
-                if spellSchool and banishImmuneSchools[spellSchool] then
-                    return true
-                end
             end
         end
     end
