@@ -10,11 +10,13 @@ The durable design and historical reasoning remain in
 
 - Branch: `design/temp-cc-immunity`
 - Base: `main`
-- Branch head before this handoff refresh: `adb62e8d8443ca7493295246c6d03c9ebc62aee3`
-- Branch relation before this handoff refresh: 52 ahead / 0 behind `main`
+- Branch head before this handoff refresh: `3bdeb163a5ebc1ff97458dc60b163a0dc0dd11c5`
+- Branch relation before this handoff refresh: 54 ahead / 0 behind `main`
 - TOC version: `@project-version@`
-- Latest runtime-related commit: `0b4e081e6f73e6b354c0d4f8c1c839590859ff5b`
+- Latest runtime-related commit: `3bdeb163a5ebc1ff97458dc60b163a0dc0dd11c5`
 - Recent commits:
+  - `3bdeb163` — Type temporary immunity aura guards
+  - `9f4016ad` — Record framework step four start
   - `adb62e8d` — Correct framework runtime head
   - `0eba3721` — Record immunity framework step three completion
   - `0b4e081e` — Track immunity query sources
@@ -381,47 +383,44 @@ Current query integration:
 
 No persistence format or learning behaviour changed.
 
-### Step 4 — replace the flat guard with `IMMUNITY_AURAS`
+### Step 4 — replace the flat guard with `IMMUNITY_AURAS` — DONE
 
-Replace:
+Implemented in `3bdeb163`.
 
-```text
-IMMUNITY_GUARD_AURA_IDS
-HasImmunityGuardAura
+The flat `IMMUNITY_GUARD_AURA_IDS` table is gone. It is now:
+
+```lua
+IMMUNITY_AURAS = {
+    all = { ... },
+    spell = { ... },
+    physical = { ... },
+    reflect = { ... },
+}
 ```
 
-with the semantic bucket table agreed above.
+Implementation details:
 
-Requirements:
+- all previously curated IDs were transferred exactly once;
+- no new aura IDs were added;
+- ranks / NPC variants / alternate applications remain simple one-line
+  `[spellID] = true` additions;
+- `GetActiveImmunityAura(unit, auraType)` performs direct numeric by-ID
+  `C_UnitAuras` lookup;
+- no aura-slot scan or polling was added;
+- `HasImmunityGuardAura(unit)` remains as the compatibility learning guard and
+  treats any `all`, `spell`, `physical`, or `reflect` match as
+  inconclusive;
+- the compatibility guard can also return bucket + spell ID for later source
+  plumbing, while old callers continue consuming only the aura name;
+- typed queries now report exact live `all`, `spell`, or `physical`
+  aura buckets as `temporary_aura` plus aura ID;
+- cross-type composition is deliberately not active yet;
+- `reflect` is never a queryable immunity type;
+- TempCC remains separate.
 
-- allow unlimited verified spell IDs per bucket
-- ranks and variants are individual one-line additions
-- keep numeric spell-ID matching
-- keep locale independence
-- keep direct by-ID `C_UnitAuras` lookup
-- do not introduce a full aura scan
-- preserve the existing "any known protection/reflection makes learning
-  inconclusive" behaviour while callers are migrated
-
-Initial mapping from the current guard:
-
-```text
-all:
-    498, 5573          Divine Protection
-    642, 1020          Divine Shield
-    11958, 27619       Ice Block
-
-spell:
-    7121, 19645, 24021 Anti-Magic Shield
-
-physical:
-    1022, 5599, 10278  Blessing of Protection
-
-reflect:
-    all currently curated reflection / reflector IDs
-```
-
-Do not infer additional IDs in this mechanical refactor.
+Static review confirmed the old flat-table symbol no longer exists and every
+previous guard ID occurs exactly once in the new table. No Lua interpreter is
+available in the tool environment, so runtime validation remains outstanding.
 
 ### Step 5 — integrate TempCC with typed queries
 
@@ -635,31 +634,33 @@ matrix before learner development begins.
 
 ## Exact next step
 
-**Step 4: replace the flat temporary learning guard with typed
-`IMMUNITY_AURAS[type][spellID] = true` buckets.**
+**Step 5: verify and formalize TempCC integration through the typed query
+framework.**
 
-Convert the existing `IMMUNITY_GUARD_AURA_IDS` entries into:
+Keep `TEMP_CC_IMMUNITIES` unchanged:
 
 ```text
-all
-spell
-physical
-reflect
+creature entry -> aura ID -> exact CC mechanic
 ```
 
-using only the currently verified IDs.
+The common typed path already reaches TempCC through `CheckCCImmunity`; Step 5
+should make that relationship explicit and verify no broad category is implied.
+
+Required Sartura semantics during Whirlwind:
+
+```text
+stun  -> true  (source: temporary_cc, detail: 26083)
+cc    -> false
+spell -> false
+all   -> false
+```
 
 Requirements:
 
-- multiple ranks / variants / alternate applications remain one-line
-  `[spellID] = true` additions;
-- preserve numeric by-ID `C_UnitAuras` lookups;
-- preserve the current "any matching guard makes learning inconclusive"
-  behaviour while learning callers are migrated;
-- typed queries may begin reporting live `all`, `spell`, and `physical`
-  from these auras;
-- `reflect` must remain a source/explanation, never an immunity type;
-- TempCC remains separate;
-- do not add new aura IDs during the structural conversion.
+- no TempCC persistence changes;
+- no flattening TempCC into `IMMUNITY_AURAS`;
+- no implication from one exact temporary mechanic to broad `cc`;
+- preserve both automatic-learning guards;
+- only make runtime code changes if needed to satisfy those invariants.
 
-After Step 4, update this document before beginning Step 5.
+After Step 5, update this document before beginning Step 6.
