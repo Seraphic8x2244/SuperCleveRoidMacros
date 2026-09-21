@@ -143,8 +143,9 @@ existing event
  -> immunity query consumes confirmed facts
 ```
 
-No runtime change until `spellimmune` classification and confirmation rules
-are settled.
+`spellimmune` classification is now resolved as six-school non-physical school
+immunity, and spell-aware public immunity checks consume the action dimension
+set. Comparative learner confirmation rules remain deferred.
 
 ---
 
