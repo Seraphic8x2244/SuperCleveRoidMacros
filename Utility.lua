@@ -7973,7 +7973,11 @@ function CleveRoids.CheckImmunity(unitId, spellOrSchool)
     local inputLower = string.lower(spellOrSchool)
     local normalizedInput = NormalizeImmunityType(inputLower)
     if normalizedInput and CC_IMMUNITY_TYPES[normalizedInput] then
-        return CheckImmunityType(unitId, normalizedInput)
+        local immune, source, detail = CheckImmunityType(unitId, normalizedInput)
+        if immune then
+            return true, normalizedInput, source, detail
+        end
+        return false
     end
 
     -- Spell-name / bare-action queries consume the complete ordered immunity
@@ -7984,9 +7988,9 @@ function CleveRoids.CheckImmunity(unitId, spellOrSchool)
     end
     local actionSpellID = GetSpellIdForName and GetSpellIdForName(actionSpellName)
     if actionSpellID then
-        local actionImmune = CheckSpellImmunityDimensions(unitId, actionSpellID)
+        local actionImmune, dimension, source, detail = CheckSpellImmunityDimensions(unitId, actionSpellID)
         if actionImmune then
-            return true
+            return true, dimension, source, detail
         end
     end
 
@@ -7996,9 +8000,9 @@ function CleveRoids.CheckImmunity(unitId, spellOrSchool)
     if not IMMUNITY_SCHOOLS[inputLower] then
         local specialSchool = GetSpellSchool(spellOrSchool)
         if specialSchool and specialSchool ~= "unknown" then
-            local specialImmune, source = CheckImmunityType(unitId, specialSchool)
+            local specialImmune, source, detail = CheckImmunityType(unitId, specialSchool)
             if specialImmune and source == IMMUNITY_SOURCE.special then
-                return true
+                return true, specialSchool, source, detail
             end
         end
     end
@@ -8006,7 +8010,11 @@ function CleveRoids.CheckImmunity(unitId, spellOrSchool)
     -- Explicit canonical school queries use the typed path. Keep "unknown"
     -- on the legacy spell-specific storage path for compatibility.
     if inputLower ~= "unknown" and IMMUNITY_SCHOOLS[inputLower] then
-        return CheckImmunityType(unitId, inputLower)
+        local immune, source, detail = CheckImmunityType(unitId, inputLower)
+        if immune then
+            return true, inputLower, source, detail
+        end
+        return false
     end
 
     -- Only works on NPCs for NPC-specific immunities
@@ -8051,8 +8059,8 @@ function CleveRoids.CheckImmunity(unitId, spellOrSchool)
 
             -- Initial school (e.g. physical for Rake's opening hit), then the DoT's
             -- school (e.g. bleed). Immunity to either component skips the spell.
-            local initialImmune = CheckImmunityType(unitId, initialSchool)
-            local debuffImmune = CheckImmunityType(unitId, debuffSchool)
+            local initialImmune, initialSource, initialDetail = CheckImmunityType(unitId, initialSchool)
+            local debuffImmune, debuffSource, debuffDetail = CheckImmunityType(unitId, debuffSchool)
 
             -- Return true if immune to EITHER component
             if initialImmune or debuffImmune then
@@ -8064,7 +8072,10 @@ function CleveRoids.CheckImmunity(unitId, spellOrSchool)
                             debuffSchool, debuffImmune and "IMMUNE" or "ok")
                     )
                 end
-                return true
+                if initialImmune then
+                    return true, initialSchool, initialSource, initialDetail
+                end
+                return true, debuffSchool, debuffSource, debuffDetail
             end
             return false
         end
@@ -8075,7 +8086,11 @@ function CleveRoids.CheckImmunity(unitId, spellOrSchool)
         end
 
         if school ~= "unknown" and IMMUNITY_SCHOOLS[school] then
-            return CheckImmunityType(unitId, school)
+            local immune, source, detail = CheckImmunityType(unitId, school)
+            if immune then
+                return true, school, source, detail
+            end
+            return false
         end
     end
 
@@ -8093,7 +8108,7 @@ function CleveRoids.CheckImmunity(unitId, spellOrSchool)
 
     -- Permanent immunity
     if immunityData == true then
-        return true
+        return true, school, IMMUNITY_SOURCE.recorded
     end
 
     -- Table-based immunity data (buff-based or unknown school with spell name)
@@ -8109,7 +8124,7 @@ function CleveRoids.CheckImmunity(unitId, spellOrSchool)
         -- lookup across the unit's buffs via C_UnitAuras -- no 32-slot scan.
         if immunityData.buff then
             if CleveRoids.ClassicAPI.GetAuraDataBySpellName(unitId, immunityData.buff, "HELPFUL") then
-                return true
+                return true, school, IMMUNITY_SOURCE.conditional, immunityData.buff
             end
             -- Buff not found, not currently immune
             return false
@@ -8117,11 +8132,53 @@ function CleveRoids.CheckImmunity(unitId, spellOrSchool)
 
         -- Unknown school permanent immunity (has spell name, no buff requirement)
         if immunityData.spell and not immunityData.buff then
-            return true  -- Permanent immunity to this specific spell
+            return true, "unknown", IMMUNITY_SOURCE.recorded, immunityData.spell
         end
     end
 
     return false
+end
+
+local function FormatImmunityDebugDetail(detail)
+    if detail == nil then return nil end
+    if type(detail) == "number" then
+        local name = C_Spell.GetSpellName(detail)
+        if name then
+            return name .. " " .. tostring(detail)
+        end
+        return "SpellID:" .. tostring(detail)
+    end
+    return tostring(detail)
+end
+
+-- Explicit on-demand diagnostic. Keeping this separate from macro evaluation
+-- avoids flooding chat when [immune]/[noimmune] conditions are checked often.
+function CleveRoids.DebugCheckImmunity(unitId, spellOrSchool)
+    if not CleveRoids.debug then
+        CleveRoids.Print("|cffffaa00[Immunity Debug]|r Enable CleveRoids debug first.")
+        return false
+    end
+
+    local immune, dimension, source, detail = CleveRoids.CheckImmunity(unitId, spellOrSchool)
+    local targetName = UnitName(unitId) or tostring(unitId)
+    local query = tostring(spellOrSchool)
+
+    if not immune then
+        CleveRoids.Print("|cffaaaaaa[Immunity Debug]|r " .. query .. " on " .. targetName .. " -> no matching immunity")
+        return false
+    end
+
+    local message = "|cff00aaff[Immunity Debug]|r " .. query .. " on " .. targetName ..
+        " -> immune: " .. tostring(dimension or "unknown") ..
+        " [" .. tostring(source or "unknown") .. "]"
+
+    local detailText = FormatImmunityDebugDetail(detail)
+    if detailText then
+        message = message .. " (" .. detailText .. ")"
+    end
+
+    CleveRoids.Print(message)
+    return true, dimension, source, detail
 end
 
 -- Management functions for immunity data
