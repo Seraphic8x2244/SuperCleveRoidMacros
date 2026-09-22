@@ -158,9 +158,13 @@ Static-checked:
   docs changed; no immunity-learning or immunity SavedVariables code changed;
 - no GitHub CI workflow/status is attached to `ed777632`;
 - first WoW test of the mouseover slice reported ClassicAPI being blocked from
-  an action restricted to Blizzard UI; the cause is the attempted
+  an action restricted to Blizzard UI; the cause was the attempted
   `hooksecurefunc` wrapping of the four protected WorldFrame movement/action
-  globals, so that hook mechanism must be removed before further testing.
+  globals;
+- those four hooks were removed in
+  `93f1f69a664907a67d37d78413738e69b3585dd3`; the canonical resolver and
+  pipeline consolidation remain, but WorldFrame suspension is disabled pending
+  a safe observation mechanism.
 - @mouseover investigation (no behavior change yet): SCRM maintains a
   priority-ordered synthetic mouseover aggregate (unit-frame sources > native
   UPDATE_MOUSEOVER_UNIT > tooltip) and may call `SetMouseoverUnit` itself;
@@ -254,9 +258,10 @@ Deferred:
 - new public `[immune:*]` grammar;
 - any new polling or high-frequency `OnUpdate` mechanism.
 
-Exact next step: remove the failed protected-global mouseover hooks, keep the
-canonical resolver/consolidation work, and identify a non-tainting WorldFrame
-action signal before resuming the mouseover live-test matrix. Continue the
+Exact next step: identify and agree a non-tainting WorldFrame action signal
+before resuming the mouseover live-test matrix. The failed protected-global
+hooks are already removed in `93f1f69a`; keep the canonical
+resolver/consolidation work. Continue the
 existing clean-dataset immunity observations separately. Do not expand the mouseover
 sidequest or start the generalized immunity learner during this testing period.
 The target-model UI and clean-dataset immunity observations also remain awaiting
