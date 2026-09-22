@@ -14,12 +14,13 @@ mouseover consolidation and WorldFrame-action suspension semantics.
 
 - Branch: `design/temp-cc-immunity`
 - Base: `main`
-- Branch head before this handoff refresh: `e795de924f416fcce4cab3cea53f7721cd4f6ac4`
-- Branch relation before this handoff refresh: 106 ahead / 0 behind `main`
+- Branch head before this handoff refresh: `9e3574c2ae1c6a88d432e7d97343ac582194b688`
+- Branch relation before this handoff refresh: 107 ahead / 0 behind `main`
 - TOC version: `@project-version@`
 - Latest framework/runtime behavior commit: `c23a80c4cff5d64765b25464b88738fdf93bfa31`
 - Latest immunity UI runtime commit: `6726ce1e39332581ba9145bad954341f0bd439d0`
 - Recent commits:
+  - `9e3574c2` — Link mouseover sidequest handoff
   - `e795de92` — Document mouseover WorldFrame sidequest
   - `7aa64375` — Record mouseover camera-drag investigation
   - `6726ce1e` — Add rotating target model to immunity UI
