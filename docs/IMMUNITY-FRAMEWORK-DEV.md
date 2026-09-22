@@ -14,12 +14,17 @@ mouseover consolidation and WorldFrame-action suspension semantics.
 
 - Branch: `design/temp-cc-immunity`
 - Base: `main`
-- Branch head before this handoff refresh: `9e3574c2ae1c6a88d432e7d97343ac582194b688`
-- Branch relation before this handoff refresh: 107 ahead / 0 behind `main`
+- Branch head before this final status refresh: `ed7776329379853db1d32aea0d6b76e9e8305bed`
+- Branch relation before this final status refresh: 112 ahead / 0 behind `main`
 - TOC version: `@project-version@`
 - Latest framework/runtime behavior commit: `c23a80c4cff5d64765b25464b88738fdf93bfa31`
 - Latest immunity UI runtime commit: `6726ce1e39332581ba9145bad954341f0bd439d0`
 - Recent commits:
+  - `ed777632` — Unify macro mouseover resolution
+  - `49da0702` — Route target validation through mouseover resolver
+  - `2be9746b` — Suspend mouseover during WorldFrame actions
+  - `2c0a0ae3` — Refresh immunity recovery snapshot
+  - `d5902db0` — Refresh mouseover recovery snapshot
   - `9e3574c2` — Link mouseover sidequest handoff
   - `e795de92` — Document mouseover WorldFrame sidequest
   - `7aa64375` — Record mouseover camera-drag investigation
@@ -96,6 +101,11 @@ Completed / implemented:
 - shifted the Recorded CC / Recorded Spell / live-state lists downward to make
   room for the model without changing the overall 300 x 690 target-panel
   footprint or immunity-learning logic.
+- implemented the separate mouseover WorldFrame sidequest runtime slice in
+  `2be9746b`, `49da0702`, and `ed777632`: post-hooked WoW's left/right
+  WorldFrame actions, added one canonical mouseover resolver with suspension
+  semantics, and routed normal execution, `IsValidTarget`, conditional
+  `/target`, and `/pfcast` through it without changing immunity behavior.
 
 Static-checked:
 
@@ -140,6 +150,15 @@ Static-checked:
   `PlayerModel:SetRotation`, `UnitCreatureType`, and `UnitClassification`;
 - no CI workflow/status was attached to `6726ce1e`; verification so far is
   source/API static review only.
+- mouseover runtime source audit confirms no raw LMB/RMB polling or new
+  `OnUpdate` was added; stored mouseover sources are suspended rather than
+  cleared during WorldFrame actions;
+- compare from `9e3574c2` through mouseover runtime head `ed777632` shows
+  only `Utility.lua`, `Conditionals.lua`, `Core.lua`, and the two handoff
+  docs changed; no immunity-learning or immunity SavedVariables code changed;
+- no GitHub CI workflow/status is attached to `ed777632`; the mouseover
+  runtime slice is source/static-checked only and has not been live-tested in
+  WoW yet.
 - @mouseover investigation (no behavior change yet): SCRM maintains a
   priority-ordered synthetic mouseover aggregate (unit-frame sources > native
   UPDATE_MOUSEOVER_UNIT > tooltip) and may call `SetMouseoverUnit` itself;
@@ -176,10 +195,11 @@ Live-tested:
 
 Untested / outstanding:
 
-- @mouseover camera-drag semantics are agreed and documented in
-  `docs/MOUSEOVER-WORLDFRAME-DEV.md`; runtime implementation is still untested
-  and should suspend mouseover only during the actual left/right WorldFrame
-  mouse actions, never by raw LMB/RMB state;
+- @mouseover WorldFrame suspension is implemented in `2be9746b`,
+  `49da0702`, and `ed777632` and remains untested in WoW; live-test normal
+  world/pfUI mouseover, left/right WorldFrame suppression, release/resume,
+  unit-frame click preservation, and parity across `/cast`, `/target`,
+  `IsValidTarget`, and `/pfcast`;
 - live-test the new `6726ce1e` target model: model renders for ordinary NPCs,
   rotates at a comfortable speed, changes promptly with target, and stops while
   the immunity window is hidden;
@@ -232,15 +252,12 @@ Deferred:
 - new public `[immune:*]` grammar;
 - any new polling or high-frequency `OnUpdate` mechanism.
 
-Exact next step: implement the first runtime slice from
-`docs/MOUSEOVER-WORLDFRAME-DEV.md`: post-hook the left/right WorldFrame
-Start/Stop functions, add one canonical mouseover resolver that returns nil only
-while either WorldFrame action is active, and route normal conditional
-execution, `IsValidTarget`, conditional `/target`, and the mouseover portion
-of `/pfcast` through it. Do not clear stored mouseover sources and do not gate
-on raw LMB/RMB. Static-check for bypass paths, then publish for live testing.
-The target-model UI and clean-dataset immunity observations remain awaiting live
-testing. Keep the generalized learner deferred.
+Exact next step: live-test the implemented mouseover WorldFrame slice using
+the matrix in `docs/MOUSEOVER-WORLDFRAME-DEV.md`, while continuing the existing
+clean-dataset immunity observations separately. Do not expand the mouseover
+sidequest or start the generalized immunity learner during this testing period.
+The target-model UI and clean-dataset immunity observations also remain awaiting
+reported WoW results.
 
 ## Stage scope
 
