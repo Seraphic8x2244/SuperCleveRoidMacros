@@ -5739,6 +5739,7 @@ SlashCmdList["CLEVEROID"] = function(msg)
         DEFAULT_CHAT_FRAME:AddMessage('/cleveroid listschools - List all learned spell schools')
         DEFAULT_CHAT_FRAME:AddMessage('/cleveroid clearschools - Clear learned spell school data')
         DEFAULT_CHAT_FRAME:AddMessage("|cffffaa00Immunity Tracking:|r")
+        DEFAULT_CHAT_FRAME:AddMessage('/cleveroid immunities - Open immunity testing/management UI')
         DEFAULT_CHAT_FRAME:AddMessage('/cleveroid listimmune [school] - List immunity data')
         DEFAULT_CHAT_FRAME:AddMessage('/cleveroid addimmune "<NPC>" <school> [buff] - Add immunity')
         DEFAULT_CHAT_FRAME:AddMessage('/cleveroid removeimmune "<NPC>" <school> - Remove immunity')
@@ -5868,6 +5869,16 @@ SlashCmdList["CLEVEROID"] = function(msg)
         end
         -- Clear keyed debug state so messages re-fire when debug is re-enabled
         CleveRoids._lastDebugState = {}
+        return
+    end
+
+    -- immunities (testing/management UI)
+    if cmd == "immunities" then
+        if CleveRoids.ToggleImmunityUI then
+            CleveRoids.ToggleImmunityUI()
+        else
+            CleveRoids.Print("Immunity UI is unavailable.")
+        end
         return
     end
 
