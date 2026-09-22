@@ -2445,13 +2445,12 @@ function CleveRoids.DoWithConditionals(msg, hook, fixEmptyTargetFunc, targetBefo
 
     local origTarget = conditionals.target
     if conditionals.target == "mouseover" then
-        if UnitExists("mouseover") then
-            conditionals.target = "mouseover"
-        elseif CleveRoids.mouseoverUnit and UnitExists(CleveRoids.mouseoverUnit) then
-            conditionals.target = CleveRoids.mouseoverUnit
-        else
-            conditionals.target = "mouseover"
+        local resolvedMouseover = CleveRoids.ResolveMouseoverUnit()
+        if not resolvedMouseover then
+            conditionals.target = origTarget
+            return false
         end
+        conditionals.target = resolvedMouseover
     end
 
     local needRetarget = false
@@ -2681,18 +2680,12 @@ function CleveRoids.DoCast(msg)
     return false
 end
 
--- Resolve unit for /pfcast: mouseover → GetMouseFocus label+id → mouseoverUnit → target → player
--- Mirrors pfUI's own unit resolution order so /pfcast conditionals evaluate against the same unit
--- that pfUI would cast on.
+-- Resolve unit for /pfcast: canonical mouseover → target → player.
+-- Target/player remain pfcast fallbacks outside the shared mouseover resolver.
 local function ResolvePfCastUnit()
-    if UnitExists("mouseover") then
-        return "mouseover"
-    end
-    local frame = GetMouseFocus and GetMouseFocus()
-    if frame and frame.label and frame.id then
-        return frame.label .. frame.id
-    elseif CleveRoids.mouseoverUnit and UnitExists(CleveRoids.mouseoverUnit) then
-        return CleveRoids.mouseoverUnit
+    local mouseoverUnit = CleveRoids.ResolveMouseoverUnit()
+    if mouseoverUnit then
+        return mouseoverUnit
     elseif UnitExists("target") then
         return "target"
     elseif GetCVar and GetCVar("autoSelfCast") == "1" then
@@ -2842,16 +2835,7 @@ function CleveRoids.DoTarget(msg)
         local unitTok = conditionals.target
 
         if unitTok == "mouseover" then
-            if UnitExists("mouseover") then
-                unitTok = "mouseover"
-            elseif CleveRoids.mouseoverUnit and UnitExists(CleveRoids.mouseoverUnit) then
-                unitTok = CleveRoids.mouseoverUnit
-            elseif pfUI and pfUI.uf and pfUI.uf.mouseover and pfUI.uf.mouseover.unit
-               and UnitExists(pfUI.uf.mouseover.unit) then
-                unitTok = pfUI.uf.mouseover.unit
-            else
-                unitTok = nil
-            end
+            unitTok = CleveRoids.ResolveMouseoverUnit()
         end
 
         if unitTok == "focus" or unitTok == "focustarget" then
@@ -2900,7 +2884,7 @@ function CleveRoids.DoTarget(msg)
         table.insert(candidates, { unitId = unitId })
     end
 
-    addCandidate("mouseover")
+    addCandidate(CleveRoids.ResolveMouseoverUnit())
 
     addCandidate("target")
 
