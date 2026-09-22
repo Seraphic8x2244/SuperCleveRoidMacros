@@ -10,11 +10,13 @@ The durable design and historical reasoning remain in
 
 - Branch: `design/temp-cc-immunity`
 - Base: `main`
-- Branch head before this handoff refresh: `f362b4655c53e32cda9cce80847faf6128b84def`
-- Branch relation before this handoff refresh: 88 ahead / 0 behind `main`
+- Branch head before this handoff refresh: `0666d34a1008ee25b2696e1ccdaf444a862db6d5`
+- Branch relation before this handoff refresh: 90 ahead / 0 behind `main`
 - TOC version: `@project-version@`
-- Latest framework/UI runtime commit: `f362b4655c53e32cda9cce80847faf6128b84def`
+- Latest framework/UI runtime commit: `0666d34a1008ee25b2696e1ccdaf444a862db6d5`
 - Recent commits:
+  - `0666d34a` — Fix immunity UI placement comment newline
+  - `bdcd6977` — Refresh immunity UI live-test handoff
   - `f362b465` — Center immunity UI composite at 1024 width
   - `6c49e979` — Harden immunity UI for Vanilla layout
   - `9270bb99` — Add immunities slash command
@@ -60,7 +62,9 @@ Static-checked:
   event globals (`event`, `arg1`) in its script handlers;
 - the relevant UI calls used by this surface are consistent with the 1.12-era
   FrameXML API surface reviewed for this pass;
-- the 1024-wide initial-position correction above is geometry-checked only.
+- the 1024-wide initial-position correction above is geometry-checked only;
+- post-write source verification confirms the placement call remains active after
+  the comment/newline correction in `0666d34a`.
 
 Live-tested:
 
