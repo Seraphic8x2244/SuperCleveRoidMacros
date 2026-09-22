@@ -11,6 +11,7 @@ Init.lua
 NampowerAPI.lua
 ClassicAPI.lua
 Utility.lua
+ImmunityUI.lua
 Core.lua
 Conditionals.lua
 Console.lua
