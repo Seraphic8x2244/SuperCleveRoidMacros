@@ -10,11 +10,12 @@ The durable design and historical reasoning remain in
 
 - Branch: `design/temp-cc-immunity`
 - Base: `main`
-- Branch head before this handoff refresh: `39d05b95d6d8109dd12bb1f61094b552edc9ba36`
-- Branch relation before this handoff refresh: 100 ahead / 0 behind `main`
+- Branch head before this handoff refresh: `3a6a2f8818a950e201e06e3c31c7cce096f74b89`
+- Branch relation before this handoff refresh: 101 ahead / 0 behind `main`
 - TOC version: `@project-version@`
 - Latest framework/runtime behavior commit: `c23a80c4cff5d64765b25464b88738fdf93bfa31`
 - Recent commits:
+  - `3a6a2f88` — Record historical false immunity provenance
   - `39d05b95` — Record explicit miss immunity fix status
   - `2e0edc18` — Clarify shared miss immunity authority
   - `c23a80c4` — Stop generic shared misses learning immunity
@@ -168,13 +169,12 @@ Deferred:
 - new public `[immune:*]` grammar;
 - any new polling or high-frequency `OnUpdate` mechanism.
 
-Exact next step: make a manual immunity backup, clear the contaminated learned
-immunity data, then observe a clean dataset over normal play against
-`c23a80c4`. Specifically watch ordinary miss/resist/dodge/parry/block outcomes
-plus Holy, Physical, Snare and Stun actions; any newly persisted entry should
-correspond to `SPELL_MISS_SELF` IMMUNE/IMMUNE2. Preserve any reproducible new
-false entry for diagnosis before clearing it. Then continue the existing
-framework regression matrix. Keep the generalized learner deferred.
+Exact next step: add a purely cosmetic 3D model for the current target to
+the attached target panel, with slow rotation only while the immunity UI is
+visible and a valid target/model exists. Place Name, creature ID, Level,
+Creature Type, and Classification beside/near the model. Keep this isolated
+from immunity learning and preserve the clean-dataset immunity observation
+plan immediately afterwards. Keep the generalized learner deferred.
 
 ## Stage scope
 
