@@ -10,11 +10,14 @@ The durable design and historical reasoning remain in
 
 - Branch: `design/temp-cc-immunity`
 - Base: `main`
-- Branch head before this handoff refresh: `3a6a2f8818a950e201e06e3c31c7cce096f74b89`
-- Branch relation before this handoff refresh: 101 ahead / 0 behind `main`
+- Branch head before this handoff refresh: `6726ce1e39332581ba9145bad954341f0bd439d0`
+- Branch relation before this handoff refresh: 103 ahead / 0 behind `main`
 - TOC version: `@project-version@`
 - Latest framework/runtime behavior commit: `c23a80c4cff5d64765b25464b88738fdf93bfa31`
+- Latest immunity UI runtime commit: `6726ce1e39332581ba9145bad954341f0bd439d0`
 - Recent commits:
+  - `6726ce1e` — Add rotating target model to immunity UI
+  - `d737fb87` — Queue target model UI pass
   - `3a6a2f88` — Record historical false immunity provenance
   - `39d05b95` — Record explicit miss immunity fix status
   - `2e0edc18` — Clarify shared miss immunity authority
@@ -76,6 +79,16 @@ Completed / implemented:
   direct numeric `SPELL_MISS` events are available;
 - retained the old missing-aura/text heuristics only as legacy fallback paths
   for environments without direct `SPELL_MISS` support.
+- added a cosmetic `PlayerModel` to the Current Target panel using
+  `SetUnit("target")`;
+- added slow target-model rotation at one revolution per 12 seconds;
+- rotation attaches only while the immunity UI is shown with a valid target and
+  is explicitly detached on no-target, model failure, or UI hide;
+- moved target identity text beside the model and now displays Name, Mob ID,
+  Level, Creature Type, and Classification (Normal/Elite/Rare/Rare Elite/Boss);
+- shifted the Recorded CC / Recorded Spell / live-state lists downward to make
+  room for the model without changing the overall 300 x 690 target-panel
+  footprint or immunity-learning logic.
 
 Static-checked:
 
@@ -109,6 +122,17 @@ Static-checked:
   immunity fixes (`8f1e2166` on 2026-01-16 and `719021ff` on 2026-03-27);
   therefore existing SavedVariables may contain months-old contamination and
   cannot be used alone to prove the current branch still learns false entries.
+- target-model source review confirms the cosmetic spinner is isolated to
+  `ImmunityUI.lua`, uses no immunity mutations, and adds no always-on poll;
+- target-model `OnUpdate` is installed only for a visible valid target and is
+  removed when the main window hides or the target/model becomes unavailable;
+- target model is frame-level +1 inside the target panel while the Clear and
+  Backup History modals remain +50 over the parent, preserving the modal
+  layering fix;
+- Vanilla API references were checked for `PlayerModel:SetUnit`,
+  `PlayerModel:SetRotation`, `UnitCreatureType`, and `UnitClassification`;
+- no CI workflow/status was attached to `6726ce1e`; verification so far is
+  source/API static review only.
 
 Live-tested:
 
@@ -124,6 +148,13 @@ Live-tested:
 
 Untested / outstanding:
 
+- live-test the new `6726ce1e` target model: model renders for ordinary NPCs,
+  rotates at a comfortable speed, changes promptly with target, and stops while
+  the immunity window is hidden;
+- verify Name, Mob ID, Level, Type, and Classification formatting for normal,
+  elite/rare/boss, player, and no-target cases;
+- verify the reduced Recorded CC / Recorded Spell list heights remain practical
+  and that the model stays below Clear/Backup modal overlays;
 - live testing found false learned immunities on ordinary mobs, including
   Physical, Snare, Stun (Riverpaw Scout), and multiple Holy records;
 - provenance of those specific stored entries is unknown; they may have been
@@ -169,12 +200,12 @@ Deferred:
 - new public `[immune:*]` grammar;
 - any new polling or high-frequency `OnUpdate` mechanism.
 
-Exact next step: add a purely cosmetic 3D model for the current target to
-the attached target panel, with slow rotation only while the immunity UI is
-visible and a valid target/model exists. Place Name, creature ID, Level,
-Creature Type, and Classification beside/near the model. Keep this isolated
-from immunity learning and preserve the clean-dataset immunity observation
-plan immediately afterwards. Keep the generalized learner deferred.
+Exact next step: live-test `6726ce1e` in the target client with
+`/cleveroid immunities`: verify the selected target model renders and rotates,
+the metadata/layout is readable, target changes/no-target/window hide behave
+correctly, and modal overlays still cover it. Then resume the clean-dataset
+immunity observation plan over normal play. Keep the generalized learner
+deferred.
 
 ## Stage scope
 
