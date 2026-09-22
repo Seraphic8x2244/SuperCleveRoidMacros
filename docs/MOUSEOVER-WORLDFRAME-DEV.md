@@ -20,9 +20,14 @@ and must not disturb immunity-learning behavior.
   - `ed7776329379853db1d32aea0d6b76e9e8305bed` — route normal execution, conditional `/target`, and `/pfcast` through the canonical resolver.
 - Failed runtime implementation head: `ed7776329379853db1d32aea0d6b76e9e8305bed`
 - Protected-hook removal commit: `93f1f69a664907a67d37d78413738e69b3585dd3`
-- Status after removal: canonical resolver/consolidation retained; WorldFrame
-  suspension deliberately disabled pending a non-tainting signal.
-- Active next step: live-test the matrix below; immunity behavior remains frozen while its separate clean-dataset testing continues.
+- Status after protected-hook removal: canonical resolver/consolidation retained.
+- Safe WorldFrame script implementation: `532802577f2b5d56b9a9ad88318abe0e58a83170`
+  — tracks left/right state from `WorldFrame:HookScript("OnMouseDown")` and
+  `WorldFrame:HookScript("OnMouseUp")`.
+- Branch relation after that runtime commit: 120 ahead / 0 behind `main`.
+- Active next step: live-test the matrix below, with special attention to whether
+  `WorldFrame:OnMouseUp` fires reliably after camera/mouselook cursor capture;
+  immunity behavior remains frozen while its separate clean-dataset testing continues.
 
 ## User-visible problem
 
@@ -454,8 +459,11 @@ Static-checked:
 - no raw LMB/RMB polling was added;
 - no new `OnUpdate` loop or polling path was added;
 - the four protected WorldFrame movement/action globals are no longer wrapped;
-- the canonical resolver and suspension state structure remain in place, but
-  no code currently flips the suspension flags;
+- `53280257` observes only `WorldFrame`'s own `OnMouseDown` /
+  `OnMouseUp` scripts through ClassicAPI's `Frame:HookScript` backport;
+- only left/right clicks delivered to `WorldFrame` flip the suspension flags;
+  clicks handled by pfUI/unit/UI frames do not enter this path;
+- no raw `IsMouseButtonDown()` polling was added;
 - stored mouseover sources are still never erased merely because of this
   sidequest;
 - branch source audit found normal execution, `IsValidTarget`, conditional
@@ -474,8 +482,10 @@ Static-checked:
   docs changed;
 - no immunity-learning, immunity SavedVariables, or public macro grammar code
   was changed;
-- no GitHub CI workflow/status is attached to `ed777632`; verification so far
-  is source/static review only.
+- compare from handoff head `5a7388cd` to `53280257` changes only
+  `Utility.lua` (+27/-5);
+- no GitHub CI workflow/status is attached to `53280257`; verification of the
+  replacement is source/static review only.
 
 Live-tested:
 
@@ -493,7 +503,9 @@ Live-tested:
 
 Untested:
 
-- a replacement non-tainting WorldFrame-action observation mechanism;
+- the new `WorldFrame:OnMouseDown/OnMouseUp` observation mechanism in WoW;
+- specifically, whether `OnMouseUp` is delivered reliably after LMB camera
+  orbit and RMB mouselook hide/capture the cursor;
 - unified resolver behavior under normal world hover and pfUI/unit-frame hover;
 - left/right unit-frame click preservation;
 - left/right WorldFrame hold suppression;
@@ -503,16 +515,15 @@ Untested:
 
 ## Exact next step
 
-Remove the four protected-global `hooksecurefunc` calls before further live
-testing. Preserve the canonical resolver/consolidation work, but leave
-WorldFrame suspension disabled until a non-tainting observation mechanism is
-agreed. Then investigate a WorldFrame-local/event-based signal rather than
-wrapping protected movement globals.
+Live-test `53280257` without expanding scope. The replacement signal is now
+WorldFrame-local: `OnMouseDown` starts left/right suspension and
+`OnMouseUp` ends it. Do not resume the failed protected-global hook approach.
 
-The previous live-test matrix remains the acceptance matrix once a safe signal
-exists.
-
-Do not resume the failed protected-global hook approach.
+The first release-specific check is whether WorldFrame receives `OnMouseUp`
+reliably after the cursor is hidden/captured by LMB camera orbit and RMB
+mouselook. If release is reliable, continue the full matrix. If release is not
+reliable, retain WorldFrame-origin detection and add a narrowly-scoped release
+fallback only while that known WorldFrame action is active.
 
 Live-test the matrix above without expanding scope:
 
