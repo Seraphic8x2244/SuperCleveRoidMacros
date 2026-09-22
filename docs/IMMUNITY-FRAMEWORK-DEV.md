@@ -10,11 +10,12 @@ The durable design and historical reasoning remain in
 
 - Branch: `design/temp-cc-immunity`
 - Base: `main`
-- Branch head before this handoff refresh: `0666d34a1008ee25b2696e1ccdaf444a862db6d5`
-- Branch relation before this handoff refresh: 90 ahead / 0 behind `main`
+- Branch head before this handoff refresh: `fd366a56952bb3589ab912d6b89162bc542875f3`
+- Branch relation before this handoff refresh: 92 ahead / 0 behind `main`
 - TOC version: `@project-version@`
-- Latest framework/UI runtime commit: `0666d34a1008ee25b2696e1ccdaf444a862db6d5`
+- Latest framework/UI runtime commit: `fd366a56952bb3589ab912d6b89162bc542875f3`
 - Recent commits:
+  - `fd366a56` — Fix immunity scrolling and add header icons
   - `0666d34a` — Fix immunity UI placement comment newline
   - `bdcd6977` — Refresh immunity UI live-test handoff
   - `f362b465` — Center immunity UI composite at 1024 width
@@ -22,9 +23,6 @@ The durable design and historical reasoning remain in
   - `9270bb99` — Add immunities slash command
   - `ae11c272` — Load immunity management UI
   - `926a8303` — Add immunity testing management UI
-  - `0181cf55` — Expose immunity UI debug state
-  - `4c2c9c8b` — Refresh immunity UI implementation handoff
-  - `93a0dfb2` — Plan immunity testing management UI
 
 ### Resume status — 2026-09-22
 
@@ -52,7 +50,12 @@ Completed / implemented:
 - loaded `ImmunityUI.lua` between `Utility.lua` and `Core.lua`;
 - added the slash-dispatch/help entry for `/cleveroid immunities`;
 - centered the 1014 px combined main + attached-target footprint so its initial
-  placement fits inside a 1024-wide UI with a small margin.
+  placement fits inside a 1024-wide UI with a small margin;
+- reversed the horizontal-slider-to-scroll mapping after live feedback showed
+  the original controls moved in the wrong direction;
+- added representative Vanilla spell icons to every CC and spell-immunity column
+  header via `C_Spell.GetSpellTexture(spellID)`; examples include Seduction for
+  Charm, Exorcism for Holy, and Fireball for Fire.
 
 Static-checked:
 
@@ -61,21 +64,33 @@ Static-checked:
 - `ImmunityUI.lua` avoids Lua 5.1-only length/select patterns and uses Vanilla
   event globals (`event`, `arg1`) in its script handlers;
 - the relevant UI calls used by this surface are consistent with the 1.12-era
-  FrameXML API surface reviewed for this pass;
-- the 1024-wide initial-position correction above is geometry-checked only;
+  FrameXML API surface reviewed for this work;
+- the 1024-wide initial-position correction is geometry-checked;
 - post-write source verification confirms the placement call remains active after
-  the comment/newline correction in `0666d34a`.
+  the comment/newline correction in `0666d34a`;
+- post-write source verification confirms the reversed scroll mapping preserves
+  the visible content offset across refreshes and initializes on the leftmost
+  columns;
+- `C_Spell.GetSpellTexture(spellID)` is already used by the addon runtime in
+  `Utility.lua`, so the new column icons reuse an established dependency/API
+  path rather than introducing a new texture-resolution mechanism.
 
 Live-tested:
 
-- none of the new immunity UI/runtime work has been exercised in the target
-  1.12.1 client yet.
+- the immunity UI has now been opened in the target client far enough to identify
+  that the pre-`fd366a56` horizontal scroll controls moved in the wrong
+  direction;
+- the `fd366a56` scroll-direction correction has not yet been live-tested;
+- the new representative header icons have not yet been live-tested.
 
 Untested / outstanding:
 
-- verify the addon loads without Lua/API errors on the target 1.12.1 client;
-- verify main/target panel layout, dragging, horizontal scrolling, and vertical
-  list controls at practical UI scales/resolutions;
+- verify `fd366a56` makes both horizontal scroll controls move in the expected
+  direction;
+- verify every representative header icon resolves and the 18 px icon + label
+  layout remains readable, especially `14 Knockout (Sap)`;
+- verify main/target panel dragging and vertical list controls at practical UI
+  scales/resolutions;
 - verify target and aura events refresh the Current Target panel as expected;
 - verify manual Backup, history browsing, Restore, Delete, and each selective
   clear path persist correctly across reload/logout;
@@ -98,8 +113,9 @@ Deferred:
 - any new polling or high-frequency `OnUpdate` mechanism.
 
 Exact next step: load this branch in the target client, run
-`/cleveroid immunities`, fix any UI/runtime compatibility issues found, then
-execute the live regression matrix above. Do **not** begin the generalized
+`/cleveroid immunities`, verify the corrected horizontal-scroll direction and
+representative header icons, fix any remaining UI/runtime compatibility issue,
+then continue the live regression matrix above. Do **not** begin the generalized
 learner until this UI and framework regression pass is complete.
 
 ## Stage scope
