@@ -10,88 +10,51 @@ The durable design and historical reasoning remain in
 
 - Branch: `design/temp-cc-immunity`
 - Base: `main`
-- Branch head before this handoff refresh: `593e18c1907ad86e53949ceb3dfce7fa527e6748`
-- Branch relation before this handoff refresh: 79 ahead / 0 behind `main`
+- Branch head before this handoff refresh: `93a0dfb2a5b12247dea42570c0533a3bf68636c0`
+- Branch relation before this handoff refresh: 80 ahead / 0 behind `main`
 - TOC version: `@project-version@`
 - Latest runtime-related commit: `b93293fc15bb4ebd106bd3869752a119fb6c4c61`
 - Recent commits:
+  - `93a0dfb2` — Plan immunity testing management UI
   - `593e18c1` — Refresh immunity handoff after Divine Shield update
   - `3d1ee2e5` — Document Divine Shield 13874
   - `b93293fc` — Add Divine Shield 13874 immunity aura
   - `da621fc9` — Record Divine Shield 13874 follow-up
-  - `2eb22cba` — Expose immunity decision reasons
-  - `3c51d77a` — Record framework step nine start
-  - `09632d81` — Record spell dimension query integration
-  - `331277c5` — Record immunity framework step eight completion
-  - `d5216f6a` — Route spell immunity checks through dimensions
-  - `d134d493` — Remove resolved spell immunity research note
-  - `b3e339a1` — Record framework step eight start
-  - `3942c67d` — Resolve spell immunity classification basis
-  - `b226bc67` — Record immunity framework step seven completion
-  - `3e7eccb5` — Clarify school based spell immunity classification
-  - `7ec46616` — Classify spell immunity dimensions
-  - `b3c65497` — Record Hammer of Justice step seven invariants
-  - `b17a3669` — Record immunity framework step six completion
-  - `af3dc511` — Compose typed immunity precedence
-  - `fabd382a` — Record framework step six start
-  - `68f9385e` — Complete framework step five verification
-  - `10184be3` — Record immunity framework step five completion
-  - `a7ce4661` — Record framework step five start
-  - `18a1cfaa` — Record immunity framework step four completion
-  - `3bdeb163` — Type temporary immunity aura guards
-  - `9f4016ad` — Record framework step four start
-  - `adb62e8d` — Correct framework runtime head
-  - `0eba3721` — Record immunity framework step three completion
-  - `0b4e081e` — Track immunity query sources
-  - `695f05ef` — Record framework step three start
-  - `be8c4db6` — Record immunity framework step two completion
-  - `97383436` — Route spell mechanic checks through typed immunity query
-  - `4241f918` — Centralize typed immunity queries
-  - `18c1f507` — Add canonical immunity type framework
-  - `f2b5f684` — Record framework step one start
-  - `7dd3cc92` — Refresh immunity framework recovery snapshot
-  - `690da05a` — Add immunity framework development handoff
-  - `5896f6cb` — Clean consolidated rework section breaks
-- Current runtime diff is limited to `Utility.lua` and `Conditionals.lua`.
-- The generalized comparative learner is **not** part of this stage.
+  - `a164594d` — Clean framework handoff commit list
 
-### Current handoff note — 2026-09-22
+### Resume status — 2026-09-22
 
-The framework implementation is ready for live validation, but live testing is
-the current blocker. Before starting the comparative learner, build the
-**Immunities testing/management UI** described below.
+Completed:
 
-Purpose:
+- canonical typed immunity framework through the existing spell/action query path;
+- source/provenance returns for recorded, conditional, temporary aura, temporary CC,
+  and special cases;
+- typed `IMMUNITY_AURAS` buckets and TempCC integration;
+- spell/action immunity dimension classification and public check routing;
+- Divine Shield 13874 added to the live `all` aura set;
+- static framework regression review;
+- full design for the testing/management UI below.
 
-- expose the learned immunity data without SavedVariables inspection;
-- expose the current target's exact/broad/live immunity state;
-- make Sartura, temporary-protection, reflection, and Blackwing Spellbinder
-  regression tests practical in game;
-- provide explicit manual backup/reset controls for test cycles.
+Untested / outstanding:
 
-This UI is a testing/management surface over the existing framework. It must not
-add comparative inference, broad-immunity promotion, new polling, or new public
-macro conditionals.
+- the live framework regression matrix remains outstanding;
+- the `/cleveroid immunities` UI is not implemented yet;
+- the attached Current Target panel is not implemented yet;
+- backup/restore and selective clear controls are not implemented yet.
 
-Completed immediately before this handoff:
+Deferred:
 
-- Divine Shield 13874 added to `IMMUNITY_AURAS.all`;
-- verified Divine Shield set is now 642 / 1020 / 13874;
-- 13007 and 6356 were deliberately not added;
-- static framework regression remains passed;
-- live framework regression remains outstanding.
-
-Deferred after the UI:
-
-- observation/comparative learner work;
+- generalized observation/comparative learner;
 - candidate/disproved/confirmed evidence;
 - inferred broad-immunity persistence;
-- new public `[immune:*]` grammar.
+- new public `[immune:*]` grammar;
+- any new polling or high-frequency `OnUpdate` mechanism.
 
-Exact next step: implement `/cleveroid immunities` and the attached current
-target panel according to **Immunities testing/management UI** below, then use
-that panel for the outstanding live regression matrix before resuming learner
-work.
+Exact next step: implement `/cleveroid immunities` and the attached Current Target
+panel according to **Immunities testing/management UI** below. Keep it as a
+testing/management surface over the existing framework only; do not start the
+generalized learner. After implementation, use the UI for the outstanding live
+regression matrix.
 
 ## Stage scope
 
