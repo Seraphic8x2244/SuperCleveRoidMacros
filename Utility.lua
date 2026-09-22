@@ -441,11 +441,33 @@ do
     return CleveRoids.worldMouseAction.left or CleveRoids.worldMouseAction.right
   end
 
-  -- Do not hook CameraOrSelectOrMove*/TurnOrAction* here.  These globals are
-  -- protected by the 1.12 client, and ClassicAPI's hooksecurefunc backport
-  -- wraps/replaces the global rather than providing a native secure hook.
-  -- WorldFrame suspension remains disabled until a non-tainting observation
-  -- signal is implemented.
+  local function setWorldMouseAction(side, active)
+    if CleveRoids.worldMouseAction[side] == active then return end
+    CleveRoids.worldMouseAction[side] = active
+    if CleveRoids.QueueActionUpdate then CleveRoids.QueueActionUpdate() end
+  end
+
+  -- Observe clicks that actually originate on the 3D WorldFrame.  Do not wrap
+  -- CameraOrSelectOrMove*/TurnOrAction*: those globals are protected by the
+  -- 1.12 client.  Frame:HookScript is safe here and keeps UI-frame clicks out
+  -- of this state because they are delivered to the clicked UI frame instead.
+  if WorldFrame and WorldFrame.HookScript then
+    WorldFrame:HookScript("OnMouseDown", function(_, button)
+      if button == "LeftButton" then
+        setWorldMouseAction("left", true)
+      elseif button == "RightButton" then
+        setWorldMouseAction("right", true)
+      end
+    end)
+
+    WorldFrame:HookScript("OnMouseUp", function(_, button)
+      if button == "LeftButton" then
+        setWorldMouseAction("left", false)
+      elseif button == "RightButton" then
+        setWorldMouseAction("right", false)
+      end
+    end)
+  end
   -- Canonical @mouseover resolver.  Suspension is deliberately read-only:
   -- never clear __mo.sources/current or call SetMouseoverUnit merely because a
   -- WorldFrame mouse action started.
