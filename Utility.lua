@@ -431,6 +431,73 @@ do
       isUpdatingMouseover = false
     end
   end
+
+  -- WoW's actual 3D-world mouse actions are the signal that visible-cursor
+  -- mouseover intent is temporarily unavailable.  Keep the existing source
+  -- aggregate intact so it can resume immediately when the action stops.
+  CleveRoids.worldMouseAction = CleveRoids.worldMouseAction or { left = false, right = false }
+
+  function CleveRoids.IsWorldMouseActionActive()
+    return CleveRoids.worldMouseAction.left or CleveRoids.worldMouseAction.right
+  end
+
+  local function setWorldMouseAction(side, active)
+    if CleveRoids.worldMouseAction[side] == active then return end
+    CleveRoids.worldMouseAction[side] = active
+    if CleveRoids.QueueActionUpdate then CleveRoids.QueueActionUpdate() end
+  end
+
+  hooksecurefunc("CameraOrSelectOrMoveStart", function()
+    setWorldMouseAction("left", true)
+  end)
+  hooksecurefunc("CameraOrSelectOrMoveStop", function()
+    setWorldMouseAction("left", false)
+  end)
+  hooksecurefunc("TurnOrActionStart", function()
+    setWorldMouseAction("right", true)
+  end)
+  hooksecurefunc("TurnOrActionStop", function()
+    setWorldMouseAction("right", false)
+  end)
+
+  -- Canonical @mouseover resolver.  Suspension is deliberately read-only:
+  -- never clear __mo.sources/current or call SetMouseoverUnit merely because a
+  -- WorldFrame mouse action started.
+  function CleveRoids.ResolveMouseoverUnit()
+    if CleveRoids.IsWorldMouseActionActive() then
+      return nil
+    end
+
+    if UnitExists("mouseover") then
+      return "mouseover"
+    end
+
+    -- Preserve pfUI's direct frame-under-cursor fallback without making it a
+    -- /pfcast-only resolver.
+    local frame = GetMouseFocus and GetMouseFocus()
+    if frame and frame.label and frame.id then
+      local frameUnit = frame.label .. frame.id
+      if UnitExists(frameUnit) then
+        return frameUnit
+      end
+    end
+
+    local aggregate = CleveRoids.__mo and CleveRoids.__mo.current
+    if aggregate and UnitExists(aggregate) then
+      return aggregate
+    end
+
+    if CleveRoids.mouseoverUnit and UnitExists(CleveRoids.mouseoverUnit) then
+      return CleveRoids.mouseoverUnit
+    end
+
+    if pfUI and pfUI.uf and pfUI.uf.mouseover and pfUI.uf.mouseover.unit
+       and UnitExists(pfUI.uf.mouseover.unit) then
+      return pfUI.uf.mouseover.unit
+    end
+
+    return nil
+  end
 end
 
 -- TODO: Get rid of one Split function.  CleveRoids.splitString is ~10% slower
