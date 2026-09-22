@@ -5719,6 +5719,7 @@ SlashCmdList["CLEVEROID"] = function(msg)
         DEFAULT_CHAT_FRAME:AddMessage("/cleveroid learn <spellID> <duration> - Manually set spell duration")
         DEFAULT_CHAT_FRAME:AddMessage("/cleveroid forget <spellID|all> - Forget learned duration(s)")
         DEFAULT_CHAT_FRAME:AddMessage("/cleveroid debug [0|1] - Toggle learning debug messages")
+    DEFAULT_CHAT_FRAME:AddMessage("/cleveroid immunitydebug [0|1] - Toggle compact immunity diagnostics")
         DEFAULT_CHAT_FRAME:AddMessage("|cffffaa00Spell Schools:|r")
         DEFAULT_CHAT_FRAME:AddMessage('/cleveroid listschools - List all learned spell schools')
         DEFAULT_CHAT_FRAME:AddMessage('/cleveroid clearschools - Clear learned spell school data')
@@ -5853,6 +5854,24 @@ SlashCmdList["CLEVEROID"] = function(msg)
         end
         -- Clear keyed debug state so messages re-fire when debug is re-enabled
         CleveRoids._lastDebugState = {}
+        return
+    end
+
+    -- immunitydebug (runtime-only compact immunity diagnostics)
+    if cmd == "immunitydebug" then
+        local num = tonumber(val)
+        local enabled
+        if num == 0 or num == 1 then
+            enabled = (num == 1)
+        else
+            enabled = not CleveRoids.immunityDebug
+        end
+        if CleveRoids.SetImmunityDebugEnabled then
+            CleveRoids.SetImmunityDebugEnabled(enabled)
+        else
+            CleveRoids.immunityDebug = enabled
+        end
+        CleveRoids.Print("immunitydebug " .. (enabled and "enabled" or "disabled"))
         return
     end
 
