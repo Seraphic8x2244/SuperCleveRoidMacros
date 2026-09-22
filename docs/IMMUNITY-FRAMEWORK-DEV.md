@@ -10,37 +10,66 @@ The durable design and historical reasoning remain in
 
 - Branch: `design/temp-cc-immunity`
 - Base: `main`
-- Branch head before this handoff refresh: `93a0dfb2a5b12247dea42570c0533a3bf68636c0`
-- Branch relation before this handoff refresh: 80 ahead / 0 behind `main`
+- Branch head before this handoff refresh: `6c49e97904864d0451165cd6864701346c83a71e`
+- Branch relation before this handoff refresh: 86 ahead / 0 behind `main`
 - TOC version: `@project-version@`
-- Latest runtime-related commit: `b93293fc15bb4ebd106bd3869752a119fb6c4c61`
+- Latest framework/UI runtime commit: `6c49e97904864d0451165cd6864701346c83a71e`
 - Recent commits:
+  - `6c49e979` — Harden immunity UI for Vanilla layout
+  - `9270bb99` — Add immunities slash command
+  - `ae11c272` — Load immunity management UI
+  - `926a8303` — Add immunity testing management UI
+  - `0181cf55` — Expose immunity UI debug state
+  - `4c2c9c8b` — Refresh immunity UI implementation handoff
   - `93a0dfb2` — Plan immunity testing management UI
   - `593e18c1` — Refresh immunity handoff after Divine Shield update
-  - `3d1ee2e5` — Document Divine Shield 13874
-  - `b93293fc` — Add Divine Shield 13874 immunity aura
-  - `da621fc9` — Record Divine Shield 13874 follow-up
-  - `a164594d` — Clean framework handoff commit list
 
 ### Resume status — 2026-09-22
 
 Completed:
 
-- canonical typed immunity framework through the existing spell/action query path;
-- source/provenance returns for recorded, conditional, temporary aura, temporary CC,
-  and special cases;
-- typed `IMMUNITY_AURAS` buckets and TempCC integration;
-- spell/action immunity dimension classification and public check routing;
-- Divine Shield 13874 added to the live `all` aura set;
-- static framework regression review;
-- full design for the testing/management UI below.
+- implemented `/cleveroid immunities` as the framework testing/management UI;
+- added a movable Vanilla-style Lua-created `SCRM Immunities` main window;
+- added horizontally scrollable CC columns with canonical Vanilla mechanic IDs,
+  recorded mob lists, and per-column counts;
+- added horizontally scrollable All / Spell / Physical / school / Bleed columns;
+- kept legacy `unknown` records in a separate diagnostic area;
+- added the attached `Current Target` companion panel on the right of the main
+  window;
+- current-target inspection separates recorded/conditional state from live
+  temporary/current-state immunity and exposes source/detail provenance;
+- reflection is exposed only as a non-immunity explanation;
+- target state refresh is event-driven through target/aura/world events; no new
+  `OnUpdate` poll was added;
+- immunity-data mutations notify the UI through a narrow refresh bridge;
+- added selective CC clears, selective spell/general clears, full-category
+  clears, and full learned-immunity clear;
+- added manual whole-dataset Backup controls beside the destructive controls;
+- added manual backup history under `CleveRoidMacros.immunityBackups`, with
+  dated labels, data-version metadata, explicit Restore, and explicit Delete;
+- loaded `ImmunityUI.lua` between `Utility.lua` and `Core.lua`;
+- added the slash-dispatch/help entry for `/cleveroid immunities`;
+- completed static source review for the UI wiring and verified the UI contains
+  no generalized learner/evidence state and no high-frequency polling.
 
 Untested / outstanding:
 
-- the live framework regression matrix remains outstanding;
-- the `/cleveroid immunities` UI is not implemented yet;
-- the attached Current Target panel is not implemented yet;
-- backup/restore and selective clear controls are not implemented yet.
+- no in-game addon-runtime validation has been performed for this UI yet;
+- verify the addon loads without Lua/API errors on the target 1.12.1 client;
+- verify main/target panel layout, dragging, horizontal scrolling, and vertical
+  list controls at practical UI scales/resolutions;
+- verify target and aura events refresh the Current Target panel as expected;
+- verify manual Backup, history browsing, Restore, Delete, and each selective
+  clear path persist correctly across reload/logout;
+- complete the existing live framework regression matrix:
+  - Sartura: live Stun appears only during Whirlwind 26083;
+  - forced HoJ during Whirlwind does not create permanent `cc_stun`;
+  - Divine Shield / Divine Protection / Ice Block appear as live All;
+  - Anti-Magic Shield appears as live Spell;
+  - Blessing of Protection appears as live Physical;
+  - reflection appears only as an explanation/guard;
+  - Blackwing Spellbinder can be inspected as permanent broad Spell immunity
+    without falsely becoming Stun immune.
 
 Deferred:
 
@@ -50,11 +79,10 @@ Deferred:
 - new public `[immune:*]` grammar;
 - any new polling or high-frequency `OnUpdate` mechanism.
 
-Exact next step: implement `/cleveroid immunities` and the attached Current Target
-panel according to **Immunities testing/management UI** below. Keep it as a
-testing/management surface over the existing framework only; do not start the
-generalized learner. After implementation, use the UI for the outstanding live
-regression matrix.
+Exact next step: load this branch in the target client, run
+`/cleveroid immunities`, fix any UI/runtime compatibility issues found, then
+execute the live regression matrix above. Do **not** begin the generalized
+learner until this UI and framework regression pass is complete.
 
 ## Stage scope
 
