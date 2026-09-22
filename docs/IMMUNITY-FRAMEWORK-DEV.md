@@ -14,12 +14,14 @@ mouseover consolidation and WorldFrame-action suspension semantics.
 
 - Branch: `design/temp-cc-immunity`
 - Base: `main`
-- Branch head before this status refresh: `532802577f2b5d56b9a9ad88318abe0e58a83170`
-- Branch relation before this status refresh: 120 ahead / 0 behind `main`
+- Branch head before this status refresh: `99963d76cb44a48c525b6250ccbdb4e83d81887c`
+- Branch relation before this status refresh: 128 ahead / 0 behind `main`
 - TOC version: `@project-version@`
 - Latest framework/runtime behavior commit: `c23a80c4cff5d64765b25464b88738fdf93bfa31`
 - Latest immunity UI runtime commit: `6726ce1e39332581ba9145bad954341f0bd439d0`
 - Recent commits:
+  - `99963d76` — Close mouseover cast acceptance
+  - `cac16d5e` — Record unit-frame and cast live pass
   - `53280257` — Track WorldFrame mouse scripts safely
   - `5a7388cd` — Record protected hook removal
   - `b24c0f3a` — Document protected hook removal
@@ -216,13 +218,10 @@ Live-tested:
 
 Untested / outstanding:
 
-- @mouseover canonical resolution is implemented in `2be9746b`,
-  `49da0702`, and `ed777632`; the protected-global signal failed live and
-  was removed in `93f1f69a`; the safe WorldFrame-script signal is now
-  implemented in `53280257` and awaits WoW testing, especially
-  `OnMouseUp` reliability after cursor capture, plus normal world/pfUI
-  mouseover, suppression, release/resume, unit-frame click preservation, and
-  parity across `/cast`, `/target`, `IsValidTarget`, and `/pfcast`;
+- mouseover user-facing `/cast` acceptance is complete: normal world/pfUI
+  mouseover, LMB/RMB WorldFrame suppression, release/resume, and unit-frame
+  click preservation are live-passed; unused `/target`, `IsValidTarget`, and
+  `/pfcast` parity tests remain deferred;
 - live-test the new `6726ce1e` target model: model renders for ordinary NPCs,
   rotates at a comfortable speed, changes promptly with target, and stops while
   the immunity window is hidden;
@@ -275,14 +274,223 @@ Deferred:
 - new public `[immune:*]` grammar;
 - any new polling or high-frequency `OnUpdate` mechanism.
 
-Exact next step: return focus to the existing clean-dataset immunity testing.
-The mouseover sidequest's user-facing `/cast` acceptance path is complete;
-leave unused `/target`, `IsValidTarget`, and `/pfcast` live tests deferred
-unless they become relevant. Keep the failed protected-global hooks removed and
-continue the existing clean-dataset immunity observations separately. Do not expand the mouseover
-sidequest or start the generalized immunity learner during this testing period.
-The target-model UI and clean-dataset immunity observations also remain awaiting
-reported WoW results.
+Exact next step: implement the **immunitydebug** diagnostic slice below, then
+resume the existing clean-dataset immunity testing with that compact chat view.
+Do not change immunity persistence/learning semantics while adding it. The
+mouseover sidequest's user-facing `/cast` acceptance path is complete; leave
+unused `/target`, `IsValidTarget("mouseover", ...)`, and `/pfcast` live
+tests deferred unless they become relevant. Do not start the generalized
+immunity learner during this testing period.
+
+## Next implementation slice — immunitydebug
+
+Add a dedicated compact chat diagnostic:
+
+```text
+/cleveroid immunitydebug 1
+/cleveroid immunitydebug 0
+```
+
+This exists only to make current clean-dataset immunity testing practical
+without leaving the very large `/cleveroid immunities` window open.
+
+### Hard constraints
+
+This is **diagnostic-only**.
+
+Do not change:
+
+- `CleveRoids_ImmunityData` layout, category grouping, keys, or query behavior;
+- any SavedVariables schema or migration;
+- what is learned, removed, confirmed, or rejected by the current learner;
+- public immunity conditional grammar;
+- persistence/removal semantics in `RecordCCImmunity()`,
+  `RemoveCCImmunity()`, `RecordImmunity()`, or `RemoveSpellImmunity()`;
+- the direct Nampower `SPELL_MISS_SELF` authority model;
+- current temporary-aura, death, DR, reflection, split-CC, or inconclusive
+  safeguards.
+
+Do not add persistent suspect/candidate/disproved/confirmed evidence, a
+generalized learner, polling, or a high-frequency `OnUpdate`.
+
+The immunitydebug enabled flag and any display state must be runtime-only. Do
+not add a SavedVariable for this feature.
+
+### Command behavior
+
+- default off;
+- `/cleveroid immunitydebug 1` enables only this compact immunity stream;
+- `/cleveroid immunitydebug 0` disables it;
+- keep it independent from existing `/cleveroid debug`;
+- a bare `/cleveroid immunitydebug` may toggle if convenient.
+
+### Compact mob-centric line
+
+Desired shape:
+
+```text
+Blackwing Spellbinder [spell icon] | Stun, Spell, Holy
+```
+
+The message is mob-centric, not a raw combat-log dump. Use the actual spell
+icon inline in chat **instead of the spell name**. The addon already resolves
+spell textures with `C_Spell.GetSpellTexture(spellID)`; use WoW inline texture
+markup at a small chat-readable size.
+
+Keep the localized NPC name as the readable label.
+
+Presentation does not need to mirror SavedVariables. Existing real storage
+remains category-first, for example:
+
+```lua
+CleveRoids_ImmunityData["cc_stun"][npcName] = true
+CleveRoids_ImmunityData["holy"][npcName] = true
+```
+
+Do not rewrite that storage for immunitydebug.
+
+### Color semantics
+
+Color is the state language:
+
+- **green** = positively disproved immunity: authoritative evidence proves the
+  mob accepts that category/effect;
+- **yellow** = suspect immunity: an authoritative observation is compatible
+  with that category, but it is not currently persisted as immune;
+- **red** = current existing SCRM immunity data actually records that category
+  as immune.
+
+Do not use green merely for unknown/not-recorded. Green requires positive
+counter-evidence. Unobserved/irrelevant categories should normally be omitted.
+No strikethrough is required; color replaces it.
+
+Example:
+
+1. Hammer of Justice returns authoritative `IMMUNE/IMMUNE2`:
+
+   ```text
+   Blackwing Spellbinder [HoJ icon] | Stun, Spell, Holy
+   ```
+
+   Stun/Spell/Holy are yellow display suspects unless current existing data
+   already records one, in which case that category is red.
+
+2. Later authoritative evidence proves the mob can be stunned:
+
+   ```text
+   Blackwing Spellbinder [stun spell icon] | Stun, Spell, Holy
+   ```
+
+   Stun becomes green. Unresolved Spell/Holy remain yellow; persisted
+   categories remain red.
+
+### Runtime-only mob debug state
+
+A small transient table is allowed to remember yellow suspects and green
+disprovals for the current session so later evidence can update the mob-centric
+line.
+
+It must not be a SavedVariable and must have no effect on conditionals or
+learning.
+
+Prefer a stable runtime identity such as GUID/Mob ID when available, with the
+localized NPC name retained for display. This does **not** authorize a Mob-ID
+migration of the real immunity SavedVariables.
+
+Reload/logout may discard yellow/green debug state. Existing persisted immunity
+data remains the sole source of red state.
+
+### Suspect derivation
+
+For authoritative `IMMUNE/IMMUNE2`, build display-only hypotheses from the
+existing classifiers/facts already used by immunity code. Depending on the
+spell, candidates may include:
+
+- exact CC type, such as Stun/Fear/Root;
+- specific school, such as Holy/Fire/Frost;
+- an appropriate broad family such as Spell or Physical.
+
+Reuse existing CC/school/split-spell classification. Do not create a competing
+classification system. A yellow suspect must never cause an immunity write.
+
+### Green/disproved derivation
+
+Only turn a displayed category green when an existing authoritative success
+path positively contradicts immunity to that category.
+
+Attach observation to current success paths; do not introduce gameplay side
+effects to manufacture green evidence.
+
+If existing logic already removes a recorded immunity when the relevant effect
+lands, preserve that behavior exactly.
+
+### Red/confirmed derivation
+
+Red is not a new confidence tier. It simply means the category is present in
+the current existing persisted immunity data/query model.
+
+Read red state from the framework; do not maintain a second confirmed database.
+
+### Spam control
+
+This should be far quieter than `/cleveroid debug 1`.
+
+Print only on meaningful rendered-state changes:
+
+- new `IMMUNE/IMMUNE2` introduces/changes suspects;
+- a relevant suspect becomes green from positive contrary evidence;
+- current learner persistence makes a category red;
+- existing removal logic changes a previously red category.
+
+Do not repeat an identical line for events that leave the rendered state
+unchanged. Ordinary successful hits/casts should not print unless they
+materially change a currently relevant immunitydebug state.
+
+Existing skip reasons (temporary aura, dead target, DR, reflect, inconclusive)
+may be represented compactly if useful, but do not recreate the general debug
+firehose.
+
+### Source landmarks
+
+Primary authoritative path in `Utility.lua`:
+
+- `ProcessSpellMissSelf(spellId, targetGuid, missInfo)`;
+- `IMMUNE=7`, `IMMUNE2=8`;
+- current safeguards run before `RecordCCImmunity()` / `RecordImmunity()`.
+
+Existing persistence/removal functions:
+
+- `RecordCCImmunity(npcName, ccType, conditionalBuff, spellName)`;
+- `RemoveCCImmunity(npcName, ccType)`;
+- `RecordImmunity(npcName, spellName, conditionalBuff, spellID)`;
+- `RemoveSpellImmunity(npcName, school)`.
+
+Slash handling is in `Core.lua` beside `/cleveroid debug [0|1]` and
+`/cleveroid immunities`.
+
+### Acceptance test
+
+Do not mark these live-passed until the user reports them:
+
+1. `/cleveroid immunitydebug 1` enables the compact stream without enabling
+   general debug output.
+2. `IMMUNE/IMMUNE2` prints one mob-first line with spell icon and yellow
+   display suspects.
+3. If the existing learner persists a category, that category renders red.
+4. Positive contrary evidence can make an applicable runtime suspect green.
+5. Identical repeated observations do not spam duplicate lines.
+6. `/cleveroid immunitydebug 0` stops the stream.
+7. Reload clears transient yellow/green display state.
+8. No immunitydebug SavedVariables are created and existing immunity
+   conditionals behave exactly as before.
+
+### Deferred / out of scope for immunitydebug
+
+- generalized observation/comparative learner;
+- persistent candidate/disproved/confirmed evidence;
+- Mob-ID SavedVariables migration / locale-storage redesign;
+- inferred broad-immunity persistence;
+- new public `[immune:*]` grammar.
 
 ## Stage scope
 
