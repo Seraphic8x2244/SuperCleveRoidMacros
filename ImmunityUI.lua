@@ -6,12 +6,12 @@ local _G = _G or getfenv(0)
 local CleveRoids = _G.CleveRoids or {}
 
 local DATA_VERSION = 1
-local MAIN_WIDTH = 760
+local MAIN_WIDTH = 710
 local MAIN_HEIGHT = 690
 local TARGET_WIDTH = 300
 local COLUMN_WIDTH = 138
 local COLUMN_GAP = 6
-local SECTION_WIDTH = 720
+local SECTION_WIDTH = 670
 
 local widgetCounter = 0
 local mainFrame
@@ -130,7 +130,7 @@ end
 
 local function CreateMessageList(parent)
     local list = CreateFrame("ScrollingMessageFrame", NewWidgetName("List"), parent)
-    list:SetFontObject(GameFontHighlightSmall)
+    list:SetFont("Fonts\\FRIZQT__.TTF", 10)
     list:SetJustifyH("LEFT")
     list:SetMaxLines(1000)
     list:SetFading(false)
@@ -254,8 +254,10 @@ local function CreateHorizontalSlider(parent, scrollFrame)
     end
 
     local track = slider:CreateTexture(nil, "BACKGROUND")
-    track:SetAllPoints(slider)
-    track:SetTexture(0.18, 0.18, 0.18, 0.9)
+    track:SetPoint("TOPLEFT", slider, "TOPLEFT", 0, 0)
+    track:SetPoint("BOTTOMRIGHT", slider, "BOTTOMRIGHT", 0, 0)
+    track:SetTexture("Interface\\Buttons\\WHITE8x8")
+    track:SetVertexColor(0.18, 0.18, 0.18, 0.9)
 
     slider:SetScript("OnValueChanged", function()
         scrollFrame:SetHorizontalScroll(arg1 or 0)
@@ -930,7 +932,7 @@ local function CreateMainFrame()
 
     legacyList = CreateMessageList(frame)
     legacyList:SetPoint("TOPLEFT", frame, "TOPLEFT", 20, -593)
-    legacyList:SetWidth(720)
+    legacyList:SetWidth(670)
     legacyList:SetHeight(38)
 
     local backupCC = CreateButton(frame, "Backup", 70, 22)
