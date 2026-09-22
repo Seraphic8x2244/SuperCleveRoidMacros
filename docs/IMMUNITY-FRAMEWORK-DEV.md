@@ -10,11 +10,15 @@ The durable design and historical reasoning remain in
 
 - Branch: `design/temp-cc-immunity`
 - Base: `main`
-- Branch head before this handoff refresh: `9cd181fabb9b5058141dd5f67c7b499a408d5b10`
-- Branch relation before this handoff refresh: 94 ahead / 0 behind `main`
+- Branch head before this handoff refresh: `2e0edc18144e192247117ee606d66aff690598c3`
+- Branch relation before this handoff refresh: 99 ahead / 0 behind `main`
 - TOC version: `@project-version@`
-- Latest framework/UI runtime commit: `9cd181fabb9b5058141dd5f67c7b499a408d5b10`
+- Latest framework/runtime behavior commit: `c23a80c4cff5d64765b25464b88738fdf93bfa31`
 - Recent commits:
+  - `2e0edc18` — Clarify shared miss immunity authority
+  - `c23a80c4` — Stop generic shared misses learning immunity
+  - `4c6d7946` — Require explicit miss reason for immunity learning
+  - `e04d5c21` — Record false immunity learning diagnosis
   - `9cd181fa` — Fix immunity scroll offset and modal layering
   - `53493d85` — Record immunity UI scroll and icon test state
   - `fd366a56` — Fix immunity scrolling and add header icons
@@ -60,7 +64,16 @@ Completed / implemented:
   later columns on the right;
 - raised Clear and Backup History modal frames by an explicit 50 frame levels
   over their parent so header icons/content behind them cannot draw above the
-  modal backdrop.
+  modal backdrop;
+- made Nampower `SPELL_MISS_SELF` the authoritative automatic immunity-learning
+  source whenever direct miss events are available;
+- prevented delayed missing-aura verification from persisting permanent
+  immunity for bleed, non-bleed personal debuffs, CC, and shared debuffs when
+  `CleveRoids.usingSpellMissEvents` is true;
+- prevented text-only school immunity messages from persisting immunity when
+  direct numeric `SPELL_MISS` events are available;
+- retained the old missing-aura/text heuristics only as legacy fallback paths
+  for environments without direct `SPELL_MISS` support.
 
 Static-checked:
 
@@ -77,7 +90,16 @@ Static-checked:
   at offset 0 and moves the scroll child left with a negative X anchor as the
   slider value increases;
 - post-write source review confirms both modal boxes explicitly set a frame
-  level 50 above the main panel.
+  level 50 above the main panel;
+- Nampower miss constants are independently mapped as MISS=1, RESIST=2,
+  DODGE=3, PARRY=4, BLOCK=5, EVADE=6, IMMUNE=7, IMMUNE2=8, DEFLECT=9,
+  ABSORB=10, REFLECT=11; crit is not a `SPELL_MISS` outcome;
+- static write-path review found four legacy absence learners (bleed,
+  non-bleed, CC, shared) plus one text-only school fallback; all are now gated
+  away when direct `SPELL_MISS` events are active;
+- the shared-debuff path previously treated generic `SPELL_GO` misses as
+  candidates for immunity despite `SPELL_GO` lacking a miss reason, which can
+  explain false Holy/Physical records from ordinary misses/resists/avoidance.
 
 Live-tested:
 
@@ -95,15 +117,17 @@ Untested / outstanding:
 
 - live testing found false learned immunities on ordinary mobs, including
   Physical, Snare, Stun (Riverpaw Scout), and multiple Holy records;
-- investigation confirms direct Nampower `SPELL_MISS_SELF` keeps MISS, RESIST,
-  DODGE, PARRY, BLOCK, EVADE, IMMUNE/IMMUNE2, ABSORB, and REFLECT as distinct
-  outcomes; crit is not a `SPELL_MISS` outcome;
-- likely false-positive source identified: legacy delayed verification still
-  promotes a missing aura/debuff after 0.2-0.4s to permanent school/CC immunity,
-  even when exact `SPELL_MISS` events are available;
-- exact next code fix: when `CleveRoids.usingSpellMissEvents` is true, treat
-  missing delayed auras as inconclusive for immunity learning and allow only
-  explicit IMMUNE/IMMUNE2 handling to persist permanent immunity;
+- the false records already present in SavedVariables cannot be safely
+  auto-pruned because the existing storage does not distinguish manual records
+  from automatically learned records; use Backup then clear the affected
+  categories (or all learned immunity data) before the clean retest;
+- verify ordinary MISS, RESIST, DODGE, PARRY and BLOCK outcomes do not create
+  any new school or CC immunity records after `c23a80c4`;
+- specifically retest Riverpaw Scout with stun/snare-capable actions and confirm
+  no permanent Stun/Snare entry appears unless the server reports
+  IMMUNE/IMMUNE2;
+- retest representative Holy and Physical debuffs/attacks on ordinary mobs and
+  confirm no school record is learned from an ordinary miss or missing aura;
 
 - verify `9cd181fa` now starts both horizontal sections on the left and moves
   the subheaders left to reveal later columns as the slider moves right;
@@ -134,11 +158,12 @@ Deferred:
 - new public `[immune:*]` grammar;
 - any new polling or high-frequency `OnUpdate` mechanism.
 
-Exact next step: remove the false-positive legacy missing-aura immunity learner
-while exact Nampower `SPELL_MISS` reasons are available, static-check every
-remaining permanent-immunity write path, then live-test ordinary mobs before
-continuing the framework regression matrix. Keep the generalized learner
-deferred.
+Exact next step: make a manual immunity backup, clear the contaminated learned
+immunity data, then live-test ordinary mobs against `c23a80c4`: exercise
+ordinary miss/resist/dodge/parry/block outcomes plus representative Holy,
+Physical, Snare and Stun actions and confirm none persist immunity unless
+`SPELL_MISS_SELF` reports IMMUNE/IMMUNE2. Then continue the existing framework
+regression matrix. Keep the generalized learner deferred.
 
 ## Stage scope
 
