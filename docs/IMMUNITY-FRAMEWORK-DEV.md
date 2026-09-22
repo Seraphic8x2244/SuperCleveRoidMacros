@@ -10,8 +10,8 @@ The durable design and historical reasoning remain in
 
 - Branch: `design/temp-cc-immunity`
 - Base: `main`
-- Branch head before this handoff refresh: `6726ce1e39332581ba9145bad954341f0bd439d0`
-- Branch relation before this handoff refresh: 103 ahead / 0 behind `main`
+- Branch head before this handoff refresh: `92ad3365e7bdccd42f6abf5a6c677603bcd3936f`
+- Branch relation before this handoff refresh: 104 ahead / 0 behind `main`
 - TOC version: `@project-version@`
 - Latest framework/runtime behavior commit: `c23a80c4cff5d64765b25464b88738fdf93bfa31`
 - Latest immunity UI runtime commit: `6726ce1e39332581ba9145bad954341f0bd439d0`
@@ -133,6 +133,27 @@ Static-checked:
   `PlayerModel:SetRotation`, `UnitCreatureType`, and `UnitClassification`;
 - no CI workflow/status was attached to `6726ce1e`; verification so far is
   source/API static review only.
+- @mouseover investigation (no behavior change yet): SCRM maintains a
+  priority-ordered synthetic mouseover aggregate (unit-frame sources > native
+  UPDATE_MOUSEOVER_UNIT > tooltip) and may call `SetMouseoverUnit` itself;
+- Vanilla `UPDATE_MOUSEOVER_UNIT` is not a reliable "mouseover became nil"
+  notification for 3D-world hover, so the stored native source can outlive the
+  game's visible cursor state;
+- current consumers independently re-resolve mouseover through combinations of
+  `UnitExists("mouseover")`, `CleveRoids.mouseoverUnit`,
+  `pfUI.uf.mouseover.unit`, and (for /pfcast) `GetMouseFocus`, which permits
+  stale/synthetic hover state to intercept a clause while the cursor is hidden;
+- SCRM currently has no camera-control guard around @mouseover;
+- the preferred design under discussion is to post-hook the exact protected
+  WorldFrame actions `CameraOrSelectOrMoveStart/Stop` (left-button
+  camera/select) and `TurnOrActionStart/Stop` (right-button turn/action), then
+  make one central mouseover resolver return nil while either action is active;
+  this is more precise than gating on raw `IsMouseButtonDown`, which would
+  also suppress legitimate UI-frame clicks;
+- ClassicAPI already provides `hooksecurefunc` and `IsMouseButtonDown`;
+  current SCRM requires ClassicAPI >= 1.15.8, while the held-button API predates
+  that requirement. `IsMouselooking` alone is insufficient because it covers
+  right-button mouselook but not left-button camera orbit.
 
 Live-tested:
 
@@ -148,6 +169,10 @@ Live-tested:
 
 Untested / outstanding:
 
+- discuss the @mouseover camera-drag semantics before changing code; desired
+  behavior from live use is that @mouseover is unavailable while left/right
+  WorldFrame camera control is active, allowing the macro to fall through to
+  its normal target clause;
 - live-test the new `6726ce1e` target model: model renders for ordinary NPCs,
   rotates at a comfortable speed, changes promptly with target, and stops while
   the immunity window is hidden;
@@ -200,12 +225,12 @@ Deferred:
 - new public `[immune:*]` grammar;
 - any new polling or high-frequency `OnUpdate` mechanism.
 
-Exact next step: live-test `6726ce1e` in the target client with
-`/cleveroid immunities`: verify the selected target model renders and rotates,
-the metadata/layout is readable, target changes/no-target/window hide behave
-correctly, and modal overlays still cover it. Then resume the clean-dataset
-immunity observation plan over normal play. Keep the generalized learner
-deferred.
+Exact next step: finish the @mouseover camera-drag design
+discussion before changing behavior. If agreed, centralize mouseover resolution
+and suppress it only while the actual left/right WorldFrame camera actions are
+active, then live-test camera drag versus real unit-frame hover. The target-model
+UI and clean-dataset immunity observations remain awaiting live testing. Keep
+the generalized learner deferred.
 
 ## Stage scope
 
