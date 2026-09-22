@@ -3447,8 +3447,19 @@ delayedTrackingFrame:SetScript("OnUpdate", function()
               )
             end
             -- Skip immunity recording - damage landed, only CC was resisted
+          elseif CleveRoids.usingSpellMissEvents then
+            -- SPELL_GO only reports hit/miss counts. It cannot distinguish
+            -- MISS/RESIST/DODGE/PARRY/BLOCK from IMMUNE, so a missing shared
+            -- debuff is inconclusive when SPELL_MISS gives the exact reason.
+            if debug then
+              local spellNameDebug = C_Spell.GetSpellName(pending.spellID) or "Unknown"
+              DEFAULT_CHAT_FRAME:AddMessage(
+                _string_format("|cffaaaaaa[Shared Inconclusive]|r %s missing/missed on %s - authoritative SPELL_MISS did not report IMMUNE, not recording immunity",
+                  spellNameDebug, pending.targetName or "Unknown")
+              )
+            end
           elseif totalDebuffs < DEBUFF_CAP_THRESHOLD then
-            -- Few debuffs = likely immunity — use DBC school if available (more reliable than name-based)
+            -- Legacy fallback only: few debuffs may indicate immunity.
             local recordSchool = pending.school
             if pending.spellID and _GetSpellRecField then
               local dbcSchool = _GetSpellRecField(pending.spellID, "school")
