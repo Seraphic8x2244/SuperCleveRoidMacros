@@ -441,25 +441,11 @@ do
     return CleveRoids.worldMouseAction.left or CleveRoids.worldMouseAction.right
   end
 
-  local function setWorldMouseAction(side, active)
-    if CleveRoids.worldMouseAction[side] == active then return end
-    CleveRoids.worldMouseAction[side] = active
-    if CleveRoids.QueueActionUpdate then CleveRoids.QueueActionUpdate() end
-  end
-
-  hooksecurefunc("CameraOrSelectOrMoveStart", function()
-    setWorldMouseAction("left", true)
-  end)
-  hooksecurefunc("CameraOrSelectOrMoveStop", function()
-    setWorldMouseAction("left", false)
-  end)
-  hooksecurefunc("TurnOrActionStart", function()
-    setWorldMouseAction("right", true)
-  end)
-  hooksecurefunc("TurnOrActionStop", function()
-    setWorldMouseAction("right", false)
-  end)
-
+  -- Do not hook CameraOrSelectOrMove*/TurnOrAction* here.  These globals are
+  -- protected by the 1.12 client, and ClassicAPI's hooksecurefunc backport
+  -- wraps/replaces the global rather than providing a native secure hook.
+  -- WorldFrame suspension remains disabled until a non-tainting observation
+  -- signal is implemented.
   -- Canonical @mouseover resolver.  Suspension is deliberately read-only:
   -- never clear __mo.sources/current or call SetMouseoverUnit merely because a
   -- WorldFrame mouse action started.
