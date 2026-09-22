@@ -18,8 +18,10 @@ and must not disturb immunity-learning behavior.
   - `2be9746ba3504fad01236a5a0d4365211f6f18e6` — suspend mouseover during WorldFrame actions and add the canonical resolver;
   - `49da070200b2a1fbbd8e9d7f707c63cfcdbcc67e` — route `IsValidTarget()` through the canonical resolver;
   - `ed7776329379853db1d32aea0d6b76e9e8305bed` — route normal execution, conditional `/target`, and `/pfcast` through the canonical resolver.
-- Branch head after runtime implementation, before this status refresh: `ed7776329379853db1d32aea0d6b76e9e8305bed`
-- Branch relation at that point: 112 ahead / 0 behind `main`
+- Failed runtime implementation head: `ed7776329379853db1d32aea0d6b76e9e8305bed`
+- Protected-hook removal commit: `93f1f69a664907a67d37d78413738e69b3585dd3`
+- Status after removal: canonical resolver/consolidation retained; WorldFrame
+  suspension deliberately disabled pending a non-tainting signal.
 - Active next step: live-test the matrix below; immunity behavior remains frozen while its separate clean-dataset testing continues.
 
 ## User-visible problem
@@ -422,8 +424,11 @@ Completed / implemented:
 - current divergent mouseover pipelines identified;
 - WorldFrame action suspension strategy agreed;
 - raw LMB/RMB gating explicitly rejected;
-- post-hooked `CameraOrSelectOrMoveStart/Stop` and
-  `TurnOrActionStart/Stop` without replacing the original WoW functions;
+- initially attempted `hooksecurefunc` post-hooks on
+  `CameraOrSelectOrMoveStart/Stop` and `TurnOrActionStart/Stop`, but the
+  first live test proved this unsafe on 1.12 because ClassicAPI implements the
+  hook by replacing the protected global with a wrapper;
+- removed those four protected-global hooks in `93f1f69a`;
 - added narrow left/right WorldFrame action state and
   `CleveRoids.IsWorldMouseActionActive()`;
 - added canonical `CleveRoids.ResolveMouseoverUnit()`;
@@ -448,11 +453,11 @@ Static-checked:
 
 - no raw LMB/RMB polling was added;
 - no new `OnUpdate` loop or polling path was added;
-- all four requested WorldFrame functions are post-hooked through
-  `hooksecurefunc`;
-- both Start and Stop paths are covered for left and right state;
-- WorldFrame start/stop changes only the suspension flags and queues the
-  existing action refresh; stored mouseover sources are not erased;
+- the four protected WorldFrame movement/action globals are no longer wrapped;
+- the canonical resolver and suspension state structure remain in place, but
+  no code currently flips the suspension flags;
+- stored mouseover sources are still never erased merely because of this
+  sidequest;
 - branch source audit found normal execution, `IsValidTarget`, conditional
   `/target`, and `/pfcast` resolving through
   `CleveRoids.ResolveMouseoverUnit()`;
@@ -488,7 +493,7 @@ Live-tested:
 
 Untested:
 
-- the new WorldFrame action hooks in the target client;
+- a replacement non-tainting WorldFrame-action observation mechanism;
 - unified resolver behavior under normal world hover and pfUI/unit-frame hover;
 - left/right unit-frame click preservation;
 - left/right WorldFrame hold suppression;
