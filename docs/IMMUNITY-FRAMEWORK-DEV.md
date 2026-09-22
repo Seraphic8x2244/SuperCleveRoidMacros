@@ -57,10 +57,12 @@ mouseover consolidation and WorldFrame-action suspension semantics.
 
 - Branch: `design/temp-cc-immunity`
 - Starting head: `7f8a46d14ae1785922b917c6e136cdad15a04306`
-- Completed before this slice: framework/UI work and mouseover /cast acceptance documented below.
-- Untested: the immunitydebug acceptance matrix remains entirely live-pending until user testing.
+- Implementation commits: `d3efe5de` (runtime diagnostics) and `1d1b8116` (slash command/help).
+- Completed: runtime-only `/cleveroid immunitydebug [0|1]`; GUID/name-backed transient suspect/disproved display state; inline spell icons; yellow/green/red rendering; duplicate rendered-state suppression; authoritative IMMUNE observation after existing safeguards; school/family green evidence from successful SPELL_GO; green evidence from the existing CC/school removal paths; red refresh from existing persistence writes.
+- Static-checked: branch diff from the handoff changes only `Utility.lua`, `Core.lua`, and this handoff document; no SavedVariables declaration/schema, conditional grammar, learner decision, immunity data layout, polling loop, or generalized learner was added. No GitHub CI/status checks are configured for the implementation head.
+- Untested: all eight immunitydebug acceptance items below remain live-pending until user testing; do not mark them passed from static inspection.
 - Deferred: generalized learner/evidence persistence, Mob-ID storage migration, inferred broad-immunity persistence, and new public immunity grammar.
-- Exact next step: implement only the runtime-only diagnostic `/cleveroid immunitydebug` slice documented below, static-review it, publish this branch, then resume clean-dataset live immunity testing.
+- Exact next step: publish the branch, then live-test the immunitydebug acceptance matrix against a clean immunity dataset, beginning with `/cleveroid immunitydebug 1`, one authoritative IMMUNE/IMMUNE2 observation, duplicate suppression, contrary success evidence, and `/cleveroid immunitydebug 0`.
 
 ### Resume status — 2026-09-22
 
