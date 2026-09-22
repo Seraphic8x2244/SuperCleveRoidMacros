@@ -1706,37 +1706,17 @@ end
 -- help: Optional. If set to 1 then the target must be friendly. If set to 0 it must be an enemy
 -- returns: Whether or not the target is a viable target
 function CleveRoids.IsValidTarget(target, help)
-    -- If the conditional is not for @mouseover, use the existing logic.
-    if target ~= "mouseover" then
-        if not UnitExists(target) or not CleveRoids.CheckHelp(target, help) then
-            return false
-        end
-        return true
-    end
-
-    -- --- START OF PATCH ---
-    -- New logic to handle [@mouseover] with pfUI compatibility.
-
-    local effectiveMouseoverUnit = "mouseover" -- Start with the default game token.
-
-    -- Check if the default mouseover exists. If not, check pfUI's internal data,
-    -- which is necessary because pfUI frames don't always update the default token.
-    if not UnitExists(effectiveMouseoverUnit) then
-        if pfUI and pfUI.uf and pfUI.uf.mouseover and pfUI.uf.mouseover.unit and UnitExists(pfUI.uf.mouseover.unit) then
-            -- If pfUI has a valid mouseover unit recorded, use that instead.
-            effectiveMouseoverUnit = pfUI.uf.mouseover.unit
-        else
-            -- If neither the default token nor the pfUI unit exists, there's no valid mouseover.
+    local effectiveTarget = target
+    if target == "mouseover" then
+        effectiveTarget = CleveRoids.ResolveMouseoverUnit()
+        if not effectiveTarget then
             return false
         end
     end
-    -- --- END OF PATCH ---
 
-    -- Finally, perform the help/harm check on the determined mouseover unit (either from the game or from pfUI).
-    if not UnitExists(effectiveMouseoverUnit) or not CleveRoids.CheckHelp(effectiveMouseoverUnit, help) then
+    if not UnitExists(effectiveTarget) or not CleveRoids.CheckHelp(effectiveTarget, help) then
         return false
     end
-
     return true
 end
 
