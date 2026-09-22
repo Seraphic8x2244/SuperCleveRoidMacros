@@ -14,7 +14,13 @@ and must not disturb immunity-learning behavior.
 - Branch relation at that handoff: 107 ahead / 0 behind `main`
 - TOC version: `@project-version@`
 - Status: investigation/design agreed; runtime behavior not changed yet.
-- Active next step: implement the smallest runtime slice documented below; immunity behavior remains frozen while live testing continues.
+- Runtime implementation commits:
+  - `2be9746ba3504fad01236a5a0d4365211f6f18e6` — suspend mouseover during WorldFrame actions and add the canonical resolver;
+  - `49da070200b2a1fbbd8e9d7f707c63cfcdbcc67e` — route `IsValidTarget()` through the canonical resolver;
+  - `ed7776329379853db1d32aea0d6b76e9e8305bed` — route normal execution, conditional `/target`, and `/pfcast` through the canonical resolver.
+- Branch head after runtime implementation, before this status refresh: `ed7776329379853db1d32aea0d6b76e9e8305bed`
+- Branch relation at that point: 112 ahead / 0 behind `main`
+- Active next step: live-test the matrix below; immunity behavior remains frozen while its separate clean-dataset testing continues.
 
 ## User-visible problem
 
@@ -415,35 +421,83 @@ Completed / implemented:
 - investigation and desired semantics documented;
 - current divergent mouseover pipelines identified;
 - WorldFrame action suspension strategy agreed;
-- raw LMB/RMB gating explicitly rejected.
+- raw LMB/RMB gating explicitly rejected;
+- post-hooked `CameraOrSelectOrMoveStart/Stop` and
+  `TurnOrActionStart/Stop` without replacing the original WoW functions;
+- added narrow left/right WorldFrame action state and
+  `CleveRoids.IsWorldMouseActionActive()`;
+- added canonical `CleveRoids.ResolveMouseoverUnit()`;
+- the resolver returns nil while either WorldFrame action is active but does
+  not clear `CleveRoids.__mo.sources`, `CleveRoids.__mo.current`,
+  `CleveRoids.mouseoverUnit`, pfUI state, or call `SetMouseoverUnit("")`
+  because of the WorldFrame action;
+- normal `DoWithConditionals()` now fails an explicit `@mouseover` clause
+  when the canonical resolver returns nil, allowing the next clause/current
+  target fallback to run even if the synthetic native `mouseover` token still
+  exists;
+- `CleveRoids.IsValidTarget()` now delegates mouseover resolution to the
+  canonical helper;
+- conditional `/target` uses the canonical helper for explicit
+  `@mouseover` and for its implicit mouseover candidate;
+- `/pfcast` uses the canonical helper only for mouseover resolution and keeps
+  its separate target/player fallback afterward;
+- the existing pfUI frame-under-cursor fallback was folded into the canonical
+  resolver rather than left as a `/pfcast`-only pipeline.
 
 Static-checked:
 
-- ClassicAPI already supplies `hooksecurefunc` and held-button APIs;
-- SCRM currently requires ClassicAPI >= 1.15.8;
-- current SCRM source confirms the separate resolver paths listed above.
+- no raw LMB/RMB polling was added;
+- no new `OnUpdate` loop or polling path was added;
+- all four requested WorldFrame functions are post-hooked through
+  `hooksecurefunc`;
+- both Start and Stop paths are covered for left and right state;
+- WorldFrame start/stop changes only the suspension flags and queues the
+  existing action refresh; stored mouseover sources are not erased;
+- branch source audit found normal execution, `IsValidTarget`, conditional
+  `/target`, and `/pfcast` resolving through
+  `CleveRoids.ResolveMouseoverUnit()`;
+- the remaining direct `UnitExists("mouseover")` in
+  `Extensions/Mouseover/GameTooltip.lua` is the native source/event bridge,
+  not a macro-resolution consumer; its explicit `SetMouseoverUnit("")`
+  remains limited to existing non-unit tooltip cleanup and is not invoked by
+  WorldFrame suspension;
+- the branch-wide audit found no other direct macro mouseover resolver using
+  `CleveRoids.mouseoverUnit`, `pfUI.uf.mouseover`, or `GetMouseFocus()`
+  outside the canonical helper;
+- compare from handoff `9e3574c2` through runtime head `ed777632` shows
+  only `Utility.lua`, `Conditionals.lua`, `Core.lua`, and the two handoff
+  docs changed;
+- no immunity-learning, immunity SavedVariables, or public macro grammar code
+  was changed;
+- no GitHub CI workflow/status is attached to `ed777632`; verification so far
+  is source/static review only.
 
 Live-tested:
 
-- user reports the current bug: hidden-cursor camera/world mouse action can
+- user reports the pre-fix bug: hidden-cursor camera/world mouse action can
   allow an unintended old mouseover to intercept a macro.
+- **No post-implementation WoW live test has been reported yet.**
 
 Untested:
 
-- the proposed WorldFrame action hooks;
-- unified resolver behavior;
+- the new WorldFrame action hooks in the target client;
+- unified resolver behavior under normal world hover and pfUI/unit-frame hover;
 - left/right unit-frame click preservation;
+- left/right WorldFrame hold suppression;
 - release/resume semantics;
-- parity across `/cast`, `/target`, `IsValidTarget`, and `/pfcast`.
+- parity across `/cast`, conditional `/target`, `IsValidTarget`, and
+  `/pfcast`.
 
 ## Exact next step
 
-Implement the smallest runtime slice:
+Live-test the matrix above without expanding scope:
 
-1. add WorldFrame left/right action state tracking through post-hooks;
-2. add the canonical mouseover resolver with suspension while either action is
-   active;
-3. route the four known consumer paths through it;
-4. static-review for stale direct mouseover resolution that bypasses the helper;
-5. publish a testable commit;
-6. live-test the matrix above before expanding scope.
+1. verify normal world and pfUI mouseover still win when no WorldFrame action is active;
+2. verify held left and right 3D-world actions suppress the old/stale mouseover and allow fallback/current target to win;
+3. release each button and verify normal mouseover eligibility resumes immediately;
+4. verify LMB/RMB interaction on pfUI/unit frames does not suppress mouseover when the WorldFrame Start functions are not invoked;
+5. repeat representative checks through normal `/cast`, conditional
+   `/target`, an `IsValidTarget("mouseover", ...)` path, and `/pfcast`.
+
+Do not broaden this sidequest or start the generalized immunity learner while
+the separate immunity live-testing period is in progress.
