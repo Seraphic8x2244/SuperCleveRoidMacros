@@ -512,12 +512,16 @@ Untested:
 - the new `WorldFrame:OnMouseDown/OnMouseUp` observation mechanism in WoW;
 - LMB camera-orbit and RMB mouselook `OnMouseUp` delivery are both
   live-confirmed;
+- pfUI/unit-frame clicking is live-confirmed not to interfere with mouseover or
+  trigger WorldFrame suspension;
+- the user's actual macro usage is `/cast`; that path is live-confirmed for
+  normal mouseover, WorldFrame suppression, release/resume, and unit-frame
+  preservation.
 - unified resolver behavior under normal world hover and pfUI/unit-frame hover;
-- left/right unit-frame click preservation;
-- left/right WorldFrame hold suppression;
-- release/resume semantics;
-- parity across `/cast`, conditional `/target`, `IsValidTarget`, and
-  `/pfcast`.
+- conditional `/target`, `IsValidTarget("mouseover", ...)`, and `/pfcast`
+  remain not live-tested; they are routed through the same canonical resolver
+  and are deferred because the user's actual macros use `/cast`.
+
 
 ## Exact next step
 
@@ -526,8 +530,9 @@ WorldFrame-local: `OnMouseDown` starts left/right suspension and
 `OnMouseUp` ends it. Do not resume the failed protected-global hook approach.
 
 LMB and RMB WorldFrame suppression plus release/resume are now live-confirmed.
-Next, test unit-frame click/hold preservation and then the remaining
-pipeline-parity checks. If release is not
+The user-facing `/cast` acceptance path is complete. Keep conditional
+`/target`, `IsValidTarget("mouseover", ...)`, and `/pfcast` as
+static-checked/deferred unless future use or a regression requires live testing. If release is not
 reliable, retain WorldFrame-origin detection and add a narrowly-scoped release
 fallback only while that known WorldFrame action is active.
 
