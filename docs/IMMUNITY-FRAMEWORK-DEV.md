@@ -10,11 +10,12 @@ The durable design and historical reasoning remain in
 
 - Branch: `design/temp-cc-immunity`
 - Base: `main`
-- Branch head before this handoff refresh: `2e0edc18144e192247117ee606d66aff690598c3`
-- Branch relation before this handoff refresh: 99 ahead / 0 behind `main`
+- Branch head before this handoff refresh: `39d05b95d6d8109dd12bb1f61094b552edc9ba36`
+- Branch relation before this handoff refresh: 100 ahead / 0 behind `main`
 - TOC version: `@project-version@`
 - Latest framework/runtime behavior commit: `c23a80c4cff5d64765b25464b88738fdf93bfa31`
 - Recent commits:
+  - `39d05b95` — Record explicit miss immunity fix status
   - `2e0edc18` — Clarify shared miss immunity authority
   - `c23a80c4` — Stop generic shared misses learning immunity
   - `4c6d7946` — Require explicit miss reason for immunity learning
@@ -100,6 +101,13 @@ Static-checked:
 - the shared-debuff path previously treated generic `SPELL_GO` misses as
   candidates for immunity despite `SPELL_GO` lacking a miss reason, which can
   explain false Holy/Physical records from ordinary misses/resists/avoidance.
+- historical audit shows this unsafe shape predates the current framework
+  branch: `4c00ade6` (2026-02-07) explicitly annotated pending CC/shared
+  verification with binary `SPELL_GO` hit/miss and sent misses onward to the
+  immunity verifier; earlier/later history also contains dedicated false-
+  immunity fixes (`8f1e2166` on 2026-01-16 and `719021ff` on 2026-03-27);
+  therefore existing SavedVariables may contain months-old contamination and
+  cannot be used alone to prove the current branch still learns false entries.
 
 Live-tested:
 
@@ -117,6 +125,8 @@ Untested / outstanding:
 
 - live testing found false learned immunities on ordinary mobs, including
   Physical, Snare, Stun (Riverpaw Scout), and multiple Holy records;
+- provenance of those specific stored entries is unknown; they may have been
+  learned by an earlier build rather than the current framework;
 - the false records already present in SavedVariables cannot be safely
   auto-pruned because the existing storage does not distinguish manual records
   from automatically learned records; use Backup then clear the affected
@@ -159,11 +169,12 @@ Deferred:
 - any new polling or high-frequency `OnUpdate` mechanism.
 
 Exact next step: make a manual immunity backup, clear the contaminated learned
-immunity data, then live-test ordinary mobs against `c23a80c4`: exercise
-ordinary miss/resist/dodge/parry/block outcomes plus representative Holy,
-Physical, Snare and Stun actions and confirm none persist immunity unless
-`SPELL_MISS_SELF` reports IMMUNE/IMMUNE2. Then continue the existing framework
-regression matrix. Keep the generalized learner deferred.
+immunity data, then observe a clean dataset over normal play against
+`c23a80c4`. Specifically watch ordinary miss/resist/dodge/parry/block outcomes
+plus Holy, Physical, Snare and Stun actions; any newly persisted entry should
+correspond to `SPELL_MISS_SELF` IMMUNE/IMMUNE2. Preserve any reproducible new
+false entry for diagnosis before clearing it. Then continue the existing
+framework regression matrix. Keep the generalized learner deferred.
 
 ## Stage scope
 
