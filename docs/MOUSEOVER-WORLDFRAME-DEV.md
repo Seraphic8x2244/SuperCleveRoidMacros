@@ -475,8 +475,16 @@ Static-checked:
 Live-tested:
 
 - user reports the pre-fix bug: hidden-cursor camera/world mouse action can
-  allow an unintended old mouseover to intercept a macro.
-- **No post-implementation WoW live test has been reported yet.**
+  allow an unintended old mouseover to intercept a macro;
+- first post-implementation client test failed immediately: ClassicAPI was
+  reported as "blocked from an action only available to the Blizzard UI" after
+  the new WorldFrame action hooks were installed;
+- diagnosis: Vanilla 1.10+ protects
+  `CameraOrSelectOrMoveStart/Stop` and `TurnOrActionStart/Stop`; ClassicAPI's
+  1.12 `hooksecurefunc` implementation installs a wrapper back into the
+  target global, so these protected movement/action globals must not be hooked
+  this way.
+
 
 Untested:
 
@@ -489,6 +497,17 @@ Untested:
   `/pfcast`.
 
 ## Exact next step
+
+Remove the four protected-global `hooksecurefunc` calls before further live
+testing. Preserve the canonical resolver/consolidation work, but leave
+WorldFrame suspension disabled until a non-tainting observation mechanism is
+agreed. Then investigate a WorldFrame-local/event-based signal rather than
+wrapping protected movement globals.
+
+The previous live-test matrix remains the acceptance matrix once a safe signal
+exists.
+
+Do not resume the failed protected-global hook approach.
 
 Live-test the matrix above without expanding scope:
 
