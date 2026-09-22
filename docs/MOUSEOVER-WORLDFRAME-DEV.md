@@ -499,18 +499,19 @@ Live-tested:
   1.12 `hooksecurefunc` implementation installs a wrapper back into the
   target global, so these protected movement/action globals must not be hooked
   this way.
-- `53280257` LMB WorldFrame-script path passed live: normal mouseover works
-  before the click, mouseover is suppressed while LMB is held even when camera
-  movement would place the hidden cursor over a unit, and mouseover works again
-  after release. This confirms LMB `WorldFrame:OnMouseUp` release/resume on the
-  target client.
+- `53280257` WorldFrame-script path passed live for both LMB and RMB: normal
+  mouseover works before the click, mouseover is suppressed while either button
+  is held in the 3D world even when camera/mouselook movement would place the
+  hidden cursor over a unit, and mouseover works again after release. This
+  confirms `WorldFrame:OnMouseUp` release/resume for both camera orbit and
+  mouselook on the target client.
 
 
 Untested:
 
 - the new `WorldFrame:OnMouseDown/OnMouseUp` observation mechanism in WoW;
-- RMB mouselook release/resume remains untested; LMB camera-orbit
-  `OnMouseUp` delivery is now live-confirmed;
+- LMB camera-orbit and RMB mouselook `OnMouseUp` delivery are both
+  live-confirmed;
 - unified resolver behavior under normal world hover and pfUI/unit-frame hover;
 - left/right unit-frame click preservation;
 - left/right WorldFrame hold suppression;
@@ -524,9 +525,9 @@ Live-test `53280257` without expanding scope. The replacement signal is now
 WorldFrame-local: `OnMouseDown` starts left/right suspension and
 `OnMouseUp` ends it. Do not resume the failed protected-global hook approach.
 
-LMB WorldFrame suppression and release/resume are now live-confirmed. Next,
-repeat the same hold/move/release check with RMB mouselook. If RMB release is
-reliable, continue the remaining unit-frame and pipeline-parity checks. If release is not
+LMB and RMB WorldFrame suppression plus release/resume are now live-confirmed.
+Next, test unit-frame click/hold preservation and then the remaining
+pipeline-parity checks. If release is not
 reliable, retain WorldFrame-origin detection and add a narrowly-scoped release
 fallback only while that known WorldFrame action is active.
 
