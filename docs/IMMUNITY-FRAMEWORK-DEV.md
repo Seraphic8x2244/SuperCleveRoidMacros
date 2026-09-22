@@ -10,11 +10,12 @@ The durable design and historical reasoning remain in
 
 - Branch: `design/temp-cc-immunity`
 - Base: `main`
-- Branch head before this handoff refresh: `3d1ee2e541a51ee83d6a3b9d3b8eb8c71a6cd967`
-- Branch relation before this handoff refresh: 78 ahead / 0 behind `main`
+- Branch head before this handoff refresh: `593e18c1907ad86e53949ceb3dfce7fa527e6748`
+- Branch relation before this handoff refresh: 79 ahead / 0 behind `main`
 - TOC version: `@project-version@`
 - Latest runtime-related commit: `b93293fc15bb4ebd106bd3869752a119fb6c4c61`
 - Recent commits:
+  - `593e18c1` — Refresh immunity handoff after Divine Shield update
   - `3d1ee2e5` — Document Divine Shield 13874
   - `b93293fc` — Add Divine Shield 13874 immunity aura
   - `da621fc9` — Record Divine Shield 13874 follow-up
@@ -54,25 +55,43 @@ The durable design and historical reasoning remain in
 - Current runtime diff is limited to `Utility.lua` and `Conditionals.lua`.
 - The generalized comparative learner is **not** part of this stage.
 
-### Current handoff note — 2026-09-21
+### Current handoff note — 2026-09-22
 
-- Completed data-only follow-up: spell **13874 (Divine Shield)** is now in
-  `IMMUNITY_AURAS.all`; existing Divine Shield IDs 642 and 1020 are unchanged.
-- Source: vMaNGOS/core explicitly identifies 13874 as Divine Shield in
-  `sql/old_migrations/20210521134028_world.sql` (Anvilrage Officer correction)
-  and uses 13874 for Vanilla NPC Divine Shield casts.
-- `docs/CC-DR-IMMUNITY-REWORK.md` now lists Divine Shield as
-  `642, 1020, 13874`.
-- No 13007 (Divine Protection) or 6356 (Spell Immunity) was added in this
-  follow-up; those remain separate research leads if revisited.
-- Untested work remains the existing Sartura/framework live regression matrix,
-  plus in-game confirmation that aura 13874 is visible through ClassicAPI when
-  encountered.
-- Deferred work remains comparative immunity learning, evidence persistence,
-  SavedVariables changes, and new public immunity grammar.
-- Exact next step: resume the planned learner stage with the observation-only
-  `ObserveImmunity(target, spellID, result)` layer; do not infer or persist
-  broad immunity yet. Live framework validation remains parallel outstanding.
+The framework implementation is ready for live validation, but live testing is
+the current blocker. Before starting the comparative learner, build the
+**Immunities testing/management UI** described below.
+
+Purpose:
+
+- expose the learned immunity data without SavedVariables inspection;
+- expose the current target's exact/broad/live immunity state;
+- make Sartura, temporary-protection, reflection, and Blackwing Spellbinder
+  regression tests practical in game;
+- provide explicit manual backup/reset controls for test cycles.
+
+This UI is a testing/management surface over the existing framework. It must not
+add comparative inference, broad-immunity promotion, new polling, or new public
+macro conditionals.
+
+Completed immediately before this handoff:
+
+- Divine Shield 13874 added to `IMMUNITY_AURAS.all`;
+- verified Divine Shield set is now 642 / 1020 / 13874;
+- 13007 and 6356 were deliberately not added;
+- static framework regression remains passed;
+- live framework regression remains outstanding.
+
+Deferred after the UI:
+
+- observation/comparative learner work;
+- candidate/disproved/confirmed evidence;
+- inferred broad-immunity persistence;
+- new public `[immune:*]` grammar.
+
+Exact next step: implement `/cleveroid immunities` and the attached current
+target panel according to **Immunities testing/management UI** below, then use
+that panel for the outstanding live regression matrix before resuming learner
+work.
 
 ## Stage scope
 
@@ -749,6 +768,223 @@ as passed until it has actually been exercised in game.
 
 ---
 
+## Immunities testing/management UI — NEXT
+
+### Purpose
+
+Add an in-game inspection/management surface specifically to unblock live
+validation of the framework.
+
+Slash command:
+
+```text
+/cleveroid immunities
+```
+
+The command opens/toggles the immunity UI. It should be a normal Vanilla-style
+Lua-created frame; do not introduce a new XML dependency solely for this panel.
+
+No learner/inference logic belongs in the UI. It reads the same canonical data
+and query helpers used by the runtime.
+
+### Main window
+
+Header:
+
+```text
+SCRM Immunities
+```
+
+The main window is intentionally large. Prefer readable fixed-width columns plus
+horizontal scrolling over squeezing every mechanic/school into narrow columns.
+
+#### CC Immunities
+
+Sub-header:
+
+```text
+CC Immunities
+```
+
+Display a horizontal set of immunity columns. Include the broad `CC` dimension
+when/if recorded broad data exists, followed by the exact Vanilla mechanic ID
+and canonical display name, for example:
+
+```text
+CC
+1 Charm
+2 Disorient
+3 Disarm
+4 Distract
+5 Fear
+6 Fumble
+7 Root
+8 Pacify
+9 Silence
+10 Sleep
+11 Snare
+12 Stun
+13 Freeze
+14 Knockout (Sap)
+17 Polymorph
+18 Banish
+20 Shackle
+23 Turn
+24 Horror
+26 Interrupt
+27 Daze
+```
+
+Do not invent rows for unused/non-exposed mechanics. Mechanic 14 remains
+canonical `Knockout`; show `Sap` as a user-facing clarification/alias.
+
+Each mechanic column contains a vertically scrollable text/list area of mobs
+currently recorded for that immunity. Show a count in the column header where
+practical, e.g. `12 Stun (27)`.
+
+The CC section itself may scroll horizontally.
+
+#### Spell Immunities
+
+Sub-header:
+
+```text
+Spell Immunities
+```
+
+Display the canonical broad/general and school dimensions as columns:
+
+```text
+All
+Spell
+Physical
+Holy
+Fire
+Nature
+Frost
+Shadow
+Arcane
+Bleed
+```
+
+Each column contains a vertically scrollable list of recorded mobs and may show
+its count in the header.
+
+`unknown` is a legacy/storage fallback rather than a canonical immunity
+dimension. Do not present it as an ordinary immunity column. If old `unknown`
+records exist, expose them separately as diagnostic/legacy data rather than
+pretending they are a real immunity type.
+
+The Spell Immunities section may scroll horizontally.
+
+### Current Target companion window
+
+Attach a second, narrower window to the **right** of the main SCRM Immunities
+window. It should be approximately the same height as the main window and move
+with it.
+
+Layout:
+
+```text
+Current Target
+
+Blackwing Spellbinder (12457)
+
+CC Immunities        Spell Immunities
+12 Stun              Fire
+14 Knockout (Sap)    Frost
+CC                    Spell
+                      All
+```
+
+Use the current target's real name and creature entry ID when available.
+
+The two columns must distinguish **recorded/learned** immunity from **live
+temporary/current-state** immunity. Live entries should expose enough provenance
+for testing, for example:
+
+```text
+LIVE
+Stun — Whirlwind 26083
+Spell — Anti-Magic Shield 7121
+All — Divine Shield 13874
+Physical — Blessing of Protection 1022
+```
+
+Reflection must remain visibly a non-immunity explanation. It may be shown in a
+small live/explanation area for debugging, but must never appear as learned
+`Spell`, `CC`, or `All` immunity.
+
+The target panel should update from existing target/aura/data-change event paths.
+Do not add an always-running poll or high-frequency `OnUpdate`.
+
+### Management controls
+
+The panel is also the replacement for repeatedly typing the immunity management
+slash commands while testing.
+
+Support clearing:
+
+- one exact CC immunity type;
+- all CC immunity data;
+- one school/general immunity type where stored;
+- all school/general immunity data;
+- all learned immunity data.
+
+Prefer compact `Clear CC...` / `Clear Spell...` selection dialogs or
+equivalent controls rather than putting a large reset button under every
+column.
+
+Every destructive/reset control must have a **manual Backup** control directly
+beside it.
+
+### Manual backup history
+
+Backups are **manual only**. Do not automatically create a snapshot before every
+clear/restore; silent automatic snapshots can bloat SavedVariables.
+
+A backup always copies the complete current `CleveRoids_ImmunityData`, even
+when the adjacent reset only clears one category.
+
+Keep dated/time-labelled historical snapshots until the user explicitly deletes
+them. WoW addons cannot create arbitrary runtime files such as
+`immunitydata-2026-09-22-1200.lua`, so store the archive inside an existing
+SCRM SavedVariables container (preferred: an isolated
+`CleveRoidMacros.immunityBackups` field) rather than adding a file-writing
+scheme.
+
+Each snapshot should retain at least:
+
+```text
+timestamp / display label
+immunity data version
+complete immunity data copy
+optional reason/label
+```
+
+Provide a compact backup-history view/dialog with explicit Restore and Delete
+actions. Restoring a snapshot must be an explicit user action.
+
+This backup archive is a management-data exception to the framework's
+"no learner SavedVariables schema" rule: it must not change the format or
+meaning of `CleveRoids_ImmunityData`, and it must not store learner evidence,
+candidates, or inferred state.
+
+### Testing role
+
+Once implemented, use this UI to complete the outstanding live regression
+matrix before beginning generalized learner work:
+
+- Sartura: live `Stun` appears only during Whirlwind 26083;
+- forced HoJ during Whirlwind does not create permanent `cc_stun`;
+- Divine Shield / Divine Protection / Ice Block appear as live `All`;
+- Anti-Magic Shield appears as live `Spell`;
+- Blessing of Protection appears as live `Physical`;
+- reflection is visible only as an explanation/guard, never immunity;
+- Blackwing Spellbinder can be inspected as the permanent broad-spell
+  regression case without falsely becoming Stun immune.
+
+
 ## Invariants
 
 Do not break these while refactoring:
@@ -831,37 +1067,36 @@ matrix before learner development begins.
 
 ## Exact next step
 
-**Start the learner stage with an observation-only layer; do not infer or
-persist broad immunity yet.**
+**Build the Immunities testing/management UI before learner work.**
 
-First learner milestone:
-
-```lua
-ObserveImmunity(target, spellID, result)
-```
-
-It should only normalize existing event information into an evidence
-observation containing the action's immunity dimensions and the outcome.
-
-Initial outcomes:
+First implementation milestone:
 
 ```text
-IMMUNE
-LANDED / SUCCESS
+/cleveroid immunities
+ -> SCRM Immunities main window
+ -> attached Current Target companion window
 ```
 
-Requirements:
+Minimum first-pass requirements:
 
-- reuse existing Nampower / landed-effect events;
+- CC and Spell Immunities sections render existing recorded data;
+- horizontal scrolling keeps columns readable;
+- each column has a vertically scrollable mob list;
+- current target shows name + creature ID;
+- current target separates recorded immunity from live temporary/current-state
+  immunity;
+- current target consumes the framework's existing dimension/source/detail
+  information rather than duplicating classification logic;
+- manual Backup controls sit beside destructive reset controls;
+- backups are full, dated historical snapshots and are never auto-pruned;
+- no automatic backup-on-clear;
 - no new polling;
-- no candidate promotion rules yet;
-- no SavedVariables changes;
-- no public macro grammar changes;
-- no automatic broad `spell` / `cc` / `all` records;
-- temporary explanations (TempCC, typed immunity auras, reflection, DR, death,
-  debuff-cap ambiguity) must be attached or filtered before an observation can
-  later become permanent evidence.
+- no comparative learner/inference;
+- no public conditional grammar changes.
 
-Live framework validation remains a parallel outstanding task.
+After the UI is usable, complete the Step 10 live regression matrix with it.
+Only then resume the observation-only learner milestone
+`ObserveImmunity(target, spellID, result)`.
 
-Before learner coding, use this document as the recovery source of truth.
+Before coding in a new chat, use this document as the recovery source of truth.
+
