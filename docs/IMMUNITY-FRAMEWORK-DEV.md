@@ -10,11 +10,12 @@ The durable design and historical reasoning remain in
 
 - Branch: `design/temp-cc-immunity`
 - Base: `main`
-- Branch head before this handoff refresh: `6c49e97904864d0451165cd6864701346c83a71e`
-- Branch relation before this handoff refresh: 86 ahead / 0 behind `main`
+- Branch head before this handoff refresh: `f362b4655c53e32cda9cce80847faf6128b84def`
+- Branch relation before this handoff refresh: 88 ahead / 0 behind `main`
 - TOC version: `@project-version@`
-- Latest framework/UI runtime commit: `6c49e97904864d0451165cd6864701346c83a71e`
+- Latest framework/UI runtime commit: `f362b4655c53e32cda9cce80847faf6128b84def`
 - Recent commits:
+  - `f362b465` — Center immunity UI composite at 1024 width
   - `6c49e979` — Harden immunity UI for Vanilla layout
   - `9270bb99` — Add immunities slash command
   - `ae11c272` — Load immunity management UI
@@ -22,11 +23,10 @@ The durable design and historical reasoning remain in
   - `0181cf55` — Expose immunity UI debug state
   - `4c2c9c8b` — Refresh immunity UI implementation handoff
   - `93a0dfb2` — Plan immunity testing management UI
-  - `593e18c1` — Refresh immunity handoff after Divine Shield update
 
 ### Resume status — 2026-09-22
 
-Completed:
+Completed / implemented:
 
 - implemented `/cleveroid immunities` as the framework testing/management UI;
 - added a movable Vanilla-style Lua-created `SCRM Immunities` main window;
@@ -49,12 +49,26 @@ Completed:
   dated labels, data-version metadata, explicit Restore, and explicit Delete;
 - loaded `ImmunityUI.lua` between `Utility.lua` and `Core.lua`;
 - added the slash-dispatch/help entry for `/cleveroid immunities`;
-- completed static source review for the UI wiring and verified the UI contains
-  no generalized learner/evidence state and no high-frequency polling.
+- centered the 1014 px combined main + attached-target footprint so its initial
+  placement fits inside a 1024-wide UI with a small margin.
+
+Static-checked:
+
+- UI/framework wiring has been reviewed without finding generalized
+  learner/evidence state or new high-frequency polling;
+- `ImmunityUI.lua` avoids Lua 5.1-only length/select patterns and uses Vanilla
+  event globals (`event`, `arg1`) in its script handlers;
+- the relevant UI calls used by this surface are consistent with the 1.12-era
+  FrameXML API surface reviewed for this pass;
+- the 1024-wide initial-position correction above is geometry-checked only.
+
+Live-tested:
+
+- none of the new immunity UI/runtime work has been exercised in the target
+  1.12.1 client yet.
 
 Untested / outstanding:
 
-- no in-game addon-runtime validation has been performed for this UI yet;
 - verify the addon loads without Lua/API errors on the target 1.12.1 client;
 - verify main/target panel layout, dragging, horizontal scrolling, and vertical
   list controls at practical UI scales/resolutions;
