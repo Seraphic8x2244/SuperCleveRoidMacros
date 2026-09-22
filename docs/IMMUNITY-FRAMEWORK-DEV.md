@@ -93,6 +93,18 @@ Live-tested:
 
 Untested / outstanding:
 
+- live testing found false learned immunities on ordinary mobs, including
+  Physical, Snare, Stun (Riverpaw Scout), and multiple Holy records;
+- investigation confirms direct Nampower `SPELL_MISS_SELF` keeps MISS, RESIST,
+  DODGE, PARRY, BLOCK, EVADE, IMMUNE/IMMUNE2, ABSORB, and REFLECT as distinct
+  outcomes; crit is not a `SPELL_MISS` outcome;
+- likely false-positive source identified: legacy delayed verification still
+  promotes a missing aura/debuff after 0.2-0.4s to permanent school/CC immunity,
+  even when exact `SPELL_MISS` events are available;
+- exact next code fix: when `CleveRoids.usingSpellMissEvents` is true, treat
+  missing delayed auras as inconclusive for immunity learning and allow only
+  explicit IMMUNE/IMMUNE2 handling to persist permanent immunity;
+
 - verify `9cd181fa` now starts both horizontal sections on the left and moves
   the subheaders left to reveal later columns as the slider moves right;
 - verify `9cd181fa` keeps all background/header icons below both Clear and
@@ -122,12 +134,11 @@ Deferred:
 - new public `[immune:*]` grammar;
 - any new polling or high-frequency `OnUpdate` mechanism.
 
-Exact next step: load this branch in the target client, run
-`/cleveroid immunities`, verify that both horizontal sections start on the
-left and slide their content left to reveal later columns, then open both modal
-boxes and verify no header icons/content render over them. Fix any remaining UI
-issue before continuing the live regression matrix. Do **not** begin the
-generalized learner until this UI and framework regression pass is complete.
+Exact next step: remove the false-positive legacy missing-aura immunity learner
+while exact Nampower `SPELL_MISS` reasons are available, static-check every
+remaining permanent-immunity write path, then live-test ordinary mobs before
+continuing the framework regression matrix. Keep the generalized learner
+deferred.
 
 ## Stage scope
 
