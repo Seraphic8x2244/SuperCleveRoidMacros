@@ -53,6 +53,15 @@ mouseover consolidation and WorldFrame-action suspension semantics.
   - `6c49e979` — Harden immunity UI for Vanilla layout
   - `9270bb99` — Add immunities slash command
 
+### Implementation checkpoint — immunitydebug
+
+- Branch: `design/temp-cc-immunity`
+- Starting head: `7f8a46d14ae1785922b917c6e136cdad15a04306`
+- Completed before this slice: framework/UI work and mouseover /cast acceptance documented below.
+- Untested: the immunitydebug acceptance matrix remains entirely live-pending until user testing.
+- Deferred: generalized learner/evidence persistence, Mob-ID storage migration, inferred broad-immunity persistence, and new public immunity grammar.
+- Exact next step: implement only the runtime-only diagnostic `/cleveroid immunitydebug` slice documented below, static-review it, publish this branch, then resume clean-dataset live immunity testing.
+
 ### Resume status — 2026-09-22
 
 Completed / implemented:
