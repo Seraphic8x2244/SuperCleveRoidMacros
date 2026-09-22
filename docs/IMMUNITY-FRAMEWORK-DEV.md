@@ -10,19 +10,19 @@ The durable design and historical reasoning remain in
 
 - Branch: `design/temp-cc-immunity`
 - Base: `main`
-- Branch head before this handoff refresh: `fd366a56952bb3589ab912d6b89162bc542875f3`
-- Branch relation before this handoff refresh: 92 ahead / 0 behind `main`
+- Branch head before this handoff refresh: `9cd181fabb9b5058141dd5f67c7b499a408d5b10`
+- Branch relation before this handoff refresh: 94 ahead / 0 behind `main`
 - TOC version: `@project-version@`
-- Latest framework/UI runtime commit: `fd366a56952bb3589ab912d6b89162bc542875f3`
+- Latest framework/UI runtime commit: `9cd181fabb9b5058141dd5f67c7b499a408d5b10`
 - Recent commits:
+  - `9cd181fa` — Fix immunity scroll offset and modal layering
+  - `53493d85` — Record immunity UI scroll and icon test state
   - `fd366a56` — Fix immunity scrolling and add header icons
   - `0666d34a` — Fix immunity UI placement comment newline
   - `bdcd6977` — Refresh immunity UI live-test handoff
   - `f362b465` — Center immunity UI composite at 1024 width
   - `6c49e979` — Harden immunity UI for Vanilla layout
   - `9270bb99` — Add immunities slash command
-  - `ae11c272` — Load immunity management UI
-  - `926a8303` — Add immunity testing management UI
 
 ### Resume status — 2026-09-22
 
@@ -51,11 +51,16 @@ Completed / implemented:
 - added the slash-dispatch/help entry for `/cleveroid immunities`;
 - centered the 1014 px combined main + attached-target footprint so its initial
   placement fits inside a 1024-wide UI with a small margin;
-- reversed the horizontal-slider-to-scroll mapping after live feedback showed
-  the original controls moved in the wrong direction;
 - added representative Vanilla spell icons to every CC and spell-immunity column
   header via `C_Spell.GetSpellTexture(spellID)`; examples include Seduction for
-  Charm, Exorcism for Holy, and Fireball for Fire.
+  Charm, Exorcism for Holy, and Fireball for Fire;
+- replaced the ambiguous native horizontal-scroll inversion with an explicit
+  left-origin content offset: slider value 0 keeps the first columns at the left,
+  and increasing the slider physically offsets the column strip left to reveal
+  later columns on the right;
+- raised Clear and Backup History modal frames by an explicit 50 frame levels
+  over their parent so header icons/content behind them cannot draw above the
+  modal backdrop.
 
 Static-checked:
 
@@ -66,29 +71,34 @@ Static-checked:
 - the relevant UI calls used by this surface are consistent with the 1.12-era
   FrameXML API surface reviewed for this work;
 - the 1024-wide initial-position correction is geometry-checked;
-- post-write source verification confirms the placement call remains active after
-  the comment/newline correction in `0666d34a`;
-- post-write source verification confirms the reversed scroll mapping preserves
-  the visible content offset across refreshes and initializes on the leftmost
-  columns;
-- `C_Spell.GetSpellTexture(spellID)` is already used by the addon runtime in
-  `Utility.lua`, so the new column icons reuse an established dependency/API
-  path rather than introducing a new texture-resolution mechanism.
+- `C_Spell.GetSpellTexture(spellID)` was already used by the addon runtime in
+  `Utility.lua`, so the column icons reuse an established API path;
+- post-write source review confirms `9cd181fa` starts each horizontal control
+  at offset 0 and moves the scroll child left with a negative X anchor as the
+  slider value increases;
+- post-write source review confirms both modal boxes explicitly set a frame
+  level 50 above the main panel.
 
 Live-tested:
 
-- the immunity UI has now been opened in the target client far enough to identify
-  that the pre-`fd366a56` horizontal scroll controls moved in the wrong
-  direction;
-- the `fd366a56` scroll-direction correction has not yet been live-tested;
-- the new representative header icons have not yet been live-tested.
+- the immunity UI opens on the target client;
+- the original pre-`fd366a56` horizontal mapping started on the left but moved
+  the subheaders right, exposing empty space instead of later columns;
+- the `fd366a56` inversion was also tested and confirmed wrong: it started on
+  the right and still moved the subheaders right, so the inverted direction and
+  start point cancelled the intended correction;
+- representative header icons render in the client;
+- the pre-`9cd181fa` modal layering is confirmed wrong: header icons from the
+  panel behind can render above the overlay/modal boxes.
 
 Untested / outstanding:
 
-- verify `fd366a56` makes both horizontal scroll controls move in the expected
-  direction;
-- verify every representative header icon resolves and the 18 px icon + label
-  layout remains readable, especially `14 Knockout (Sap)`;
+- verify `9cd181fa` now starts both horizontal sections on the left and moves
+  the subheaders left to reveal later columns as the slider moves right;
+- verify `9cd181fa` keeps all background/header icons below both Clear and
+  Backup History overlays;
+- verify the representative icon choices and header spacing remain readable,
+  especially `14 Knockout (Sap)`;
 - verify main/target panel dragging and vertical list controls at practical UI
   scales/resolutions;
 - verify target and aura events refresh the Current Target panel as expected;
@@ -113,10 +123,11 @@ Deferred:
 - any new polling or high-frequency `OnUpdate` mechanism.
 
 Exact next step: load this branch in the target client, run
-`/cleveroid immunities`, verify the corrected horizontal-scroll direction and
-representative header icons, fix any remaining UI/runtime compatibility issue,
-then continue the live regression matrix above. Do **not** begin the generalized
-learner until this UI and framework regression pass is complete.
+`/cleveroid immunities`, verify that both horizontal sections start on the
+left and slide their content left to reveal later columns, then open both modal
+boxes and verify no header icons/content render over them. Fix any remaining UI
+issue before continuing the live regression matrix. Do **not** begin the
+generalized learner until this UI and framework regression pass is complete.
 
 ## Stage scope
 
