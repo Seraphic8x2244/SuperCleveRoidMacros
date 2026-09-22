@@ -12,6 +12,7 @@ local TARGET_WIDTH = 300
 local COLUMN_WIDTH = 138
 local COLUMN_GAP = 6
 local SECTION_WIDTH = 670
+local HEADER_ICON_SIZE = 18
 
 local widgetCounter = 0
 local mainFrame
@@ -28,35 +29,35 @@ local targetSpellList
 local targetLiveList
 
 local CC_COLUMNS = {
-    { key = "cc", type = "cc", label = "CC", broad = true },
-    { key = "cc_charm", type = "charm", mechanicID = 1, label = "Charm" },
-    { key = "cc_disorient", type = "disorient", mechanicID = 2, label = "Disorient" },
-    { key = "cc_fear", type = "fear", mechanicID = 5, label = "Fear" },
-    { key = "cc_root", type = "root", mechanicID = 7, label = "Root" },
-    { key = "cc_silence", type = "silence", mechanicID = 9, label = "Silence" },
-    { key = "cc_sleep", type = "sleep", mechanicID = 10, label = "Sleep" },
-    { key = "cc_snare", type = "snare", mechanicID = 11, label = "Snare" },
-    { key = "cc_stun", type = "stun", mechanicID = 12, label = "Stun" },
-    { key = "cc_freeze", type = "freeze", mechanicID = 13, label = "Freeze" },
-    { key = "cc_knockout", type = "knockout", mechanicID = 14, label = "Knockout (Sap)" },
-    { key = "cc_polymorph", type = "polymorph", mechanicID = 17, label = "Polymorph" },
-    { key = "cc_banish", type = "banish", mechanicID = 18, label = "Banish" },
-    { key = "cc_shackle", type = "shackle", mechanicID = 20, label = "Shackle" },
-    { key = "cc_horror", type = "horror", mechanicID = 24, label = "Horror" },
-    { key = "cc_daze", type = "daze", mechanicID = 27, label = "Daze" },
+    { key = "cc", type = "cc", label = "CC", broad = true, iconSpellID = 853 }, -- Hammer of Justice
+    { key = "cc_charm", type = "charm", mechanicID = 1, label = "Charm", iconSpellID = 6358 }, -- Seduction
+    { key = "cc_disorient", type = "disorient", mechanicID = 2, label = "Disorient", iconSpellID = 1776 }, -- Gouge
+    { key = "cc_fear", type = "fear", mechanicID = 5, label = "Fear", iconSpellID = 5782 }, -- Fear
+    { key = "cc_root", type = "root", mechanicID = 7, label = "Root", iconSpellID = 339 }, -- Entangling Roots
+    { key = "cc_silence", type = "silence", mechanicID = 9, label = "Silence", iconSpellID = 15487 }, -- Silence
+    { key = "cc_sleep", type = "sleep", mechanicID = 10, label = "Sleep", iconSpellID = 2637 }, -- Hibernate
+    { key = "cc_snare", type = "snare", mechanicID = 11, label = "Snare", iconSpellID = 1715 }, -- Hamstring
+    { key = "cc_stun", type = "stun", mechanicID = 12, label = "Stun", iconSpellID = 853 }, -- Hammer of Justice
+    { key = "cc_freeze", type = "freeze", mechanicID = 13, label = "Freeze", iconSpellID = 122 }, -- Frost Nova
+    { key = "cc_knockout", type = "knockout", mechanicID = 14, label = "Knockout (Sap)", iconSpellID = 6770 }, -- Sap
+    { key = "cc_polymorph", type = "polymorph", mechanicID = 17, label = "Polymorph", iconSpellID = 118 }, -- Polymorph
+    { key = "cc_banish", type = "banish", mechanicID = 18, label = "Banish", iconSpellID = 710 }, -- Banish
+    { key = "cc_shackle", type = "shackle", mechanicID = 20, label = "Shackle", iconSpellID = 9484 }, -- Shackle Undead
+    { key = "cc_horror", type = "horror", mechanicID = 24, label = "Horror", iconSpellID = 6789 }, -- Death Coil
+    { key = "cc_daze", type = "daze", mechanicID = 27, label = "Daze", iconSpellID = 5116 }, -- Concussive Shot
 }
 
 local SPELL_COLUMNS = {
-    { key = "all", type = "all", label = "All" },
-    { key = "spell", type = "spell", label = "Spell" },
-    { key = "physical", type = "physical", label = "Physical" },
-    { key = "holy", type = "holy", label = "Holy" },
-    { key = "fire", type = "fire", label = "Fire" },
-    { key = "nature", type = "nature", label = "Nature" },
-    { key = "frost", type = "frost", label = "Frost" },
-    { key = "shadow", type = "shadow", label = "Shadow" },
-    { key = "arcane", type = "arcane", label = "Arcane" },
-    { key = "bleed", type = "bleed", label = "Bleed" },
+    { key = "all", type = "all", label = "All", iconSpellID = 642 }, -- Divine Shield
+    { key = "spell", type = "spell", label = "Spell", iconSpellID = 7121 }, -- Anti-Magic Shield
+    { key = "physical", type = "physical", label = "Physical", iconSpellID = 1022 }, -- Blessing of Protection
+    { key = "holy", type = "holy", label = "Holy", iconSpellID = 879 }, -- Exorcism
+    { key = "fire", type = "fire", label = "Fire", iconSpellID = 133 }, -- Fireball
+    { key = "nature", type = "nature", label = "Nature", iconSpellID = 403 }, -- Lightning Bolt
+    { key = "frost", type = "frost", label = "Frost", iconSpellID = 116 }, -- Frostbolt
+    { key = "shadow", type = "shadow", label = "Shadow", iconSpellID = 686 }, -- Shadow Bolt
+    { key = "arcane", type = "arcane", label = "Arcane", iconSpellID = 5143 }, -- Arcane Missiles
+    { key = "bleed", type = "bleed", label = "Bleed", iconSpellID = 772 }, -- Rend
 }
 
 local TYPE_LABELS = {
@@ -242,7 +243,7 @@ local function ColumnHeader(column, count)
     return column.label .. " (" .. tostring(count) .. ")"
 end
 
-local function CreateHorizontalSlider(parent, scrollFrame)
+local function CreateHorizontalSlider(parent)
     local slider = CreateFrame("Slider", NewWidgetName("HSlider"), parent)
     slider:SetOrientation("HORIZONTAL")
     slider:SetHeight(12)
@@ -259,9 +260,6 @@ local function CreateHorizontalSlider(parent, scrollFrame)
     track:SetTexture("Interface\\Buttons\\WHITE8x8")
     track:SetVertexColor(0.18, 0.18, 0.18, 0.9)
 
-    slider:SetScript("OnValueChanged", function()
-        scrollFrame:SetHorizontalScroll(arg1 or 0)
-    end)
     return slider
 end
 
@@ -270,16 +268,27 @@ local function CreateDataColumn(parent, column, height)
     frame:SetWidth(COLUMN_WIDTH)
     frame:SetHeight(height)
 
+    local icon = frame:CreateTexture(nil, "ARTWORK")
+    icon:SetWidth(HEADER_ICON_SIZE)
+    icon:SetHeight(HEADER_ICON_SIZE)
+    icon:SetPoint("TOPLEFT", frame, "TOPLEFT", 2, -3)
+    icon:SetTexture(
+        (column.iconSpellID and C_Spell.GetSpellTexture(column.iconSpellID)) or
+        CleveRoids.unknownTexture or
+        "Interface\\Icons\\INV_Misc_QuestionMark"
+    )
+    icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
+
     local header = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    header:SetPoint("TOPLEFT", frame, "TOPLEFT", 2, -2)
+    header:SetPoint("TOPLEFT", icon, "TOPRIGHT", 4, 1)
     header:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -2, -2)
-    header:SetHeight(26)
+    header:SetHeight(30)
     header:SetJustifyH("LEFT")
     header:SetJustifyV("TOP")
     header:SetText(column.label)
 
     local list = CreateMessageList(frame)
-    list:SetPoint("TOPLEFT", frame, "TOPLEFT", 4, -30)
+    list:SetPoint("TOPLEFT", frame, "TOPLEFT", 4, -34)
     list:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -4, 22)
 
     local up = CreateButton(frame, "^", 22, 18)
@@ -316,10 +325,17 @@ local function CreateHorizontalSection(parent, topOffset, height, columns, nameP
         CreateDataColumn(section.child, column, height - 18)
     end
 
-    section.slider = CreateHorizontalSlider(parent, section.viewport)
+    section.slider = CreateHorizontalSlider(parent)
     section.slider:SetPoint("TOPLEFT", section.viewport, "BOTTOMLEFT", 0, -2)
     section.slider:SetWidth(SECTION_WIDTH)
     section.columns = columns
+    section.maxScroll = 0
+    section.scrollInitialized = false
+    section.slider:SetScript("OnValueChanged", function()
+        local maxScroll = section.maxScroll or 0
+        local value = arg1 or 0
+        section.viewport:SetHorizontalScroll(maxScroll - value)
+    end)
     return section
 end
 
@@ -349,6 +365,12 @@ local function RefreshHorizontalSection(section)
         end
     end
 
+    local previousOffset = 0
+    if section.scrollInitialized then
+        previousOffset = (section.maxScroll or 0) - (section.slider:GetValue() or 0)
+        if previousOffset < 0 then previousOffset = 0 end
+    end
+
     local contentWidth = x
     if contentWidth < SECTION_WIDTH then
         contentWidth = SECTION_WIDTH
@@ -357,16 +379,30 @@ local function RefreshHorizontalSection(section)
 
     local maxScroll = contentWidth - SECTION_WIDTH
     if maxScroll < 0 then maxScroll = 0 end
+    section.maxScroll = maxScroll
+
     if maxScroll == 0 then
         section.slider:Hide()
+        section.slider:SetValue(0)
         section.viewport:SetHorizontalScroll(0)
     else
         section.slider:Show()
         section.slider:SetMinMaxValues(0, maxScroll)
-        local current = section.slider:GetValue() or 0
-        if current > maxScroll then
-            section.slider:SetValue(maxScroll)
+
+        if previousOffset > maxScroll then
+            previousOffset = maxScroll
         end
+
+        local sliderValue
+        if section.scrollInitialized then
+            sliderValue = maxScroll - previousOffset
+        else
+            sliderValue = maxScroll
+            section.scrollInitialized = true
+        end
+
+        section.slider:SetValue(sliderValue)
+        section.viewport:SetHorizontalScroll(maxScroll - sliderValue)
     end
 end
 
