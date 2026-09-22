@@ -499,13 +499,18 @@ Live-tested:
   1.12 `hooksecurefunc` implementation installs a wrapper back into the
   target global, so these protected movement/action globals must not be hooked
   this way.
+- `53280257` LMB WorldFrame-script path passed live: normal mouseover works
+  before the click, mouseover is suppressed while LMB is held even when camera
+  movement would place the hidden cursor over a unit, and mouseover works again
+  after release. This confirms LMB `WorldFrame:OnMouseUp` release/resume on the
+  target client.
 
 
 Untested:
 
 - the new `WorldFrame:OnMouseDown/OnMouseUp` observation mechanism in WoW;
-- specifically, whether `OnMouseUp` is delivered reliably after LMB camera
-  orbit and RMB mouselook hide/capture the cursor;
+- RMB mouselook release/resume remains untested; LMB camera-orbit
+  `OnMouseUp` delivery is now live-confirmed;
 - unified resolver behavior under normal world hover and pfUI/unit-frame hover;
 - left/right unit-frame click preservation;
 - left/right WorldFrame hold suppression;
@@ -519,9 +524,9 @@ Live-test `53280257` without expanding scope. The replacement signal is now
 WorldFrame-local: `OnMouseDown` starts left/right suspension and
 `OnMouseUp` ends it. Do not resume the failed protected-global hook approach.
 
-The first release-specific check is whether WorldFrame receives `OnMouseUp`
-reliably after the cursor is hidden/captured by LMB camera orbit and RMB
-mouselook. If release is reliable, continue the full matrix. If release is not
+LMB WorldFrame suppression and release/resume are now live-confirmed. Next,
+repeat the same hold/move/release check with RMB mouselook. If RMB release is
+reliable, continue the remaining unit-frame and pipeline-parity checks. If release is not
 reliable, retain WorldFrame-origin detection and add a narrowly-scoped release
 fallback only while that known WorldFrame action is active.
 
