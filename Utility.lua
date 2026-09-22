@@ -2770,8 +2770,18 @@ delayedTrackingFrame:SetScript("OnUpdate", function()
                         pending.targetName or "Unknown", immunityBuff)
                     )
                   end
+                elseif CleveRoids.usingSpellMissEvents then
+                  -- With direct SPELL_MISS reasons available, missing aura state is
+                  -- inconclusive. Only IMMUNE/IMMUNE2 may create permanent immunity.
+                  if debug then
+                    DEFAULT_CHAT_FRAME:AddMessage(
+                      _string_format("|cffaaaaaa[Bleed Inconclusive]|r %s missing on %s - waiting for authoritative SPELL_MISS reason, not recording immunity",
+                        C_Spell.GetSpellName(pending.spellID) or "Bleed",
+                        pending.targetName or "Unknown")
+                    )
+                  end
                 elseif totalDebuffs < DEBUFF_CAP_THRESHOLD then
-                  -- Few debuffs = likely bleed immunity, not debuff cap
+                  -- Legacy fallback only: few debuffs may indicate bleed immunity.
                   if pending.targetName and pending.targetName ~= "" then
                     -- Record as BLEED immunity directly (bypass split damage override in RecordImmunity)
                     -- RecordImmunity would record Rake/Pounce as "physical" (initial school),
@@ -2917,8 +2927,19 @@ delayedTrackingFrame:SetScript("OnUpdate", function()
                         pending.targetName or "Unknown", immunityBuff)
                     )
                   end
+                elseif CleveRoids.usingSpellMissEvents then
+                  -- Missing a debuff after the short verification delay can be
+                  -- latency, rank replacement, hidden aura behavior, or another
+                  -- non-immunity outcome. SPELL_MISS gives the exact reason.
+                  if debug then
+                    DEFAULT_CHAT_FRAME:AddMessage(
+                      _string_format("|cffaaaaaa[NonBleed Inconclusive]|r %s missing on %s - authoritative SPELL_MISS did not report IMMUNE, not recording immunity",
+                        C_Spell.GetSpellName(pending.spellID) or "Debuff",
+                        pending.targetName or "Unknown")
+                    )
+                  end
                 elseif totalDebuffs < DEBUFF_CAP_THRESHOLD then
-                  -- Few debuffs = likely school immunity, not debuff cap
+                  -- Legacy fallback only: few debuffs may indicate school immunity.
                   -- Use RecordImmunity for proper DBC school lookup (with bleed override)
                   if pending.targetName and pending.targetName ~= "" then
                     CleveRoids.RecordImmunity(pending.targetName, nil, nil, pending.spellID)
@@ -3120,6 +3141,17 @@ delayedTrackingFrame:SetScript("OnUpdate", function()
               DEFAULT_CHAT_FRAME:AddMessage(
                 _string_format("|cffaaaaaa[CC Skip]|r %s has immunity buff - not recording %s immunity",
                   pending.targetName or "Unknown", pending.ccType or "CC")
+              )
+            end
+          elseif CleveRoids.usingSpellMissEvents then
+            -- Aura absence is not proof of immunity when Nampower already
+            -- provides the exact miss reason. Permanent CC immunity is learned
+            -- only by ProcessSpellMissSelf on IMMUNE/IMMUNE2.
+            if debug then
+              DEFAULT_CHAT_FRAME:AddMessage(
+                _string_format("|cffaaaaaa[CC Inconclusive]|r %s missing on %s - authoritative SPELL_MISS did not report IMMUNE, not recording permanent immunity",
+                  pending.spellName or pending.ccType or "CC",
+                  pending.targetName or "Unknown")
               )
             end
           else
@@ -7582,8 +7614,18 @@ local function ParseImmunityCombatLog()
         return
     end
 
-    -- If we have a school but no spell, use the school directly
+    -- If we have a school but no spell, use the school directly only as a
+    -- legacy fallback. With SPELL_MISS available, text-only school messages are
+    -- redundant and less authoritative than the numeric miss event.
     if school and targetName and not spellName then
+        if CleveRoids.usingSpellMissEvents then
+            if CleveRoids.debug then
+                CleveRoids.Print("|cff00aaff[CombatLog Deferred]|r " .. targetName .. " text-only " .. school .. " immunity - SPELL_MISS_SELF is authoritative, not recording from text")
+            end
+            CancelPendingVerification(targetName, nil)
+            return
+        end
+
         -- Check if target is queryable for buff check
         local canQuery = UnitExists("target") and UnitName("target") == targetName
         if canQuery then
