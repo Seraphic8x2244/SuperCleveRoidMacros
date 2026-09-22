@@ -14,12 +14,18 @@ mouseover consolidation and WorldFrame-action suspension semantics.
 
 - Branch: `design/temp-cc-immunity`
 - Base: `main`
-- Branch head before this final status refresh: `ed7776329379853db1d32aea0d6b76e9e8305bed`
-- Branch relation before this final status refresh: 112 ahead / 0 behind `main`
+- Branch head before this status refresh: `532802577f2b5d56b9a9ad88318abe0e58a83170`
+- Branch relation before this status refresh: 120 ahead / 0 behind `main`
 - TOC version: `@project-version@`
 - Latest framework/runtime behavior commit: `c23a80c4cff5d64765b25464b88738fdf93bfa31`
 - Latest immunity UI runtime commit: `6726ce1e39332581ba9145bad954341f0bd439d0`
 - Recent commits:
+  - `53280257` — Track WorldFrame mouse scripts safely
+  - `5a7388cd` — Record protected hook removal
+  - `b24c0f3a` — Document protected hook removal
+  - `93f1f69a` — Remove protected WorldFrame hooks
+  - `7b9112eb` — Record mouseover protected-hook failure
+  - `717da83c` — Record protected hook live-test failure
   - `ed777632` — Unify macro mouseover resolution
   - `49da0702` — Route target validation through mouseover resolver
   - `2be9746b` — Suspend mouseover during WorldFrame actions
@@ -162,9 +168,11 @@ Static-checked:
   `hooksecurefunc` wrapping of the four protected WorldFrame movement/action
   globals;
 - those four hooks were removed in
-  `93f1f69a664907a67d37d78413738e69b3585dd3`; the canonical resolver and
-  pipeline consolidation remain, but WorldFrame suspension is disabled pending
-  a safe observation mechanism.
+  `93f1f69a664907a67d37d78413738e69b3585dd3`;
+- `532802577f2b5d56b9a9ad88318abe0e58a83170` restores WorldFrame
+  suspension through `WorldFrame:HookScript("OnMouseDown"/"OnMouseUp")`
+  without wrapping the protected movement/action globals; this replacement is
+  static-checked but not yet live-tested.
 - @mouseover investigation (no behavior change yet): SCRM maintains a
   priority-ordered synthetic mouseover aggregate (unit-frame sources > native
   UPDATE_MOUSEOVER_UNIT > tooltip) and may call `SetMouseoverUnit` itself;
@@ -201,11 +209,13 @@ Live-tested:
 
 Untested / outstanding:
 
-- @mouseover WorldFrame suspension is implemented in `2be9746b`,
-  `49da0702`, and `ed777632` and remains untested in WoW; live-test normal
-  world/pfUI mouseover, left/right WorldFrame suppression, release/resume,
-  unit-frame click preservation, and parity across `/cast`, `/target`,
-  `IsValidTarget`, and `/pfcast`;
+- @mouseover canonical resolution is implemented in `2be9746b`,
+  `49da0702`, and `ed777632`; the protected-global signal failed live and
+  was removed in `93f1f69a`; the safe WorldFrame-script signal is now
+  implemented in `53280257` and awaits WoW testing, especially
+  `OnMouseUp` reliability after cursor capture, plus normal world/pfUI
+  mouseover, suppression, release/resume, unit-frame click preservation, and
+  parity across `/cast`, `/target`, `IsValidTarget`, and `/pfcast`;
 - live-test the new `6726ce1e` target model: model renders for ordinary NPCs,
   rotates at a comfortable speed, changes promptly with target, and stops while
   the immunity window is hidden;
@@ -258,11 +268,11 @@ Deferred:
 - new public `[immune:*]` grammar;
 - any new polling or high-frequency `OnUpdate` mechanism.
 
-Exact next step: identify and agree a non-tainting WorldFrame action signal
-before resuming the mouseover live-test matrix. The failed protected-global
-hooks are already removed in `93f1f69a`; keep the canonical
-resolver/consolidation work. Continue the
-existing clean-dataset immunity observations separately. Do not expand the mouseover
+Exact next step: live-test the non-tainting WorldFrame-script signal in
+`53280257`, first confirming that `WorldFrame:OnMouseUp` fires reliably
+after LMB camera orbit and RMB mouselook cursor capture, then continue the full
+mouseover parity matrix. Keep the failed protected-global hooks removed and
+continue the existing clean-dataset immunity observations separately. Do not expand the mouseover
 sidequest or start the generalized immunity learner during this testing period.
 The target-model UI and clean-dataset immunity observations also remain awaiting
 reported WoW results.
