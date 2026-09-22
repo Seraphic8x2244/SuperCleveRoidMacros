@@ -175,7 +175,11 @@ Static-checked:
 - user live-tested both LMB and RMB WorldFrame paths successfully: mouseover
   works before the click, is suppressed while either button is held in the 3D
   world even if camera/mouselook movement would put the hidden cursor over a
-  unit, and resumes after release.
+  unit, and resumes after release;
+- pfUI/unit-frame clicks are live-confirmed not to interfere with mouseover;
+- the user's real macro usage is `/cast`, and that path is live-confirmed.
+  Conditional `/target`, `IsValidTarget("mouseover", ...)`, and `/pfcast`
+  remain static-checked/deferred rather than requiring unnecessary live tests.
 - @mouseover investigation (no behavior change yet): SCRM maintains a
   priority-ordered synthetic mouseover aggregate (unit-frame sources > native
   UPDATE_MOUSEOVER_UNIT > tooltip) and may call `SetMouseoverUnit` itself;
@@ -271,8 +275,10 @@ Deferred:
 - new public `[immune:*]` grammar;
 - any new polling or high-frequency `OnUpdate` mechanism.
 
-Exact next step: test unit-frame click/hold preservation, then continue the
-remaining mouseover pipeline-parity checks. Keep the failed protected-global hooks removed and
+Exact next step: return focus to the existing clean-dataset immunity testing.
+The mouseover sidequest's user-facing `/cast` acceptance path is complete;
+leave unused `/target`, `IsValidTarget`, and `/pfcast` live tests deferred
+unless they become relevant. Keep the failed protected-global hooks removed and
 continue the existing clean-dataset immunity observations separately. Do not expand the mouseover
 sidequest or start the generalized immunity learner during this testing period.
 The target-model UI and clean-dataset immunity observations also remain awaiting
