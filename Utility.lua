@@ -2782,6 +2782,9 @@ delayedTrackingFrame:SetScript("OnUpdate", function()
                       CleveRoids_ImmunityData["bleed"] = {}
                     end
                     CleveRoids_ImmunityData["bleed"][pending.targetName] = true
+                    if CleveRoids.NotifyImmunityDataChanged then
+                      CleveRoids.NotifyImmunityDataChanged()
+                    end
 
                     CleveRoids.DebugChanged("bleed_immune_" .. _tostring(pending.targetName),
                       _string_format("|cffff6600[Bleed Immunity]|r %s is immune to bleed (%s) - only %d debuffs on target",
@@ -3432,6 +3435,9 @@ delayedTrackingFrame:SetScript("OnUpdate", function()
                 CleveRoids_ImmunityData[recordSchool] = {}
               end
               CleveRoids_ImmunityData[recordSchool][pending.targetName] = true
+              if CleveRoids.NotifyImmunityDataChanged then
+                CleveRoids.NotifyImmunityDataChanged()
+              end
 
               if debug then
                 local spellNameDebug = C_Spell.GetSpellName(pending.spellID) or "Unknown"
@@ -6066,6 +6072,15 @@ CleveRoids.setbonusModifiers[9907] = { setId = HARUSPEX_SET_ID, items = haruspex
 -- Initialize SavedVariables for immunity tracking
 CleveRoids_ImmunityData = CleveRoids_ImmunityData or {}
 
+-- Event-driven bridge for the optional testing/management UI.  Runtime immunity
+-- code never depends on the UI, but mutations can ask it to refresh if loaded.
+local function NotifyImmunityDataChanged()
+    if CleveRoids.RefreshImmunityUI then
+        CleveRoids.RefreshImmunityUI()
+    end
+end
+CleveRoids.NotifyImmunityDataChanged = NotifyImmunityDataChanged
+
 -- Spell school constants
 local IMMUNITY_SCHOOLS = {
     physical = 1,
@@ -6977,6 +6992,7 @@ local function RecordCCImmunity(npcName, ccType, conditionalBuff, spellName)
             return  -- Already recorded
         end
         CleveRoids_ImmunityData[key][npcName] = immunityData
+        NotifyImmunityDataChanged()
 
         if CleveRoids.debug then
             local spellInfo = spellName and (" (" .. spellName .. ")") or ""
@@ -6988,6 +7004,7 @@ local function RecordCCImmunity(npcName, ccType, conditionalBuff, spellName)
             return  -- Already recorded
         end
         CleveRoids_ImmunityData[key][npcName] = true
+        NotifyImmunityDataChanged()
 
         if CleveRoids.debug then
             local spellInfo = spellName and (" (" .. spellName .. ")") or ""
@@ -7015,6 +7032,7 @@ local function RemoveCCImmunity(npcName, ccType)
 
     if CleveRoids_ImmunityData[key] and CleveRoids_ImmunityData[key][npcName] then
         CleveRoids_ImmunityData[key][npcName] = nil
+        NotifyImmunityDataChanged()
 
         if CleveRoids.debug then
             CleveRoids.Print("|cff00aaff[CC Immunity Removed]|r " .. npcName .. " is no longer immune to " .. ccType .. " (spell landed successfully)")
@@ -7166,6 +7184,7 @@ local function RecordImmunity(npcName, spellName, conditionalBuff, spellID)
             immunityData.spell = spellName
         end
         CleveRoids_ImmunityData[school][npcName] = immunityData
+        NotifyImmunityDataChanged()
 
         if CleveRoids.debug then
             if school == "unknown" then
@@ -7186,6 +7205,7 @@ local function RecordImmunity(npcName, spellName, conditionalBuff, spellID)
 
         if CleveRoids_ImmunityData[school][npcName] ~= immunityData then
             CleveRoids_ImmunityData[school][npcName] = immunityData
+            NotifyImmunityDataChanged()
             if CleveRoids.debug then
                 if school == "unknown" then
                     CleveRoids.Print("|cffff6600Immunity:|r " .. npcName .. " is permanently immune to '" .. spellName .. "' (unknown school)")
@@ -7212,6 +7232,7 @@ local function RemoveSpellImmunity(npcName, school)
 
     if CleveRoids_ImmunityData[school] and CleveRoids_ImmunityData[school][npcName] then
         CleveRoids_ImmunityData[school][npcName] = nil
+        NotifyImmunityDataChanged()
 
         if CleveRoids.debug then
             CleveRoids.Print("|cff00aaff[Immunity Removed]|r " .. npcName .. " is no longer immune to " .. school .. " (spell landed successfully)")
@@ -7591,6 +7612,7 @@ local function ParseImmunityCombatLog()
         -- Permanent immunity
         if CleveRoids_ImmunityData[school][targetName] ~= true then
             CleveRoids_ImmunityData[school][targetName] = true
+            NotifyImmunityDataChanged()
             if CleveRoids.debug then
                 CleveRoids.Print("|cffff6600Immunity:|r " .. targetName .. " is permanently immune to " .. school)
             end
@@ -8152,6 +8174,132 @@ local function FormatImmunityDebugDetail(detail)
     return tostring(detail)
 end
 
+-- Read-only snapshot used by the immunity testing/management UI.  This exposes
+-- existing recorded/live framework state without teaching the UI how to infer
+-- immunity or changing macro-query semantics.
+local IMMUNITY_DEBUG_CC_TYPES = {
+    { type = "cc" },
+    { type = "charm", mechanicID = 1 },
+    { type = "disorient", mechanicID = 2 },
+    { type = "fear", mechanicID = 5 },
+    { type = "root", mechanicID = 7 },
+    { type = "silence", mechanicID = 9 },
+    { type = "sleep", mechanicID = 10 },
+    { type = "snare", mechanicID = 11 },
+    { type = "stun", mechanicID = 12 },
+    { type = "freeze", mechanicID = 13 },
+    { type = "knockout", mechanicID = 14 },
+    { type = "polymorph", mechanicID = 17 },
+    { type = "banish", mechanicID = 18 },
+    { type = "shackle", mechanicID = 20 },
+    { type = "horror", mechanicID = 24 },
+    { type = "daze", mechanicID = 27 },
+}
+
+local IMMUNITY_DEBUG_SPELL_TYPES = {
+    "all", "spell", "physical", "holy", "fire", "nature", "frost", "shadow", "arcane", "bleed"
+}
+
+local function AddRecordedImmunityDebugEntry(list, immunityType, mechanicID, storageKey, targetName, unitId)
+    local bucket = CleveRoids_ImmunityData and CleveRoids_ImmunityData[storageKey]
+    local data = bucket and bucket[targetName]
+    if not data then return end
+
+    local entry = {
+        immunityType = immunityType,
+        mechanicID = mechanicID,
+        source = IMMUNITY_SOURCE.recorded,
+        active = true,
+    }
+
+    if type(data) == "table" then
+        entry.buff = data.buff
+        entry.spell = data.spell
+        if data.buff then
+            entry.source = IMMUNITY_SOURCE.conditional
+            entry.active = CleveRoids.ClassicAPI.GetAuraDataBySpellName(unitId, data.buff, "HELPFUL") and true or false
+        end
+    end
+
+    table.insert(list, entry)
+end
+
+function CleveRoids.GetImmunityDebugSnapshot(unitId)
+    local snapshot = {
+        exists = false,
+        recordedCC = {},
+        recordedSpell = {},
+        liveCC = {},
+        liveSpell = {},
+        explanations = {},
+        legacy = {},
+    }
+
+    if not unitId or not UnitExists(unitId) then
+        return snapshot
+    end
+
+    snapshot.exists = true
+    snapshot.name = UnitName(unitId) or "Unknown"
+    snapshot.creatureEntry = GetCreatureEntry(unitId)
+    snapshot.isPlayer = UnitIsPlayer(unitId) and true or false
+
+    if not snapshot.isPlayer and snapshot.name and snapshot.name ~= "" then
+        for _, info in ipairs(IMMUNITY_DEBUG_CC_TYPES) do
+            local storageKey = info.type == "cc" and "cc" or ("cc_" .. info.type)
+            AddRecordedImmunityDebugEntry(snapshot.recordedCC, info.type, info.mechanicID, storageKey, snapshot.name, unitId)
+        end
+
+        for _, immunityType in ipairs(IMMUNITY_DEBUG_SPELL_TYPES) do
+            AddRecordedImmunityDebugEntry(snapshot.recordedSpell, immunityType, nil, immunityType, snapshot.name, unitId)
+        end
+
+        local unknownBucket = CleveRoids_ImmunityData and CleveRoids_ImmunityData.unknown
+        local unknownData = unknownBucket and unknownBucket[snapshot.name]
+        if unknownData then
+            table.insert(snapshot.legacy, {
+                immunityType = "unknown",
+                source = IMMUNITY_SOURCE.recorded,
+                buff = type(unknownData) == "table" and unknownData.buff or nil,
+                spell = type(unknownData) == "table" and unknownData.spell or nil,
+            })
+        end
+    end
+
+    for _, info in ipairs(IMMUNITY_DEBUG_CC_TYPES) do
+        local immune, source, detail = CheckExactImmunityType(unitId, info.type)
+        if immune and source ~= IMMUNITY_SOURCE.recorded and source ~= IMMUNITY_SOURCE.conditional then
+            table.insert(snapshot.liveCC, {
+                immunityType = info.type,
+                mechanicID = info.mechanicID,
+                source = source,
+                detail = detail,
+            })
+        end
+    end
+
+    for _, immunityType in ipairs(IMMUNITY_DEBUG_SPELL_TYPES) do
+        local immune, source, detail = CheckExactImmunityType(unitId, immunityType)
+        if immune and source ~= IMMUNITY_SOURCE.recorded and source ~= IMMUNITY_SOURCE.conditional then
+            table.insert(snapshot.liveSpell, {
+                immunityType = immunityType,
+                source = source,
+                detail = detail,
+            })
+        end
+    end
+
+    local reflectionAuraID = GetActiveImmunityAura(unitId, "reflect")
+    if reflectionAuraID then
+        table.insert(snapshot.explanations, {
+            source = IMMUNITY_SOURCE.reflection,
+            detail = reflectionAuraID,
+        })
+    end
+
+    return snapshot
+end
+
 -- Explicit on-demand diagnostic. Keeping this separate from macro evaluation
 -- avoids flooding chat when [immune]/[noimmune] conditions are checked often.
 function CleveRoids.DebugCheckImmunity(unitId, spellOrSchool)
@@ -8235,6 +8383,7 @@ function CleveRoids.ClearImmunities(school)
         CleveRoids_ImmunityData = {}
         CleveRoids.Print("Cleared all immunity data")
     end
+    NotifyImmunityDataChanged()
 end
 
 function CleveRoids.AddImmunity(npcName, school, buffName)
@@ -8261,6 +8410,7 @@ function CleveRoids.AddImmunity(npcName, school, buffName)
         CleveRoids_ImmunityData[school][npcName] = true
         CleveRoids.Print("Added: " .. npcName .. " is permanently immune to " .. school)
     end
+    NotifyImmunityDataChanged()
 end
 
 function CleveRoids.RemoveImmunity(npcName, school)
@@ -8272,6 +8422,7 @@ function CleveRoids.RemoveImmunity(npcName, school)
     school = string.lower(school)
     if CleveRoids_ImmunityData[school] and CleveRoids_ImmunityData[school][npcName] then
         CleveRoids_ImmunityData[school][npcName] = nil
+        NotifyImmunityDataChanged()
         CleveRoids.Print("Removed: " .. npcName .. " from " .. school .. " immunities")
     else
         CleveRoids.Print("Not found: " .. npcName .. " in " .. school .. " immunities")
@@ -8355,6 +8506,7 @@ function CleveRoids.ClearCCImmunities(ccType)
         end
         CleveRoids.Print("Cleared all CC immunity data (" .. cleared .. " types)")
     end
+    NotifyImmunityDataChanged()
 end
 
 -- Manually add CC immunity
@@ -8383,6 +8535,7 @@ function CleveRoids.AddCCImmunity(npcName, ccType, buffName)
         CleveRoids_ImmunityData[key][npcName] = true
         CleveRoids.Print("Added: " .. npcName .. " is permanently immune to " .. ccType)
     end
+    NotifyImmunityDataChanged()
 end
 
 -- Remove a CC immunity (command handler with user feedback)
@@ -8397,6 +8550,7 @@ function CleveRoids.RemoveCCImmunityCommand(npcName, ccType)
     local key = "cc_" .. ccType
     if CleveRoids_ImmunityData[key] and CleveRoids_ImmunityData[key][npcName] then
         CleveRoids_ImmunityData[key][npcName] = nil
+        NotifyImmunityDataChanged()
         CleveRoids.Print("Removed: " .. npcName .. " from " .. ccType .. " immunities")
     else
         CleveRoids.Print("Not found: " .. npcName .. " in " .. ccType .. " immunities")
