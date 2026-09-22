@@ -171,8 +171,11 @@ Static-checked:
   `93f1f69a664907a67d37d78413738e69b3585dd3`;
 - `532802577f2b5d56b9a9ad88318abe0e58a83170` restores WorldFrame
   suspension through `WorldFrame:HookScript("OnMouseDown"/"OnMouseUp")`
-  without wrapping the protected movement/action globals; this replacement is
-  static-checked but not yet live-tested.
+  without wrapping the protected movement/action globals;
+- user live-tested the LMB WorldFrame path successfully: mouseover works before
+  the click, is suppressed while LMB is held even if camera movement would put
+  the hidden cursor over a unit, and resumes after release. RMB remains
+  untested.
 - @mouseover investigation (no behavior change yet): SCRM maintains a
   priority-ordered synthetic mouseover aggregate (unit-frame sources > native
   UPDATE_MOUSEOVER_UNIT > tooltip) and may call `SetMouseoverUnit` itself;
@@ -268,10 +271,9 @@ Deferred:
 - new public `[immune:*]` grammar;
 - any new polling or high-frequency `OnUpdate` mechanism.
 
-Exact next step: live-test the non-tainting WorldFrame-script signal in
-`53280257`, first confirming that `WorldFrame:OnMouseUp` fires reliably
-after LMB camera orbit and RMB mouselook cursor capture, then continue the full
-mouseover parity matrix. Keep the failed protected-global hooks removed and
+Exact next step: repeat the successful LMB WorldFrame hold/move/release test
+with RMB mouselook, then continue the remaining unit-frame and pipeline-parity
+checks. Keep the failed protected-global hooks removed and
 continue the existing clean-dataset immunity observations separately. Do not expand the mouseover
 sidequest or start the generalized immunity learner during this testing period.
 The target-model UI and clean-dataset immunity observations also remain awaiting
