@@ -13,6 +13,7 @@ local COLUMN_WIDTH = 138
 local COLUMN_GAP = 6
 local SECTION_WIDTH = 670
 local HEADER_ICON_SIZE = 18
+local MODAL_FRAME_LEVEL_OFFSET = 50
 
 local widgetCounter = 0
 local mainFrame
@@ -263,6 +264,19 @@ local function CreateHorizontalSlider(parent)
     return slider
 end
 
+local function SetHorizontalSectionOffset(section, offset)
+    offset = offset or 0
+    if offset < 0 then offset = 0 end
+    if offset > (section.maxScroll or 0) then
+        offset = section.maxScroll or 0
+    end
+
+    section.offset = offset
+    section.viewport:SetHorizontalScroll(0)
+    section.child:ClearAllPoints()
+    section.child:SetPoint("TOPLEFT", section.viewport, "TOPLEFT", -offset, 0)
+end
+
 local function CreateDataColumn(parent, column, height)
     local frame = CreateFrame("Frame", NewWidgetName("Column"), parent)
     frame:SetWidth(COLUMN_WIDTH)
@@ -319,6 +333,7 @@ local function CreateHorizontalSection(parent, topOffset, height, columns, nameP
     section.child = CreateFrame("Frame", NewWidgetName(namePrefix .. "Child"), section.viewport)
     section.child:SetHeight(height)
     section.child:SetWidth(SECTION_WIDTH)
+    section.child:SetPoint("TOPLEFT", section.viewport, "TOPLEFT", 0, 0)
     section.viewport:SetScrollChild(section.child)
 
     for _, column in ipairs(columns) do
@@ -330,11 +345,9 @@ local function CreateHorizontalSection(parent, topOffset, height, columns, nameP
     section.slider:SetWidth(SECTION_WIDTH)
     section.columns = columns
     section.maxScroll = 0
-    section.scrollInitialized = false
+    section.offset = 0
     section.slider:SetScript("OnValueChanged", function()
-        local maxScroll = section.maxScroll or 0
-        local value = arg1 or 0
-        section.viewport:SetHorizontalScroll(maxScroll - value)
+        SetHorizontalSectionOffset(section, arg1 or 0)
     end)
     return section
 end
@@ -365,11 +378,7 @@ local function RefreshHorizontalSection(section)
         end
     end
 
-    local previousOffset = 0
-    if section.scrollInitialized then
-        previousOffset = (section.maxScroll or 0) - (section.slider:GetValue() or 0)
-        if previousOffset < 0 then previousOffset = 0 end
-    end
+    local previousOffset = section.offset or 0
 
     local contentWidth = x
     if contentWidth < SECTION_WIDTH then
@@ -384,7 +393,7 @@ local function RefreshHorizontalSection(section)
     if maxScroll == 0 then
         section.slider:Hide()
         section.slider:SetValue(0)
-        section.viewport:SetHorizontalScroll(0)
+        SetHorizontalSectionOffset(section, 0)
     else
         section.slider:Show()
         section.slider:SetMinMaxValues(0, maxScroll)
@@ -393,16 +402,11 @@ local function RefreshHorizontalSection(section)
             previousOffset = maxScroll
         end
 
-        local sliderValue
-        if section.scrollInitialized then
-            sliderValue = maxScroll - previousOffset
-        else
-            sliderValue = maxScroll
-            section.scrollInitialized = true
-        end
-
-        section.slider:SetValue(sliderValue)
-        section.viewport:SetHorizontalScroll(maxScroll - sliderValue)
+        -- Leftmost columns are the initial state. Moving the thumb right increases
+        -- the offset and physically moves the column strip left, revealing the
+        -- additional columns on the right.
+        section.slider:SetValue(previousOffset)
+        SetHorizontalSectionOffset(section, previousOffset)
     end
 end
 
@@ -665,6 +669,7 @@ local function CreateClearDialog(parent)
     frame:SetHeight(180)
     frame:SetPoint("CENTER", parent, "CENTER", 0, 20)
     frame:SetFrameStrata("DIALOG")
+    frame:SetFrameLevel(parent:GetFrameLevel() + MODAL_FRAME_LEVEL_OFFSET)
     ApplyBackdrop(frame)
     frame:Hide()
 
@@ -759,6 +764,7 @@ local function CreateHistoryDialog(parent)
     frame:SetHeight(250)
     frame:SetPoint("CENTER", parent, "CENTER", 0, 15)
     frame:SetFrameStrata("DIALOG")
+    frame:SetFrameLevel(parent:GetFrameLevel() + MODAL_FRAME_LEVEL_OFFSET)
     ApplyBackdrop(frame)
     frame:Hide()
     frame.index = 1
