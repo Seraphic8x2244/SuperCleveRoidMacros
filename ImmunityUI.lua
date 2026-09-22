@@ -14,6 +14,9 @@ local COLUMN_GAP = 6
 local SECTION_WIDTH = 670
 local HEADER_ICON_SIZE = 18
 local MODAL_FRAME_LEVEL_OFFSET = 50
+local TARGET_MODEL_WIDTH = 118
+local TARGET_MODEL_HEIGHT = 126
+local TARGET_MODEL_REVOLUTION_SECONDS = 12
 
 local widgetCounter = 0
 local mainFrame
@@ -25,6 +28,10 @@ local spellSection
 local legacyTitle
 local legacyList
 local targetNameText
+local targetInfoText
+local targetModel
+local targetModelRotation = 0
+local targetModelRotating = false
 local targetCCList
 local targetSpellList
 local targetLiveList
@@ -104,6 +111,66 @@ local SPELL_GENERAL_KEYS = {
     bleed = true,
     unknown = true,
 }
+
+local CLASSIFICATION_LABELS = {
+    normal = "Normal",
+    trivial = "Trivial",
+    elite = "Elite",
+    rare = "Rare",
+    rareelite = "Rare Elite",
+    worldboss = "Boss",
+}
+
+local function StopTargetModelRotation()
+    if targetModel then
+        targetModel:SetScript("OnUpdate", nil)
+    end
+    targetModelRotating = false
+end
+
+local function StartTargetModelRotation()
+    if not targetModel or targetModelRotating then return end
+
+    targetModelRotating = true
+    targetModel:SetScript("OnUpdate", function()
+        local elapsed = arg1 or 0
+        local speed = (2 * math.pi) / TARGET_MODEL_REVOLUTION_SECONDS
+        targetModelRotation = targetModelRotation + (elapsed * speed)
+        if targetModelRotation >= (2 * math.pi) then
+            targetModelRotation = targetModelRotation - (2 * math.pi)
+        end
+        targetModel:SetRotation(targetModelRotation)
+    end)
+end
+
+local function HideTargetModel()
+    StopTargetModelRotation()
+    if targetModel then
+        targetModel:Hide()
+    end
+end
+
+local function RefreshTargetModel()
+    if not targetModel or not mainFrame or not mainFrame:IsShown() or not UnitExists("target") then
+        HideTargetModel()
+        return
+    end
+
+    targetModelRotation = 0
+    local ok = pcall(function()
+        targetModel:SetUnit("target")
+        targetModel:SetRotation(targetModelRotation)
+    end)
+
+    if not ok then
+        HideTargetModel()
+        return
+    end
+
+    targetModel:Show()
+    StartTargetModelRotation()
+end
+
 
 local function NewWidgetName(prefix)
     widgetCounter = widgetCounter + 1
@@ -476,25 +543,41 @@ local function RefreshTargetPanel()
 
     if not CleveRoids.GetImmunityDebugSnapshot then
         targetNameText:SetText("Framework debug state unavailable")
+        if targetInfoText then targetInfoText:SetText("") end
+        HideTargetModel()
         return
     end
 
     local snapshot = CleveRoids.GetImmunityDebugSnapshot("target")
     if not snapshot or not snapshot.exists then
         targetNameText:SetText("No current target")
+        if targetInfoText then targetInfoText:SetText("") end
+        HideTargetModel()
         targetCCList:AddMessage("|cff777777(none)|r")
         targetSpellList:AddMessage("|cff777777(none)|r")
         targetLiveList:AddMessage("|cff777777No live immunity state|r")
         return
     end
 
-    local name = snapshot.name or "Unknown"
-    if snapshot.creatureEntry then
-        name = name .. " (" .. tostring(snapshot.creatureEntry) .. ")"
-    elseif snapshot.isPlayer then
-        name = name .. " (player)"
+    targetNameText:SetText(snapshot.name or "Unknown")
+
+    local creatureID = snapshot.creatureEntry and tostring(snapshot.creatureEntry) or "-"
+    local level = UnitLevel("target")
+    local levelText = level and level > 0 and tostring(level) or "??"
+    local creatureType = UnitCreatureType("target") or "Unknown"
+    local classification = UnitClassification("target")
+    local classificationText = CLASSIFICATION_LABELS[classification] or tostring(classification or "Unknown")
+
+    if targetInfoText then
+        targetInfoText:SetText(
+            "Mob ID: " .. creatureID ..
+            "\nLevel: " .. levelText ..
+            "\nType: " .. creatureType ..
+            "\nClass: " .. classificationText
+        )
     end
-    targetNameText:SetText(name)
+
+    RefreshTargetModel()
 
     if table.getn(snapshot.recordedCC) == 0 then
         targetCCList:AddMessage("|cff777777(none)|r")
@@ -890,38 +973,54 @@ local function CreateTargetPanel(parent)
     title:SetPoint("TOP", frame, "TOP", 0, -16)
     title:SetText("Current Target")
 
+    targetModel = CreateFrame("PlayerModel", "CleveRoidsImmunityTargetModel", frame)
+    targetModel:SetWidth(TARGET_MODEL_WIDTH)
+    targetModel:SetHeight(TARGET_MODEL_HEIGHT)
+    targetModel:SetPoint("TOPLEFT", frame, "TOPLEFT", 18, -46)
+    targetModel:SetFrameLevel(frame:GetFrameLevel() + 1)
+    ApplyBackdrop(targetModel)
+    targetModel:Hide()
+
     targetNameText = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-    targetNameText:SetPoint("TOPLEFT", frame, "TOPLEFT", 18, -44)
-    targetNameText:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -18, -44)
+    targetNameText:SetPoint("TOPLEFT", frame, "TOPLEFT", 148, -48)
+    targetNameText:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -18, -48)
     targetNameText:SetHeight(34)
     targetNameText:SetJustifyH("LEFT")
     targetNameText:SetJustifyV("TOP")
     targetNameText:SetText("No current target")
 
+    targetInfoText = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    targetInfoText:SetPoint("TOPLEFT", frame, "TOPLEFT", 148, -84)
+    targetInfoText:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -18, -84)
+    targetInfoText:SetHeight(82)
+    targetInfoText:SetJustifyH("LEFT")
+    targetInfoText:SetJustifyV("TOP")
+    targetInfoText:SetText("")
+
     local ccHeader = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    ccHeader:SetPoint("TOPLEFT", frame, "TOPLEFT", 18, -88)
+    ccHeader:SetPoint("TOPLEFT", frame, "TOPLEFT", 18, -190)
     ccHeader:SetText("Recorded CC")
 
     local spellHeader = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    spellHeader:SetPoint("TOPLEFT", frame, "TOPLEFT", 155, -88)
+    spellHeader:SetPoint("TOPLEFT", frame, "TOPLEFT", 155, -190)
     spellHeader:SetText("Recorded Spell")
 
     targetCCList = CreateMessageList(frame)
-    targetCCList:SetPoint("TOPLEFT", frame, "TOPLEFT", 18, -108)
+    targetCCList:SetPoint("TOPLEFT", frame, "TOPLEFT", 18, -210)
     targetCCList:SetWidth(126)
-    targetCCList:SetHeight(240)
+    targetCCList:SetHeight(148)
 
     targetSpellList = CreateMessageList(frame)
-    targetSpellList:SetPoint("TOPLEFT", frame, "TOPLEFT", 155, -108)
+    targetSpellList:SetPoint("TOPLEFT", frame, "TOPLEFT", 155, -210)
     targetSpellList:SetWidth(126)
-    targetSpellList:SetHeight(240)
+    targetSpellList:SetHeight(148)
 
     local liveHeader = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    liveHeader:SetPoint("TOPLEFT", frame, "TOPLEFT", 18, -365)
+    liveHeader:SetPoint("TOPLEFT", frame, "TOPLEFT", 18, -378)
     liveHeader:SetText("Live / current-state / explanations")
 
     targetLiveList = CreateMessageList(frame)
-    targetLiveList:SetPoint("TOPLEFT", frame, "TOPLEFT", 18, -388)
+    targetLiveList:SetPoint("TOPLEFT", frame, "TOPLEFT", 18, -401)
     targetLiveList:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -18, 28)
 
     targetFrame = frame
@@ -1039,6 +1138,9 @@ local function CreateMainFrame()
 
     frame:SetScript("OnShow", function()
         RefreshAll()
+    end)
+    frame:SetScript("OnHide", function()
+        StopTargetModelRotation()
     end)
 
     frame:Hide()
