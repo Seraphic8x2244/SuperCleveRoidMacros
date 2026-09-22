@@ -6,16 +6,22 @@ CC/DR/immunity rework.
 The durable design and historical reasoning remain in
 `docs/CC-DR-IMMUNITY-REWORK.md`.
 
+The active mouseover/camera-drag sidequest is documented separately in
+`docs/MOUSEOVER-WORLDFRAME-DEV.md`. Use that document as the source of truth for
+mouseover consolidation and WorldFrame-action suspension semantics.
+
 ## Recovery snapshot
 
 - Branch: `design/temp-cc-immunity`
 - Base: `main`
-- Branch head before this handoff refresh: `92ad3365e7bdccd42f6abf5a6c677603bcd3936f`
-- Branch relation before this handoff refresh: 104 ahead / 0 behind `main`
+- Branch head before this handoff refresh: `e795de924f416fcce4cab3cea53f7721cd4f6ac4`
+- Branch relation before this handoff refresh: 106 ahead / 0 behind `main`
 - TOC version: `@project-version@`
 - Latest framework/runtime behavior commit: `c23a80c4cff5d64765b25464b88738fdf93bfa31`
 - Latest immunity UI runtime commit: `6726ce1e39332581ba9145bad954341f0bd439d0`
 - Recent commits:
+  - `e795de92` — Document mouseover WorldFrame sidequest
+  - `7aa64375` — Record mouseover camera-drag investigation
   - `6726ce1e` — Add rotating target model to immunity UI
   - `d737fb87` — Queue target model UI pass
   - `3a6a2f88` — Record historical false immunity provenance
@@ -169,10 +175,10 @@ Live-tested:
 
 Untested / outstanding:
 
-- discuss the @mouseover camera-drag semantics before changing code; desired
-  behavior from live use is that @mouseover is unavailable while left/right
-  WorldFrame camera control is active, allowing the macro to fall through to
-  its normal target clause;
+- @mouseover camera-drag semantics are agreed and documented in
+  `docs/MOUSEOVER-WORLDFRAME-DEV.md`; runtime implementation is still untested
+  and should suspend mouseover only during the actual left/right WorldFrame
+  mouse actions, never by raw LMB/RMB state;
 - live-test the new `6726ce1e` target model: model renders for ordinary NPCs,
   rotates at a comfortable speed, changes promptly with target, and stops while
   the immunity window is hidden;
@@ -225,12 +231,15 @@ Deferred:
 - new public `[immune:*]` grammar;
 - any new polling or high-frequency `OnUpdate` mechanism.
 
-Exact next step: finish the @mouseover camera-drag design
-discussion before changing behavior. If agreed, centralize mouseover resolution
-and suppress it only while the actual left/right WorldFrame camera actions are
-active, then live-test camera drag versus real unit-frame hover. The target-model
-UI and clean-dataset immunity observations remain awaiting live testing. Keep
-the generalized learner deferred.
+Exact next step: implement the first runtime slice from
+`docs/MOUSEOVER-WORLDFRAME-DEV.md`: post-hook the left/right WorldFrame
+Start/Stop functions, add one canonical mouseover resolver that returns nil only
+while either WorldFrame action is active, and route normal conditional
+execution, `IsValidTarget`, conditional `/target`, and the mouseover portion
+of `/pfcast` through it. Do not clear stored mouseover sources and do not gate
+on raw LMB/RMB. Static-check for bypass paths, then publish for live testing.
+The target-model UI and clean-dataset immunity observations remain awaiting live
+testing. Keep the generalized learner deferred.
 
 ## Stage scope
 
