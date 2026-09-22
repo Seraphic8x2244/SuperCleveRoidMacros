@@ -10,10 +10,11 @@ and must not disturb immunity-learning behavior.
 
 - Branch: `design/temp-cc-immunity`
 - Base: `main`
-- Branch head before this document: `7aa64375219e528cc573a5ee338d3f8a834f5edf`
-- Branch relation before this document: 105 ahead / 0 behind `main`
+- Recovery handoff head before implementation: `9e3574c2ae1c6a88d432e7d97343ac582194b688`
+- Branch relation at that handoff: 107 ahead / 0 behind `main`
 - TOC version: `@project-version@`
 - Status: investigation/design agreed; runtime behavior not changed yet.
+- Active next step: implement the smallest runtime slice documented below; immunity behavior remains frozen while live testing continues.
 
 ## User-visible problem
 
