@@ -7008,6 +7008,178 @@ end
 
 CleveRoids.GetSpellImmunityDimensions = GetSpellImmunityDimensions
 
+
+-- Runtime-only compact immunity diagnostic state. This is deliberately separate
+-- from CleveRoids_ImmunityData: yellow/green observations are display state only
+-- and are discarded on reload/logout.
+CleveRoids.immunityDebug = false
+local immunityDebugMobs = {}
+
+local IMMUNITY_DEBUG_LABELS = {
+    charm = "Charm", disorient = "Disorient", disarm = "Disarm", distract = "Distract",
+    fear = "Fear", fumble = "Fumble", root = "Root", pacify = "Pacify",
+    silence = "Silence", sleep = "Sleep", snare = "Snare", stun = "Stun",
+    freeze = "Freeze", knockout = "Knockout", polymorph = "Polymorph",
+    banish = "Banish", shackle = "Shackle", turn = "Turn", horror = "Horror",
+    interrupt = "Interrupt", daze = "Daze",
+    spell = "Spell", physical = "Physical", holy = "Holy", fire = "Fire",
+    nature = "Nature", frost = "Frost", shadow = "Shadow", arcane = "Arcane",
+    bleed = "Bleed",
+}
+
+local function ImmunityDebugKey(targetGuid, targetName)
+    if targetGuid then
+        return "g:" .. tostring(targetGuid)
+    end
+    return targetName and ("n:" .. targetName) or nil
+end
+
+local function GetImmunityDebugMob(targetGuid, targetName, create)
+    local key = ImmunityDebugKey(targetGuid, targetName)
+    local state = key and immunityDebugMobs[key] or nil
+    if not state and targetName then
+        -- Persistence/removal callbacks only have the localized NPC name. Reuse
+        -- an existing GUID-backed debug record rather than creating a duplicate.
+        for _, candidate in pairs(immunityDebugMobs) do
+            if candidate.name == targetName then
+                state = candidate
+                break
+            end
+        end
+    end
+    if not state and create and key then
+        state = { name = targetName or "Unknown", suspects = {}, disproved = {}, lastSignature = nil }
+        immunityDebugMobs[key] = state
+    elseif state and targetName and targetName ~= "" then
+        state.name = targetName
+    end
+    return state
+end
+
+local function IsPersistedImmunityDebugDimension(npcName, dimension)
+    if not npcName or not dimension then return false end
+    local key = CC_IMMUNITY_TYPES[dimension] and ("cc_" .. dimension) or dimension
+    return CleveRoids_ImmunityData[key] and CleveRoids_ImmunityData[key][npcName] ~= nil or false
+end
+
+local function ImmunityDebugPriority(dimension)
+    if CC_IMMUNITY_TYPES[dimension] then return 10 end
+    if dimension == "spell" or dimension == "physical" then return 20 end
+    return 30
+end
+
+local function RenderImmunityDebugState(state, spellID)
+    if not CleveRoids.immunityDebug or not state or not state.name then return end
+
+    local dimensions = {}
+    for dimension in pairs(state.suspects) do
+        dimensions[table.getn(dimensions) + 1] = dimension
+    end
+    for dimension in pairs(state.disproved) do
+        if not state.suspects[dimension] then
+            dimensions[table.getn(dimensions) + 1] = dimension
+        end
+    end
+    if table.getn(dimensions) == 0 then return end
+
+    table.sort(dimensions, function(a, b)
+        local ap, bp = ImmunityDebugPriority(a), ImmunityDebugPriority(b)
+        if ap ~= bp then return ap < bp end
+        return (IMMUNITY_DEBUG_LABELS[a] or a) < (IMMUNITY_DEBUG_LABELS[b] or b)
+    end)
+
+    local rendered = {}
+    local signature = {}
+    for _, dimension in ipairs(dimensions) do
+        local color, stateCode
+        if IsPersistedImmunityDebugDimension(state.name, dimension) then
+            color, stateCode = "|cffff4040", "r"
+        elseif state.disproved[dimension] then
+            color, stateCode = "|cff40ff40", "g"
+        else
+            color, stateCode = "|cffffff40", "y"
+        end
+        local label = IMMUNITY_DEBUG_LABELS[dimension] or dimension
+        rendered[table.getn(rendered) + 1] = color .. label .. "|r"
+        signature[table.getn(signature) + 1] = dimension .. ":" .. stateCode
+    end
+
+    local signatureText = table.concat(signature, ",")
+    if signatureText == state.lastSignature then return end
+    state.lastSignature = signatureText
+
+    local icon = ""
+    if spellID and C_Spell and C_Spell.GetSpellTexture then
+        local texture = C_Spell.GetSpellTexture(spellID)
+        if texture then
+            icon = " |T" .. texture .. ":14:14:0:0|t"
+        end
+    end
+    DEFAULT_CHAT_FRAME:AddMessage(state.name .. icon .. " | " .. table.concat(rendered, ", "))
+end
+
+local function AddImmunityDebugSpellDimensions(state, spellID, includeCC)
+    local _, ordered = GetSpellImmunityDimensions(spellID)
+    for _, dimension in ipairs(ordered) do
+        -- "cc" and "all" are composition dimensions, not useful hypotheses from
+        -- one IMMUNE result. Exact CC, school, Spell/Physical and Bleed are.
+        if dimension ~= "cc" and dimension ~= "all"
+           and (includeCC or not CC_IMMUNITY_TYPES[dimension]) then
+            state.suspects[dimension] = true
+        end
+    end
+end
+
+function CleveRoids.SetImmunityDebugEnabled(enabled)
+    CleveRoids.immunityDebug = enabled and true or false
+    immunityDebugMobs = {}
+end
+
+function CleveRoids.ImmunityDebugObserveImmune(targetGuid, targetName, spellID)
+    if not CleveRoids.immunityDebug or not targetName or not spellID then return end
+    local state = GetImmunityDebugMob(targetGuid, targetName, true)
+    if not state then return end
+    AddImmunityDebugSpellDimensions(state, spellID, true)
+    RenderImmunityDebugState(state, spellID)
+end
+
+function CleveRoids.ImmunityDebugObserveSpellSuccess(targetGuid, targetName, spellID)
+    if not CleveRoids.immunityDebug or not targetName or not spellID then return end
+    local state = GetImmunityDebugMob(targetGuid, targetName, false)
+    if not state then return end
+
+    local _, ordered = GetSpellImmunityDimensions(spellID)
+    local changed = false
+    for _, dimension in ipairs(ordered) do
+        -- SPELL_GO hit proves the action's school/family was accepted, but CC
+        -- effect landing is proven by the existing affliction/removal path.
+        if dimension ~= "cc" and dimension ~= "all" and not CC_IMMUNITY_TYPES[dimension]
+           and state.suspects[dimension] and not state.disproved[dimension] then
+            state.disproved[dimension] = true
+            changed = true
+        end
+    end
+    if changed then
+        RenderImmunityDebugState(state, spellID)
+    end
+end
+
+function CleveRoids.ImmunityDebugMarkDisproved(npcName, dimension, spellID)
+    if not CleveRoids.immunityDebug or not npcName or not dimension then return end
+    local state = GetImmunityDebugMob(nil, npcName, false)
+    if not state or not state.suspects[dimension] or state.disproved[dimension] then return end
+    state.disproved[dimension] = true
+    RenderImmunityDebugState(state, spellID)
+end
+
+function CleveRoids.ImmunityDebugRefresh(npcName, spellID)
+    if not CleveRoids.immunityDebug or not npcName then return end
+    local state = GetImmunityDebugMob(nil, npcName, false)
+    if state then
+        RenderImmunityDebugState(state, spellID)
+    end
+end
+
 -- NPC immunity learning only needs DR groups that can actually diminish creatures.
 -- vMaNGOS 1.12 marks controlled stun, triggered stun, and Kidney Shot as DRTYPE_ALL;
 -- the other staged DR groups are player-only and must not suppress NPC immunity learning.
@@ -7113,6 +7285,7 @@ local function RecordCCImmunity(npcName, ccType, conditionalBuff, spellName)
         end
         CleveRoids_ImmunityData[key][npcName] = immunityData
         NotifyImmunityDataChanged()
+        CleveRoids.ImmunityDebugRefresh(npcName)
 
         if CleveRoids.debug then
             local spellInfo = spellName and (" (" .. spellName .. ")") or ""
@@ -7125,6 +7298,7 @@ local function RecordCCImmunity(npcName, ccType, conditionalBuff, spellName)
         end
         CleveRoids_ImmunityData[key][npcName] = true
         NotifyImmunityDataChanged()
+        CleveRoids.ImmunityDebugRefresh(npcName)
 
         if CleveRoids.debug then
             local spellInfo = spellName and (" (" .. spellName .. ")") or ""
@@ -7153,6 +7327,7 @@ local function RemoveCCImmunity(npcName, ccType)
     if CleveRoids_ImmunityData[key] and CleveRoids_ImmunityData[key][npcName] then
         CleveRoids_ImmunityData[key][npcName] = nil
         NotifyImmunityDataChanged()
+        CleveRoids.ImmunityDebugMarkDisproved(npcName, ccType)
 
         if CleveRoids.debug then
             CleveRoids.Print("|cff00aaff[CC Immunity Removed]|r " .. npcName .. " is no longer immune to " .. ccType .. " (spell landed successfully)")
@@ -7305,6 +7480,7 @@ local function RecordImmunity(npcName, spellName, conditionalBuff, spellID)
         end
         CleveRoids_ImmunityData[school][npcName] = immunityData
         NotifyImmunityDataChanged()
+        CleveRoids.ImmunityDebugRefresh(npcName, spellID)
 
         if CleveRoids.debug then
             if school == "unknown" then
@@ -7326,6 +7502,7 @@ local function RecordImmunity(npcName, spellName, conditionalBuff, spellID)
         if CleveRoids_ImmunityData[school][npcName] ~= immunityData then
             CleveRoids_ImmunityData[school][npcName] = immunityData
             NotifyImmunityDataChanged()
+            CleveRoids.ImmunityDebugRefresh(npcName, spellID)
             if CleveRoids.debug then
                 if school == "unknown" then
                     CleveRoids.Print("|cffff6600Immunity:|r " .. npcName .. " is permanently immune to '" .. spellName .. "' (unknown school)")
@@ -7353,6 +7530,7 @@ local function RemoveSpellImmunity(npcName, school)
     if CleveRoids_ImmunityData[school] and CleveRoids_ImmunityData[school][npcName] then
         CleveRoids_ImmunityData[school][npcName] = nil
         NotifyImmunityDataChanged()
+        CleveRoids.ImmunityDebugMarkDisproved(npcName, school)
 
         if CleveRoids.debug then
             CleveRoids.Print("|cff00aaff[Immunity Removed]|r " .. npcName .. " is no longer immune to " .. school .. " (spell landed successfully)")
@@ -9179,6 +9357,10 @@ local function ProcessSpellMissSelf(spellId, targetGuid, missInfo)
                 return
             end
 
+            -- Diagnostic-only hypotheses: all existing immunity safeguards above
+            -- have passed, so this IMMUNE/IMMUNE2 is authoritative enough to display.
+            CleveRoids.ImmunityDebugObserveImmune(targetGuid, targetName, spellId)
+
             -- Record as permanent immunity
             if immunityType then
                 RecordCCImmunity(targetName, immunityType, nil, spellName)
@@ -9552,6 +9734,21 @@ reactiveFrame:SetScript("OnEvent", function()
         -- SPELL_CAST_EVENT for the same spellId (overwritten) or expire naturally.
         pending.consumed = true
         pending.consumedAt = GetTime()
+
+        if numHit > 0 then
+            local successGuid = targetGuid
+            if not successGuid or successGuid == "0x0000000000000000" then
+                successGuid = pending.targetGuid
+            end
+            if successGuid then
+                successGuid = CleveRoids.NormalizeGUID(successGuid)
+                local successName = lib.guidToName[successGuid]
+                if not successName and CleveRoids.GetGUID("target") == successGuid then
+                    successName = UnitName("target")
+                end
+                CleveRoids.ImmunityDebugObserveSpellSuccess(successGuid, successName, spellId)
+            end
+        end
 
         -- Skip channels and targeting spells (not melee/ranged attacks)
         -- CastType: NORMAL=1, NON_GCD=2, ON_SWING=3, CHANNEL=4, TARGETING=5, TARGETING_NON_GCD=6
