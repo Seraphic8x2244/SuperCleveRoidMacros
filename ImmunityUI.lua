@@ -890,7 +890,7 @@ local function CreateMainFrame()
     local frame = CreateFrame("Frame", "CleveRoidsImmunityManagementFrame", UIParent)
     frame:SetWidth(MAIN_WIDTH)
     frame:SetHeight(MAIN_HEIGHT)
-    frame:SetPoint("CENTER", UIParent, "CENTER", -145, 0)
+    -- Center the combined main + attached target footprint. At 1024-wide UI scale\n    -- this leaves a small margin on both sides instead of clipping the target border.\n    frame:SetPoint("CENTER", UIParent, "CENTER", -152, 0)
     frame:SetFrameStrata("DIALOG")
     ApplyBackdrop(frame)
     if frame.SetClampedToScreen then
