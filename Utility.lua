@@ -3347,9 +3347,11 @@ delayedTrackingFrame:SetScript("OnUpdate", function()
           end
         end
 
-        -- SPELL_GO confirmed miss - debuff definitely didn't land
+        -- SPELL_GO confirmed miss - debuff definitely didn't land, but SPELL_GO
+        -- does not say why. When SPELL_MISS is available the exact reason remains
+        -- authoritative and this path must not infer immunity.
         if pending.spellGoMissed then
-          -- Leave debuffVerified=false → falls through to immunity recording
+          -- Leave debuffVerified=false so the debuff is not tracked as landed.
           if debug then
             local spellNameDebug = C_Spell.GetSpellName(pending.spellID) or "Shared Debuff"
             DEFAULT_CHAT_FRAME:AddMessage(
