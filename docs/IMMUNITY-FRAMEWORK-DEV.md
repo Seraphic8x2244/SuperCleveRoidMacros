@@ -14,7 +14,7 @@ mouseover consolidation and WorldFrame-action suspension semantics.
 
 - Branch: `design/temp-cc-immunity`
 - Base: `main`
-- Branch head before this status refresh: `aa2b761d1c45d1a28c8354b2f13f216a21403569`
+- Branch head before this status refresh: `20f76243d4e1eb1262c0b0a249a4c03d666e8ad8`
 - Branch relation before this status refresh: 140 ahead / 0 behind `main`
 - TOC version: `@project-version@`
 - Latest framework/runtime behavior commit: `c23a80c4cff5d64765b25464b88738fdf93bfa31`
@@ -123,14 +123,17 @@ mouseover consolidation and WorldFrame-action suspension semantics.
   to the same numeric decision/reason values with fields from the compact code
   table. No learner branch, safeguard, persistence/removal call, conditional,
   or journal schema changed. No GitHub status checks are configured.
-- Untested: addon load after the scope correction, persistent immunitydebug
-  enable/clear plumbing, and all raid acceptance items.
+- Runtime result: client start with the scope correction produced no Lua
+  errors. The prior downstream `GetGUID` and `splitString` nil failures are
+  therefore closed as a load-regression symptom.
+- Untested: persistent immunitydebug enable/disable persistence, explicit
+  journal clear behavior, journal contents, and all raid acceptance items.
 - Deferred: all previously deferred generalized learner/persistence work remains
   deferred.
-- Exact next step: install/update to `aa2b761d` (or later) and perform only a
-  plain `/reload` smoke test. Confirm that the prior `GetGUID` and
-  `splitString` nil errors are gone before doing any immunitydebug plumbing or
-  scarce raid testing.
+- Exact next step: verify only the diagnostic plumbing: enable immunitydebug,
+  confirm the enabled state survives a client restart, then run
+  `/cleveroid immunitydebug clear` and confirm the journal event array is empty.
+  Do not begin scarce raid observations until those two checks pass.
 
 ### Immunitydebug revision — snooper + persistent test journal — 2026-09-23
 
