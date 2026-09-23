@@ -5711,6 +5711,7 @@ SlashCmdList["CLEVEROID"] = function(msg)
         DEFAULT_CHAT_FRAME:AddMessage("refresh (updates per second) = " .. CleveRoidMacros.refresh .. " (Default: 5)")
         DEFAULT_CHAT_FRAME:AddMessage("macrocheck (syntax checker) = " .. CleveRoidMacros.macrocheck .. " (Default: 1)")
         DEFAULT_CHAT_FRAME:AddMessage("debug (show learning messages) = " .. (CleveRoids.debug and "1" or "0") .. " (Default: 0)")
+        DEFAULT_CHAT_FRAME:AddMessage("immunitydebug (persistent learner diagnostics) = " .. (CleveRoids.immunityDebug and "1" or "0") .. " (Default: 0)")
         DEFAULT_CHAT_FRAME:AddMessage(" ")
         CleveRoids.Print("Available Commands:")
         DEFAULT_CHAT_FRAME:AddMessage("/cleveroid realtime 0 or 1 - Force realtime updates")
@@ -5719,7 +5720,7 @@ SlashCmdList["CLEVEROID"] = function(msg)
         DEFAULT_CHAT_FRAME:AddMessage("/cleveroid learn <spellID> <duration> - Manually set spell duration")
         DEFAULT_CHAT_FRAME:AddMessage("/cleveroid forget <spellID|all> - Forget learned duration(s)")
         DEFAULT_CHAT_FRAME:AddMessage("/cleveroid debug [0|1] - Toggle learning debug messages")
-    DEFAULT_CHAT_FRAME:AddMessage("/cleveroid immunitydebug [0|1] - Toggle compact immunity diagnostics")
+        DEFAULT_CHAT_FRAME:AddMessage("/cleveroid immunitydebug [0|1|clear] - Toggle persistent learner diagnostics or clear its journal")
         DEFAULT_CHAT_FRAME:AddMessage("|cffffaa00Spell Schools:|r")
         DEFAULT_CHAT_FRAME:AddMessage('/cleveroid listschools - List all learned spell schools')
         DEFAULT_CHAT_FRAME:AddMessage('/cleveroid clearschools - Clear learned spell school data')
@@ -5857,8 +5858,18 @@ SlashCmdList["CLEVEROID"] = function(msg)
         return
     end
 
-    -- immunitydebug (runtime-only compact immunity diagnostics)
+    -- immunitydebug (persistent preference + machine-oriented learner journal)
     if cmd == "immunitydebug" then
+        if string.lower(val or "") == "clear" then
+            if CleveRoids.ClearImmunityDebugJournal then
+                CleveRoids.ClearImmunityDebugJournal()
+                CleveRoids.Print("immunitydebug journal cleared")
+            else
+                CleveRoids.Print("immunitydebug journal unavailable")
+            end
+            return
+        end
+
         local num = tonumber(val)
         local enabled
         if num == 0 or num == 1 then
