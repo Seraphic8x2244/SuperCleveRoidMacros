@@ -14,12 +14,13 @@ mouseover consolidation and WorldFrame-action suspension semantics.
 
 - Branch: `design/temp-cc-immunity`
 - Base: `main`
-- Branch head before this status refresh: `ad653f5401eb8c67e97e7f3e8a80d3a6934b307b`
-- Branch relation before this status refresh: 137 ahead / 0 behind `main`
+- Branch head before this status refresh: `2cc9ae9275132c3f13cb421b8e0e4237f4822450`
+- Branch relation before this status refresh: 138 ahead / 0 behind `main`
 - TOC version: `@project-version@`
 - Latest framework/runtime behavior commit: `c23a80c4cff5d64765b25464b88738fdf93bfa31`
 - Latest immunity UI runtime commit: `6726ce1e39332581ba9145bad954341f0bd439d0`
 - Recent commits:
+  - `2cc9ae92` — Document immunitydebug snooper journal
   - `ad653f54` — Save immunitydebug journal
   - `602a3c27` — Persist immunitydebug controls
   - `44651eed` — Make immunitydebug a learner snooper
@@ -93,6 +94,33 @@ mouseover consolidation and WorldFrame-action suspension semantics.
   cheap plumbing checks first (enable persistence across reload/login and
   explicit journal clear), then begin the scarce live immunity acceptance
   observations against a deliberately clean test dataset.
+
+### Runtime regression — Utility.lua local-variable limit — 2026-09-23
+
+- First WoW load of the corrected immunitydebug branch failed before any
+  immunity acceptance testing. The visible downstream errors were
+  `CleveRoids.GetGUID` nil in `Extensions/CursiveCustomSpells.lua` and
+  `Extensions/Mouseover/GameTooltip.lua`, plus `CleveRoids.splitString` nil
+  in `Core.lua`.
+- Both missing helpers are defined in `Utility.lua`. Because later TOC files
+  continued loading, the shared failure shape points to `Utility.lua` failing
+  to compile/load rather than three independent call-site regressions.
+- Static count shows the handoff revision had 186 column-zero/top-level
+  `local` declarations in `Utility.lua`; the corrected diagnostic revision
+  has 210. The added immunitydebug constants/helper functions are chunk-scope
+  locals and therefore can push Vanilla Lua over its active-local compiler
+  limit, which would prevent the whole file from executing and produce exactly
+  the observed downstream nil helpers.
+- Completed before this checkpoint: screenshot triage and source/load-order
+  verification only. No immunity learner semantics have been changed.
+- Untested: the proposed local-scope correction, addon load, persistent
+  immunitydebug enable/clear plumbing, and all raid acceptance items.
+- Deferred: all previously deferred generalized learner/persistence work remains
+  deferred.
+- Exact next step: scope the immunitydebug-only locals inside a `do ... end`
+  block while retaining a single compact code table for the later snooper call
+  sites, then static-review that no learner logic changed and ask for a plain
+  `/reload` smoke test before resuming immunitydebug plumbing checks.
 
 ### Immunitydebug revision — snooper + persistent test journal — 2026-09-23
 
