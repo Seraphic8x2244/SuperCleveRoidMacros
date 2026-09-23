@@ -62,7 +62,150 @@ mouseover consolidation and WorldFrame-action suspension semantics.
 - Static-checked: branch diff from the handoff changes only `Utility.lua`, `Core.lua`, and this handoff document; no SavedVariables declaration/schema, conditional grammar, learner decision, immunity data layout, polling loop, or generalized learner was added. No GitHub CI/status checks are configured for the implementation head.
 - Untested: all eight immunitydebug acceptance items below remain live-pending until user testing; do not mark them passed from static inspection.
 - Deferred: generalized learner/evidence persistence, Mob-ID storage migration, inferred broad-immunity persistence, and new public immunity grammar.
-- Exact next step: publish the branch, then live-test the immunitydebug acceptance matrix against a clean immunity dataset, beginning with `/cleveroid immunitydebug 1`, one authoritative IMMUNE/IMMUNE2 observation, duplicate suppression, contrary success evidence, and `/cleveroid immunitydebug 0`.
+- Exact next step: revise immunitydebug into a pure snooper over the existing learner, add the persistent enable preference and versioned machine-oriented diagnostic journal described below, document the decoder, then static-review before any scarce raid testing.
+
+### Immunitydebug revision — snooper + persistent test journal — 2026-09-23
+
+The first immunitydebug implementation is **not ready for raid testing as-is**.
+Its runtime `suspects` / `disproved` model independently interprets evidence.
+That violates the revised design below and must be corrected before scarce,
+non-repeatable raid observations are collected.
+
+#### Defining principle
+
+**Immunitydebug is a snooper/instrumentation layer over the real immunity
+learner. It is not a second learner.**
+
+The debug feature must observe the existing learner's real inputs, safeguards,
+decision path, persistence/removal calls, and resulting authoritative immunity
+state. It must not independently classify evidence into its own immunity
+hypotheses, maintain a parallel immunity model, or reach conclusions the learner
+itself has not reached.
+
+Consequences:
+
+- existing `CleveRoids_ImmunityData` is always the source of truth for learned
+  immunity knowledge and therefore for red/current-known state;
+- debug may expose unresolved/transient learner state only when that state
+  actually exists in the learner; it must not invent yellow/green state by
+  running a parallel inference path;
+- after reload/login, current learned knowledge is reconstructed naturally from
+  the real immunity records, not from debug state;
+- debug on/off must have zero effect on what the learner learns, removes,
+  confirms, rejects, queries, or exposes through conditionals;
+- instrument the learner at meaningful decision points rather than duplicating
+  its classification logic.
+
+#### Persist the debug enable setting
+
+For the raid-testing campaign, immunitydebug should remain enabled across
+`/reload`, logout, and login until explicitly disabled with
+`/cleveroid immunitydebug 0`.
+
+This is a diagnostic preference only. Persisting the enable flag must not
+persist a second immunity model.
+
+#### Persistent machine-oriented diagnostic journal
+
+Add a dedicated SavedVariables diagnostic journal, separate from
+`CleveRoids_ImmunityData` and separate from real learner state.
+
+The journal exists because raid observations can be lockout-limited and
+non-repeatable. Its purpose is to preserve enough raw evidence and learner
+decision information for later inspection even after reload/logout or across
+several days of testing.
+
+The journal is primarily for development analysis, not human readability:
+
+- include an explicit schema/version key (for example `v = 1`);
+- use compact deterministic field names and event/decision/reason codes;
+- document the complete decoder in this file so a future development chat can
+  decode a pasted SavedVariables section without relying on conversation
+  memory;
+- use the real numeric values wherever they already exist: numeric Mob ID,
+  spell ID, CC/mechanic ID, school mask/category ID, miss result, aura ID, etc.;
+- compact codes are appropriate only for diagnostic concepts such as journal
+  event type, learner decision, safeguard/rejection reason, and state
+  transition.
+
+Do not merely journal the rendered chat line. Record the evidence and the
+learner's actual handling of it. Where available, a record should preserve:
+
+```text
+absolute timestamp
+session identifier / session-relative time where useful
+target GUID
+numeric Mob ID
+localized NPC name (supplemental display/debug identity)
+spell ID
+raw authoritative event/result
+learner-relevant immunity dimensions/types using native numeric IDs where possible
+safeguards actually checked and the resulting reason/decision
+real persistence/removal action, if any
+authoritative before/after immunity state where useful
+```
+
+Rejected/ignored evidence is important and must also be journalled when it
+passes through the instrumented learner path. Examples include temporary
+immunity aura, TempCC, death, DR, reflection/protection guard, split-CC handling,
+and inconclusive/no-query-unit cases. This allows later diagnosis of false
+negatives as well as false positives.
+
+The journal should be append-oriented during this testing phase and should not
+be aggressively pruned. A retention policy can be designed after the framework
+is validated.
+
+Provide an explicit clear operation (planned shape:
+`/cleveroid immunitydebug clear`) so a clean test dataset can be deliberately
+started. A dump/copy UI is optional; pasting the SavedVariables journal itself
+is sufficient as long as the schema is documented.
+
+#### Relationship between chat colors and learner state
+
+The existing red/yellow/green presentation may remain useful, but its meaning
+must be driven by the learner rather than by debug-owned inference:
+
+- **red**: real current persisted immunity data records the category as immune;
+- **yellow**: only if the real learner itself has a relevant unresolved/candidate
+  state at that point; debug must not create one merely for display;
+- **green**: only when the learner's actual authoritative processing positively
+  disproves/removes a relevant immunity state; debug must not independently
+  infer a disproval from generic success.
+
+If the current learner has no persistent/transient concept corresponding to a
+yellow or green state, the snooper should report the actual learner decision
+instead of manufacturing that state.
+
+#### Scope boundary
+
+This revision intentionally permits **diagnostic** SavedVariables for the
+enable preference and journal. It does not authorize any change to the schema
+or semantics of `CleveRoids_ImmunityData`, learner evidence persistence,
+generalized comparative learning, inferred broad-immunity persistence, Mob-ID
+migration of real immunity storage, or public conditional grammar.
+
+No polling or high-frequency `OnUpdate` is authorized.
+
+#### Required correction before live raid testing
+
+Audit and revise commits `d3efe5de` / `1d1b8116` before using immunitydebug
+for raid evidence:
+
+1. remove or neutralize the debug-owned `suspects` / `disproved` learning
+   model and any independent success-based inference;
+2. retain useful presentation only where it reflects real learner state;
+3. instrument the existing learner's authoritative evidence/safeguard/decision
+   path;
+4. add the persistent enable preference;
+5. add the versioned machine-oriented SavedVariables journal and document its
+   exact field/code dictionary here as part of implementation;
+6. add explicit journal clear handling;
+7. static-review that debug enabled vs disabled cannot change learner outcomes;
+8. only then begin the scarce live raid acceptance tests.
+
+All previous immunitydebug acceptance items remain **live-pending**. The old
+requirements that the debug flag/state be entirely runtime-only and that no
+immunitydebug SavedVariables exist are superseded by this revision.
 
 ### Resume status — 2026-09-22
 
