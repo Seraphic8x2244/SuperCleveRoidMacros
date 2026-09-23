@@ -14,12 +14,14 @@ mouseover consolidation and WorldFrame-action suspension semantics.
 
 - Branch: `design/temp-cc-immunity`
 - Base: `main`
-- Branch head before this status refresh: `2cc9ae9275132c3f13cb421b8e0e4237f4822450`
-- Branch relation before this status refresh: 138 ahead / 0 behind `main`
+- Branch head before this status refresh: `aa2b761d1c45d1a28c8354b2f13f216a21403569`
+- Branch relation before this status refresh: 140 ahead / 0 behind `main`
 - TOC version: `@project-version@`
 - Latest framework/runtime behavior commit: `c23a80c4cff5d64765b25464b88738fdf93bfa31`
 - Latest immunity UI runtime commit: `6726ce1e39332581ba9145bad954341f0bd439d0`
 - Recent commits:
+  - `aa2b761d` — Scope immunitydebug locals for Vanilla Lua
+  - `63ce50fd` — Record immunitydebug load regression
   - `2cc9ae92` — Document immunitydebug snooper journal
   - `ad653f54` — Save immunitydebug journal
   - `602a3c27` — Persist immunitydebug controls
@@ -111,16 +113,24 @@ mouseover consolidation and WorldFrame-action suspension semantics.
   locals and therefore can push Vanilla Lua over its active-local compiler
   limit, which would prevent the whole file from executing and produce exactly
   the observed downstream nil helpers.
-- Completed before this checkpoint: screenshot triage and source/load-order
-  verification only. No immunity learner semantics have been changed.
-- Untested: the proposed local-scope correction, addon load, persistent
-  immunitydebug enable/clear plumbing, and all raid acceptance items.
+- Correction implemented in `aa2b761d`: all immunitydebug-only constants,
+  labels, journal helpers, and rendering helpers are now scoped inside one
+  `do ... end` block. A single `IMMUNITY_DEBUG_CODE` table remains at chunk
+  scope for the later learner snooper call sites.
+- Static review: column-zero/chunk-local declarations fall from 210 in the
+  broken revision to 179 after the correction (the pre-revision handoff had
+  186). The diff changes only diagnostic scoping and replaces later references
+  to the same numeric decision/reason values with fields from the compact code
+  table. No learner branch, safeguard, persistence/removal call, conditional,
+  or journal schema changed. No GitHub status checks are configured.
+- Untested: addon load after the scope correction, persistent immunitydebug
+  enable/clear plumbing, and all raid acceptance items.
 - Deferred: all previously deferred generalized learner/persistence work remains
   deferred.
-- Exact next step: scope the immunitydebug-only locals inside a `do ... end`
-  block while retaining a single compact code table for the later snooper call
-  sites, then static-review that no learner logic changed and ask for a plain
-  `/reload` smoke test before resuming immunitydebug plumbing checks.
+- Exact next step: install/update to `aa2b761d` (or later) and perform only a
+  plain `/reload` smoke test. Confirm that the prior `GetGUID` and
+  `splitString` nil errors are gone before doing any immunitydebug plumbing or
+  scarce raid testing.
 
 ### Immunitydebug revision — snooper + persistent test journal — 2026-09-23
 
