@@ -14,12 +14,13 @@ mouseover consolidation and WorldFrame-action suspension semantics.
 
 - Branch: `design/temp-cc-immunity`
 - Base: `main`
-- Branch head before this status refresh: `d17a5e06aa64a27cb8617c9a7e728b8430da0b3d`
-- Branch relation before this status refresh: 142 ahead / 0 behind `main`
+- Branch head before this status refresh: `90cdffc8399504a53a2e8d8218252e7aef65a211`
+- Branch relation before this status refresh: 143 ahead / 0 behind `main`
 - TOC version: `@project-version@`
 - Latest framework/runtime behavior commit: `c23a80c4cff5d64765b25464b88738fdf93bfa31`
 - Latest immunity UI runtime commit: `6726ce1e39332581ba9145bad954341f0bd439d0`
 - Recent commits:
+  - `90cdffc8` — Handoff immunitydebug live sampling
   - `d17a5e06` — Record clean immunitydebug client load
   - `20f76243` — Record immunitydebug load fix
   - `aa2b761d` — Scope immunitydebug locals for Vanilla Lua
@@ -131,10 +132,7 @@ mouseover consolidation and WorldFrame-action suspension semantics.
   or journal schema changed. No GitHub status checks are configured.
 - Runtime result: client start with the scope correction produced no Lua
   errors. The prior downstream `GetGUID` and `splitString` nil failures are
-  therefore closed as a load-regression symptom.
-- Runtime result: client start with the scope correction produced no Lua
-  errors. The prior downstream `GetGUID` and `splitString` nil failures are
-  closed.
+  closed as a load-regression symptom.
 - Untested: diagnostic journal contents against real IMMUNE events, persistence
   of the enabled preference across a later restart, explicit-clear persistence
   in the SavedVariables file, and all individual immunitydebug acceptance
