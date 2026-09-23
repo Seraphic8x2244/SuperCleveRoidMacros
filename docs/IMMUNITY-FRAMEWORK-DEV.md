@@ -14,12 +14,14 @@ mouseover consolidation and WorldFrame-action suspension semantics.
 
 - Branch: `design/temp-cc-immunity`
 - Base: `main`
-- Branch head before this status refresh: `20f76243d4e1eb1262c0b0a249a4c03d666e8ad8`
-- Branch relation before this status refresh: 140 ahead / 0 behind `main`
+- Branch head before this status refresh: `d17a5e06aa64a27cb8617c9a7e728b8430da0b3d`
+- Branch relation before this status refresh: 142 ahead / 0 behind `main`
 - TOC version: `@project-version@`
 - Latest framework/runtime behavior commit: `c23a80c4cff5d64765b25464b88738fdf93bfa31`
 - Latest immunity UI runtime commit: `6726ce1e39332581ba9145bad954341f0bd439d0`
 - Recent commits:
+  - `d17a5e06` — Record clean immunitydebug client load
+  - `20f76243` — Record immunitydebug load fix
   - `aa2b761d` — Scope immunitydebug locals for Vanilla Lua
   - `63ce50fd` — Record immunitydebug load regression
   - `2cc9ae92` — Document immunitydebug snooper journal
@@ -92,10 +94,14 @@ mouseover consolidation and WorldFrame-action suspension semantics.
 - Deferred: generalized learner/evidence persistence, Mob-ID migration of real
   immunity storage, inferred broad-immunity persistence, new public immunity
   grammar, diagnostic retention/pruning policy, and any dump/copy UI.
-- Exact next step: after this static-reviewed handoff is committed, do only the
-  cheap plumbing checks first (enable persistence across reload/login and
-  explicit journal clear), then begin the scarce live immunity acceptance
-  observations against a deliberately clean test dataset.
+- Exact next step: collect a small clean live sample against mobs known to be
+  genuinely immune. Clear only the diagnostic journal first, ensure
+  immunitydebug is enabled, exercise representative exact-CC and
+  school/general immunity cases where available, then provide the complete
+  `CleveRoids_ImmunityDebug = {...}` SavedVariables section for decoding.
+  Include the relevant `CleveRoids_ImmunityData` section when convenient so
+  the observed learner decisions can be compared directly with authoritative
+  persisted state. Do not clear real immunity data merely to force a new write.
 
 ### Runtime regression — Utility.lua local-variable limit — 2026-09-23
 
@@ -126,14 +132,21 @@ mouseover consolidation and WorldFrame-action suspension semantics.
 - Runtime result: client start with the scope correction produced no Lua
   errors. The prior downstream `GetGUID` and `splitString` nil failures are
   therefore closed as a load-regression symptom.
-- Untested: persistent immunitydebug enable/disable persistence, explicit
-  journal clear behavior, journal contents, and all raid acceptance items.
+- Runtime result: client start with the scope correction produced no Lua
+  errors. The prior downstream `GetGUID` and `splitString` nil failures are
+  closed.
+- Untested: diagnostic journal contents against real IMMUNE events, persistence
+  of the enabled preference across a later restart, explicit-clear persistence
+  in the SavedVariables file, and all individual immunitydebug acceptance
+  cases.
 - Deferred: all previously deferred generalized learner/persistence work remains
   deferred.
-- Exact next step: verify only the diagnostic plumbing: enable immunitydebug,
-  confirm the enabled state survives a client restart, then run
-  `/cleveroid immunitydebug clear` and confirm the journal event array is empty.
-  Do not begin scarce raid observations until those two checks pass.
+- Exact next step: start a clean diagnostic dataset, observe real known-immune
+  mobs, then inspect the persisted journal rather than spending another cycle
+  on synthetic plumbing checks. The first analysis pass should decode the full
+  `CleveRoids_ImmunityDebug` section and, where supplied, compare it with the
+  matching `CleveRoids_ImmunityData` records. Treat enable persistence and
+  journal-clear persistence as incidental checks during that same workflow.
 
 ### Immunitydebug revision — snooper + persistent test journal — 2026-09-23
 
