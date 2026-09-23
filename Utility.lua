@@ -7009,264 +7009,285 @@ end
 CleveRoids.GetSpellImmunityDimensions = GetSpellImmunityDimensions
 
 
--- immunitydebug is instrumentation over the real learner only. It owns no
--- immunity hypotheses or evidence model; CleveRoids_ImmunityData remains the
--- sole authoritative learned-immunity state.
-local IMMUNITY_DEBUG_SCHEMA_VERSION = 1
-local IMMUNITY_DEBUG_EVENT_DECISION = 1
-local IMMUNITY_DEBUG_EVENT_WRITE = 2
-local IMMUNITY_DEBUG_EVENT_REMOVE = 3
-
--- Decision codes stored in journal field q.
-local IMMUNITY_DEBUG_DECISION_REJECT = 0
-local IMMUNITY_DEBUG_DECISION_ACCEPT_CC = 1
-local IMMUNITY_DEBUG_DECISION_ACCEPT_SCHOOL = 2
-local IMMUNITY_DEBUG_DECISION_EXCLUDED = 3
-
--- Reason codes stored in journal field z.
-local IMMUNITY_DEBUG_REASON_NONE = 0
-local IMMUNITY_DEBUG_REASON_MISSING_IDENTITY = 1
-local IMMUNITY_DEBUG_REASON_SPLIT_CC = 2
-local IMMUNITY_DEBUG_REASON_RECENT_DEATH = 3
-local IMMUNITY_DEBUG_REASON_DEAD_NOW = 4
-local IMMUNITY_DEBUG_REASON_TEMP_CC = 5
-local IMMUNITY_DEBUG_REASON_GUARD_AURA = 6
-local IMMUNITY_DEBUG_REASON_DR = 7
-local IMMUNITY_DEBUG_REASON_NO_QUERY_UNIT = 8
-local IMMUNITY_DEBUG_REASON_REFLECT = 9
-
-local IMMUNITY_DEBUG_LABELS = {
-    charm = "Charm", disorient = "Disorient", disarm = "Disarm", distract = "Distract",
-    fear = "Fear", fumble = "Fumble", root = "Root", pacify = "Pacify",
-    silence = "Silence", sleep = "Sleep", snare = "Snare", stun = "Stun",
-    freeze = "Freeze", knockout = "Knockout", polymorph = "Polymorph",
-    banish = "Banish", shackle = "Shackle", turn = "Turn", horror = "Horror",
-    interrupt = "Interrupt", daze = "Daze",
-    spell = "Spell", physical = "Physical", holy = "Holy", fire = "Fire",
-    nature = "Nature", frost = "Frost", shadow = "Shadow", arcane = "Arcane",
-    bleed = "Bleed", unknown = "Unknown",
-}
-
-local IMMUNITY_DEBUG_REASON_LABELS = {
-    [IMMUNITY_DEBUG_REASON_MISSING_IDENTITY] = "missing identity",
-    [IMMUNITY_DEBUG_REASON_SPLIT_CC] = "split-CC",
-    [IMMUNITY_DEBUG_REASON_RECENT_DEATH] = "recent death",
-    [IMMUNITY_DEBUG_REASON_DEAD_NOW] = "target dead",
-    [IMMUNITY_DEBUG_REASON_TEMP_CC] = "TempCC aura",
-    [IMMUNITY_DEBUG_REASON_GUARD_AURA] = "protection/reflection aura",
-    [IMMUNITY_DEBUG_REASON_DR] = "DR safeguard",
-    [IMMUNITY_DEBUG_REASON_NO_QUERY_UNIT] = "no query unit",
-    [IMMUNITY_DEBUG_REASON_REFLECT] = "REFLECT",
-}
-
-local immunityDebugSessionStart = GetTime()
-local immunityDebugLastLine = {}
-
-local function InitializeImmunityDebugJournal()
-    if type(CleveRoids_ImmunityDebug) ~= "table"
-       or CleveRoids_ImmunityDebug.v ~= IMMUNITY_DEBUG_SCHEMA_VERSION then
-        CleveRoids_ImmunityDebug = {
-            v = IMMUNITY_DEBUG_SCHEMA_VERSION,
-            en = 0,
-            ns = 0,
-            e = {},
-        }
+local IMMUNITY_DEBUG_CODE = {}
+do
+    -- immunitydebug is instrumentation over the real learner only. It owns no
+    -- immunity hypotheses or evidence model; CleveRoids_ImmunityData remains the
+    -- sole authoritative learned-immunity state.
+    local IMMUNITY_DEBUG_SCHEMA_VERSION = 1
+    local IMMUNITY_DEBUG_EVENT_DECISION = 1
+    local IMMUNITY_DEBUG_EVENT_WRITE = 2
+    local IMMUNITY_DEBUG_EVENT_REMOVE = 3
+    
+    -- Decision codes stored in journal field q.
+    local IMMUNITY_DEBUG_DECISION_REJECT = 0
+    local IMMUNITY_DEBUG_DECISION_ACCEPT_CC = 1
+    local IMMUNITY_DEBUG_DECISION_ACCEPT_SCHOOL = 2
+    local IMMUNITY_DEBUG_DECISION_EXCLUDED = 3
+    
+    -- Reason codes stored in journal field z.
+    local IMMUNITY_DEBUG_REASON_NONE = 0
+    local IMMUNITY_DEBUG_REASON_MISSING_IDENTITY = 1
+    local IMMUNITY_DEBUG_REASON_SPLIT_CC = 2
+    local IMMUNITY_DEBUG_REASON_RECENT_DEATH = 3
+    local IMMUNITY_DEBUG_REASON_DEAD_NOW = 4
+    local IMMUNITY_DEBUG_REASON_TEMP_CC = 5
+    local IMMUNITY_DEBUG_REASON_GUARD_AURA = 6
+    local IMMUNITY_DEBUG_REASON_DR = 7
+    local IMMUNITY_DEBUG_REASON_NO_QUERY_UNIT = 8
+    local IMMUNITY_DEBUG_REASON_REFLECT = 9
+    
+    local IMMUNITY_DEBUG_LABELS = {
+        charm = "Charm", disorient = "Disorient", disarm = "Disarm", distract = "Distract",
+        fear = "Fear", fumble = "Fumble", root = "Root", pacify = "Pacify",
+        silence = "Silence", sleep = "Sleep", snare = "Snare", stun = "Stun",
+        freeze = "Freeze", knockout = "Knockout", polymorph = "Polymorph",
+        banish = "Banish", shackle = "Shackle", turn = "Turn", horror = "Horror",
+        interrupt = "Interrupt", daze = "Daze",
+        spell = "Spell", physical = "Physical", holy = "Holy", fire = "Fire",
+        nature = "Nature", frost = "Frost", shadow = "Shadow", arcane = "Arcane",
+        bleed = "Bleed", unknown = "Unknown",
+    }
+    
+    local IMMUNITY_DEBUG_REASON_LABELS = {
+        [IMMUNITY_DEBUG_REASON_MISSING_IDENTITY] = "missing identity",
+        [IMMUNITY_DEBUG_REASON_SPLIT_CC] = "split-CC",
+        [IMMUNITY_DEBUG_REASON_RECENT_DEATH] = "recent death",
+        [IMMUNITY_DEBUG_REASON_DEAD_NOW] = "target dead",
+        [IMMUNITY_DEBUG_REASON_TEMP_CC] = "TempCC aura",
+        [IMMUNITY_DEBUG_REASON_GUARD_AURA] = "protection/reflection aura",
+        [IMMUNITY_DEBUG_REASON_DR] = "DR safeguard",
+        [IMMUNITY_DEBUG_REASON_NO_QUERY_UNIT] = "no query unit",
+        [IMMUNITY_DEBUG_REASON_REFLECT] = "REFLECT",
+    }
+    
+    local immunityDebugSessionStart = GetTime()
+    local immunityDebugLastLine = {}
+    
+    local function InitializeImmunityDebugJournal()
+        if type(CleveRoids_ImmunityDebug) ~= "table"
+           or CleveRoids_ImmunityDebug.v ~= IMMUNITY_DEBUG_SCHEMA_VERSION then
+            CleveRoids_ImmunityDebug = {
+                v = IMMUNITY_DEBUG_SCHEMA_VERSION,
+                en = 0,
+                ns = 0,
+                e = {},
+            }
+        end
+    
+        if type(CleveRoids_ImmunityDebug.e) ~= "table" then
+            CleveRoids_ImmunityDebug.e = {}
+        end
+        if CleveRoids_ImmunityDebug.en ~= 1 then
+            CleveRoids_ImmunityDebug.en = 0
+        end
+    
+        CleveRoids_ImmunityDebug.ns = (tonumber(CleveRoids_ImmunityDebug.ns) or 0) + 1
+        return CleveRoids_ImmunityDebug, CleveRoids_ImmunityDebug.ns
     end
-
-    if type(CleveRoids_ImmunityDebug.e) ~= "table" then
-        CleveRoids_ImmunityDebug.e = {}
-    end
-    if CleveRoids_ImmunityDebug.en ~= 1 then
-        CleveRoids_ImmunityDebug.en = 0
-    end
-
-    CleveRoids_ImmunityDebug.ns = (tonumber(CleveRoids_ImmunityDebug.ns) or 0) + 1
-    return CleveRoids_ImmunityDebug, CleveRoids_ImmunityDebug.ns
-end
-
-local immunityDebugJournal, immunityDebugSession = InitializeImmunityDebugJournal()
-CleveRoids.immunityDebug = immunityDebugJournal.en == 1
-
-local function GetImmunityDebugMobID(targetGuid, queryUnit, targetName)
-    if queryUnit and UnitExists(queryUnit) then
-        local entry = GetCreatureEntry(queryUnit)
-        return entry and tonumber(entry) or nil
-    end
-
-    if targetGuid and UnitExists("target") then
-        local currentGuid = CleveRoids.GetGUID("target")
-        if currentGuid and CleveRoids.NormalizeGUID(currentGuid) == CleveRoids.NormalizeGUID(targetGuid) then
+    
+    local immunityDebugJournal, immunityDebugSession = InitializeImmunityDebugJournal()
+    CleveRoids.immunityDebug = immunityDebugJournal.en == 1
+    
+    local function GetImmunityDebugMobID(targetGuid, queryUnit, targetName)
+        if queryUnit and UnitExists(queryUnit) then
+            local entry = GetCreatureEntry(queryUnit)
+            return entry and tonumber(entry) or nil
+        end
+    
+        if targetGuid and UnitExists("target") then
+            local currentGuid = CleveRoids.GetGUID("target")
+            if currentGuid and CleveRoids.NormalizeGUID(currentGuid) == CleveRoids.NormalizeGUID(targetGuid) then
+                local entry = GetCreatureEntry("target")
+                return entry and tonumber(entry) or nil
+            end
+        end
+    
+        if targetName and UnitExists("target") and UnitName("target") == targetName then
             local entry = GetCreatureEntry("target")
             return entry and tonumber(entry) or nil
         end
+    
+        return nil
     end
-
-    if targetName and UnitExists("target") and UnitName("target") == targetName then
-        local entry = GetCreatureEntry("target")
-        return entry and tonumber(entry) or nil
+    
+    local function AddImmunityDebugDBCFields(record, spellID)
+        if not spellID or spellID <= 0 or not GetSpellRecField then return end
+    
+        local school = GetSpellRecField(spellID, "school")
+        if school ~= nil then
+            record.sc = tonumber(school) or school
+        end
+    
+        local mechanic = GetSpellRecField(spellID, "mechanic")
+        if mechanic ~= nil then
+            record.sm = tonumber(mechanic) or mechanic
+        end
+    
+        local effectMechanics = GetSpellRecField(spellID, "effectMechanic")
+        if type(effectMechanics) == "table" then
+            record.em = {
+                tonumber(effectMechanics[1]) or effectMechanics[1] or 0,
+                tonumber(effectMechanics[2]) or effectMechanics[2] or 0,
+                tonumber(effectMechanics[3]) or effectMechanics[3] or 0,
+            }
+        end
     end
-
-    return nil
-end
-
-local function AddImmunityDebugDBCFields(record, spellID)
-    if not spellID or spellID <= 0 or not GetSpellRecField then return end
-
-    local school = GetSpellRecField(spellID, "school")
-    if school ~= nil then
-        record.sc = tonumber(school) or school
-    end
-
-    local mechanic = GetSpellRecField(spellID, "mechanic")
-    if mechanic ~= nil then
-        record.sm = tonumber(mechanic) or mechanic
-    end
-
-    local effectMechanics = GetSpellRecField(spellID, "effectMechanic")
-    if type(effectMechanics) == "table" then
-        record.em = {
-            tonumber(effectMechanics[1]) or effectMechanics[1] or 0,
-            tonumber(effectMechanics[2]) or effectMechanics[2] or 0,
-            tonumber(effectMechanics[3]) or effectMechanics[3] or 0,
+    
+    local function AppendImmunityDebugJournal(eventCode, data)
+        if not CleveRoids.immunityDebug then return end
+    
+        local record = {
+            t = type(time) == "function" and time() or 0,
+            s = immunityDebugSession,
+            r = math.floor(((GetTime() or immunityDebugSessionStart) - immunityDebugSessionStart) * 1000 + 0.5),
+            e = eventCode,
         }
-    end
-end
-
-local function AppendImmunityDebugJournal(eventCode, data)
-    if not CleveRoids.immunityDebug then return end
-
-    local record = {
-        t = type(time) == "function" and time() or 0,
-        s = immunityDebugSession,
-        r = math.floor(((GetTime() or immunityDebugSessionStart) - immunityDebugSessionStart) * 1000 + 0.5),
-        e = eventCode,
-    }
-
-    if data then
-        for key, value in pairs(data) do
-            if value ~= nil then
-                record[key] = value
+    
+        if data then
+            for key, value in pairs(data) do
+                if value ~= nil then
+                    record[key] = value
+                end
             end
         end
+    
+        AddImmunityDebugDBCFields(record, record.p)
+        table.insert(immunityDebugJournal.e, record)
     end
-
-    AddImmunityDebugDBCFields(record, record.p)
-    table.insert(immunityDebugJournal.e, record)
-end
-
-local function ImmunityDebugSpellIcon(spellID)
-    if spellID and C_Spell and C_Spell.GetSpellTexture then
-        local texture = C_Spell.GetSpellTexture(spellID)
-        if texture then
-            return " |T" .. texture .. ":14:14:0:0|t"
+    
+    local function ImmunityDebugSpellIcon(spellID)
+        if spellID and C_Spell and C_Spell.GetSpellTexture then
+            local texture = C_Spell.GetSpellTexture(spellID)
+            if texture then
+                return " |T" .. texture .. ":14:14:0:0|t"
+            end
+        end
+        return ""
+    end
+    
+    local function ImmunityDebugPrintOnce(signature, message)
+        if immunityDebugLastLine[signature] == message then return end
+        immunityDebugLastLine[signature] = message
+        DEFAULT_CHAT_FRAME:AddMessage(message)
+    end
+    
+    local function ImmunityDebugDimensionLabel(storageKey)
+        if not storageKey then return "Immunity" end
+        local dimension = string.gsub(storageKey, "^cc_", "")
+        return IMMUNITY_DEBUG_LABELS[dimension] or dimension
+    end
+    
+    local function AppendImmunityDebugDecisionUnsafe(targetGuid, targetName, spellID, rawResult,
+                                                      queryUnit, decisionCode, reasonCode,
+                                                      immunityType, drType, auraID, auxValue, auxText)
+        local data = {
+            g = targetGuid and tostring(targetGuid) or nil,
+            m = GetImmunityDebugMobID(targetGuid, queryUnit, targetName),
+            n = targetName,
+            p = spellID,
+            x = rawResult,
+            q = decisionCode,
+            z = reasonCode,
+            i = immunityType,
+            dr = drType,
+            u = auraID,
+            c = auxValue,
+            h = auxText,
+        }
+        AppendImmunityDebugJournal(IMMUNITY_DEBUG_EVENT_DECISION, data)
+    
+        if decisionCode == IMMUNITY_DEBUG_DECISION_REJECT
+           or decisionCode == IMMUNITY_DEBUG_DECISION_EXCLUDED then
+            local reason = IMMUNITY_DEBUG_REASON_LABELS[reasonCode] or ("reason " .. tostring(reasonCode))
+            local name = targetName or "Unknown"
+            local signature = table.concat({name, tostring(spellID or 0), tostring(reasonCode or 0)}, ":")
+            ImmunityDebugPrintOnce(
+                signature,
+                name .. ImmunityDebugSpellIcon(spellID) .. " | immunity learner ignored: " .. reason
+            )
         end
     end
-    return ""
-end
-
-local function ImmunityDebugPrintOnce(signature, message)
-    if immunityDebugLastLine[signature] == message then return end
-    immunityDebugLastLine[signature] = message
-    DEFAULT_CHAT_FRAME:AddMessage(message)
-end
-
-local function ImmunityDebugDimensionLabel(storageKey)
-    if not storageKey then return "Immunity" end
-    local dimension = string.gsub(storageKey, "^cc_", "")
-    return IMMUNITY_DEBUG_LABELS[dimension] or dimension
-end
-
-local function AppendImmunityDebugDecisionUnsafe(targetGuid, targetName, spellID, rawResult,
-                                                  queryUnit, decisionCode, reasonCode,
-                                                  immunityType, drType, auraID, auxValue, auxText)
-    local data = {
-        g = targetGuid and tostring(targetGuid) or nil,
-        m = GetImmunityDebugMobID(targetGuid, queryUnit, targetName),
-        n = targetName,
-        p = spellID,
-        x = rawResult,
-        q = decisionCode,
-        z = reasonCode,
-        i = immunityType,
-        dr = drType,
-        u = auraID,
-        c = auxValue,
-        h = auxText,
-    }
-    AppendImmunityDebugJournal(IMMUNITY_DEBUG_EVENT_DECISION, data)
-
-    if decisionCode == IMMUNITY_DEBUG_DECISION_REJECT
-       or decisionCode == IMMUNITY_DEBUG_DECISION_EXCLUDED then
-        local reason = IMMUNITY_DEBUG_REASON_LABELS[reasonCode] or ("reason " .. tostring(reasonCode))
-        local name = targetName or "Unknown"
-        local signature = table.concat({name, tostring(spellID or 0), tostring(reasonCode or 0)}, ":")
-        ImmunityDebugPrintOnce(
-            signature,
-            name .. ImmunityDebugSpellIcon(spellID) .. " | immunity learner ignored: " .. reason
+    
+    function CleveRoids.ImmunityDebugDecision(targetGuid, targetName, spellID, rawResult,
+                                               queryUnit, decisionCode, reasonCode,
+                                               immunityType, drType, auraID, auxValue, auxText)
+        if not CleveRoids.immunityDebug then return end
+        pcall(
+            AppendImmunityDebugDecisionUnsafe,
+            targetGuid, targetName, spellID, rawResult, queryUnit, decisionCode,
+            reasonCode, immunityType, drType, auraID, auxValue, auxText
         )
     end
-end
-
-function CleveRoids.ImmunityDebugDecision(targetGuid, targetName, spellID, rawResult,
-                                           queryUnit, decisionCode, reasonCode,
-                                           immunityType, drType, auraID, auxValue, auxText)
-    if not CleveRoids.immunityDebug then return end
-    pcall(
-        AppendImmunityDebugDecisionUnsafe,
-        targetGuid, targetName, spellID, rawResult, queryUnit, decisionCode,
-        reasonCode, immunityType, drType, auraID, auxValue, auxText
-    )
-end
-
-local function AppendImmunityDebugMutationUnsafe(action, npcName, storageKey, spellID,
-                                                  beforeState, afterState, detail)
-    local targetGuid = nil
-    local queryUnit = nil
-    if npcName and UnitExists("target") and UnitName("target") == npcName then
-        queryUnit = "target"
-        targetGuid = CleveRoids.GetGUID("target")
+    
+    local function AppendImmunityDebugMutationUnsafe(action, npcName, storageKey, spellID,
+                                                      beforeState, afterState, detail)
+        local targetGuid = nil
+        local queryUnit = nil
+        if npcName and UnitExists("target") and UnitName("target") == npcName then
+            queryUnit = "target"
+            targetGuid = CleveRoids.GetGUID("target")
+        end
+    
+        local eventCode = action == 2 and IMMUNITY_DEBUG_EVENT_REMOVE or IMMUNITY_DEBUG_EVENT_WRITE
+        AppendImmunityDebugJournal(eventCode, {
+            g = targetGuid and tostring(targetGuid) or nil,
+            m = GetImmunityDebugMobID(targetGuid, queryUnit, npcName),
+            n = npcName,
+            p = spellID,
+            k = storageKey,
+            b = beforeState and 1 or 0,
+            f = afterState and 1 or 0,
+            h = detail,
+        })
+    
+        local label = ImmunityDebugDimensionLabel(storageKey)
+        local icon = ImmunityDebugSpellIcon(spellID)
+        local signature = table.concat({npcName or "Unknown", storageKey or "?", tostring(eventCode)}, ":")
+        if eventCode == IMMUNITY_DEBUG_EVENT_REMOVE then
+            ImmunityDebugPrintOnce(signature, (npcName or "Unknown") .. icon .. " | |cff40ff40" .. label .. " removed|r")
+        else
+            ImmunityDebugPrintOnce(signature, (npcName or "Unknown") .. icon .. " | |cffff4040" .. label .. " immune|r")
+        end
+    end
+    
+    function CleveRoids.ImmunityDebugMutation(action, npcName, storageKey, spellID,
+                                               beforeState, afterState, detail)
+        if not CleveRoids.immunityDebug then return end
+        pcall(
+            AppendImmunityDebugMutationUnsafe,
+            action, npcName, storageKey, spellID, beforeState, afterState, detail
+        )
+    end
+    
+    function CleveRoids.SetImmunityDebugEnabled(enabled)
+        CleveRoids.immunityDebug = enabled and true or false
+        immunityDebugJournal.en = CleveRoids.immunityDebug and 1 or 0
+        immunityDebugLastLine = {}
+    end
+    
+    function CleveRoids.ClearImmunityDebugJournal()
+        immunityDebugJournal.e = {}
+        CleveRoids_ImmunityDebug.e = immunityDebugJournal.e
     end
 
-    local eventCode = action == 2 and IMMUNITY_DEBUG_EVENT_REMOVE or IMMUNITY_DEBUG_EVENT_WRITE
-    AppendImmunityDebugJournal(eventCode, {
-        g = targetGuid and tostring(targetGuid) or nil,
-        m = GetImmunityDebugMobID(targetGuid, queryUnit, npcName),
-        n = npcName,
-        p = spellID,
-        k = storageKey,
-        b = beforeState and 1 or 0,
-        f = afterState and 1 or 0,
-        h = detail,
-    })
-
-    local label = ImmunityDebugDimensionLabel(storageKey)
-    local icon = ImmunityDebugSpellIcon(spellID)
-    local signature = table.concat({npcName or "Unknown", storageKey or "?", tostring(eventCode)}, ":")
-    if eventCode == IMMUNITY_DEBUG_EVENT_REMOVE then
-        ImmunityDebugPrintOnce(signature, (npcName or "Unknown") .. icon .. " | |cff40ff40" .. label .. " removed|r")
-    else
-        ImmunityDebugPrintOnce(signature, (npcName or "Unknown") .. icon .. " | |cffff4040" .. label .. " immune|r")
-    end
-end
-
-function CleveRoids.ImmunityDebugMutation(action, npcName, storageKey, spellID,
-                                           beforeState, afterState, detail)
-    if not CleveRoids.immunityDebug then return end
-    pcall(
-        AppendImmunityDebugMutationUnsafe,
-        action, npcName, storageKey, spellID, beforeState, afterState, detail
-    )
-end
-
-function CleveRoids.SetImmunityDebugEnabled(enabled)
-    CleveRoids.immunityDebug = enabled and true or false
-    immunityDebugJournal.en = CleveRoids.immunityDebug and 1 or 0
-    immunityDebugLastLine = {}
-end
-
-function CleveRoids.ClearImmunityDebugJournal()
-    immunityDebugJournal.e = {}
-    CleveRoids_ImmunityDebug.e = immunityDebugJournal.e
+    -- Only this single table remains live at chunk scope. The diagnostic locals
+    -- above are block-scoped so they do not consume Utility.lua's remaining
+    -- Vanilla Lua local-variable slots.
+    IMMUNITY_DEBUG_CODE.DECISION_REJECT = IMMUNITY_DEBUG_DECISION_REJECT
+    IMMUNITY_DEBUG_CODE.DECISION_ACCEPT_CC = IMMUNITY_DEBUG_DECISION_ACCEPT_CC
+    IMMUNITY_DEBUG_CODE.DECISION_ACCEPT_SCHOOL = IMMUNITY_DEBUG_DECISION_ACCEPT_SCHOOL
+    IMMUNITY_DEBUG_CODE.DECISION_EXCLUDED = IMMUNITY_DEBUG_DECISION_EXCLUDED
+    IMMUNITY_DEBUG_CODE.REASON_NONE = IMMUNITY_DEBUG_REASON_NONE
+    IMMUNITY_DEBUG_CODE.REASON_MISSING_IDENTITY = IMMUNITY_DEBUG_REASON_MISSING_IDENTITY
+    IMMUNITY_DEBUG_CODE.REASON_SPLIT_CC = IMMUNITY_DEBUG_REASON_SPLIT_CC
+    IMMUNITY_DEBUG_CODE.REASON_RECENT_DEATH = IMMUNITY_DEBUG_REASON_RECENT_DEATH
+    IMMUNITY_DEBUG_CODE.REASON_DEAD_NOW = IMMUNITY_DEBUG_REASON_DEAD_NOW
+    IMMUNITY_DEBUG_CODE.REASON_TEMP_CC = IMMUNITY_DEBUG_REASON_TEMP_CC
+    IMMUNITY_DEBUG_CODE.REASON_GUARD_AURA = IMMUNITY_DEBUG_REASON_GUARD_AURA
+    IMMUNITY_DEBUG_CODE.REASON_DR = IMMUNITY_DEBUG_REASON_DR
+    IMMUNITY_DEBUG_CODE.REASON_NO_QUERY_UNIT = IMMUNITY_DEBUG_REASON_NO_QUERY_UNIT
+    IMMUNITY_DEBUG_CODE.REASON_REFLECT = IMMUNITY_DEBUG_REASON_REFLECT
 end
 
 -- NPC immunity learning only needs DR groups that can actually diminish creatures.
@@ -9367,7 +9388,7 @@ local function ProcessSpellMissSelf(spellId, targetGuid, missInfo)
         if not targetName or not spellName then
             CleveRoids.ImmunityDebugDecision(
                 targetGuid, targetName, spellId, missInfo, nil,
-                IMMUNITY_DEBUG_DECISION_REJECT, IMMUNITY_DEBUG_REASON_MISSING_IDENTITY
+                IMMUNITY_DEBUG_CODE.DECISION_REJECT, IMMUNITY_DEBUG_CODE.REASON_MISSING_IDENTITY
             )
         end
 
@@ -9382,7 +9403,7 @@ local function ProcessSpellMissSelf(spellId, targetGuid, missInfo)
                 end
                 CleveRoids.ImmunityDebugDecision(
                     targetGuid, targetName, spellId, missInfo, nil,
-                    IMMUNITY_DEBUG_DECISION_REJECT, IMMUNITY_DEBUG_REASON_SPLIT_CC
+                    IMMUNITY_DEBUG_CODE.DECISION_REJECT, IMMUNITY_DEBUG_CODE.REASON_SPLIT_CC
                 )
                 return
             end
@@ -9394,7 +9415,7 @@ local function ProcessSpellMissSelf(spellId, targetGuid, missInfo)
                 end
                 CleveRoids.ImmunityDebugDecision(
                     targetGuid, targetName, spellId, missInfo, nil,
-                    IMMUNITY_DEBUG_DECISION_REJECT, IMMUNITY_DEBUG_REASON_RECENT_DEATH
+                    IMMUNITY_DEBUG_CODE.DECISION_REJECT, IMMUNITY_DEBUG_CODE.REASON_RECENT_DEATH
                 )
                 return
             end
@@ -9407,7 +9428,7 @@ local function ProcessSpellMissSelf(spellId, targetGuid, missInfo)
                 lib.recentDeaths[targetGuid] = GetTime()
                 CleveRoids.ImmunityDebugDecision(
                     targetGuid, targetName, spellId, missInfo, "target",
-                    IMMUNITY_DEBUG_DECISION_REJECT, IMMUNITY_DEBUG_REASON_DEAD_NOW
+                    IMMUNITY_DEBUG_CODE.DECISION_REJECT, IMMUNITY_DEBUG_CODE.REASON_DEAD_NOW
                 )
                 return
             end
@@ -9434,7 +9455,7 @@ local function ProcessSpellMissSelf(spellId, targetGuid, missInfo)
                     end
                     CleveRoids.ImmunityDebugDecision(
                         targetGuid, targetName, spellId, missInfo, queryUnit,
-                        IMMUNITY_DEBUG_DECISION_REJECT, IMMUNITY_DEBUG_REASON_TEMP_CC,
+                        IMMUNITY_DEBUG_CODE.DECISION_REJECT, IMMUNITY_DEBUG_CODE.REASON_TEMP_CC,
                         immunityType, nil, tempAuraID
                     )
                     return
@@ -9450,7 +9471,7 @@ local function ProcessSpellMissSelf(spellId, targetGuid, missInfo)
                     end
                     CleveRoids.ImmunityDebugDecision(
                         targetGuid, targetName, spellId, missInfo, queryUnit,
-                        IMMUNITY_DEBUG_DECISION_REJECT, IMMUNITY_DEBUG_REASON_GUARD_AURA,
+                        IMMUNITY_DEBUG_CODE.DECISION_REJECT, IMMUNITY_DEBUG_CODE.REASON_GUARD_AURA,
                         immunityType, nil, immunityAuraID, nil, immunityAuraType
                     )
                     return
@@ -9467,7 +9488,7 @@ local function ProcessSpellMissSelf(spellId, targetGuid, missInfo)
                     end
                     CleveRoids.ImmunityDebugDecision(
                         targetGuid, targetName, spellId, missInfo, queryUnit,
-                        IMMUNITY_DEBUG_DECISION_REJECT, IMMUNITY_DEBUG_REASON_DR,
+                        IMMUNITY_DEBUG_CODE.DECISION_REJECT, IMMUNITY_DEBUG_CODE.REASON_DR,
                         immunityType, drType, nil, drEntry.count
                     )
                     return
@@ -9481,7 +9502,7 @@ local function ProcessSpellMissSelf(spellId, targetGuid, missInfo)
                 end
                 CleveRoids.ImmunityDebugDecision(
                     targetGuid, targetName, spellId, missInfo, nil,
-                    IMMUNITY_DEBUG_DECISION_REJECT, IMMUNITY_DEBUG_REASON_NO_QUERY_UNIT,
+                    IMMUNITY_DEBUG_CODE.DECISION_REJECT, IMMUNITY_DEBUG_CODE.REASON_NO_QUERY_UNIT,
                     immunityType, drType
                 )
                 return
@@ -9493,14 +9514,14 @@ local function ProcessSpellMissSelf(spellId, targetGuid, missInfo)
                 RecordCCImmunity(targetName, immunityType, nil, spellName)
                 CleveRoids.ImmunityDebugDecision(
                     targetGuid, targetName, spellId, missInfo, queryUnit,
-                    IMMUNITY_DEBUG_DECISION_ACCEPT_CC, IMMUNITY_DEBUG_REASON_NONE,
+                    IMMUNITY_DEBUG_CODE.DECISION_ACCEPT_CC, IMMUNITY_DEBUG_CODE.REASON_NONE,
                     immunityType, drType
                 )
             else
                 RecordImmunity(targetName, spellName, nil, spellId)
                 CleveRoids.ImmunityDebugDecision(
                     targetGuid, targetName, spellId, missInfo, queryUnit,
-                    IMMUNITY_DEBUG_DECISION_ACCEPT_SCHOOL, IMMUNITY_DEBUG_REASON_NONE,
+                    IMMUNITY_DEBUG_CODE.DECISION_ACCEPT_SCHOOL, IMMUNITY_DEBUG_CODE.REASON_NONE,
                     nil, drType
                 )
             end
@@ -9533,7 +9554,7 @@ local function ProcessSpellMissSelf(spellId, targetGuid, missInfo)
     if missInfo == MISSINFO_REFLECT then
         CleveRoids.ImmunityDebugDecision(
             targetGuid, targetName, spellId, missInfo, nil,
-            IMMUNITY_DEBUG_DECISION_EXCLUDED, IMMUNITY_DEBUG_REASON_REFLECT
+            IMMUNITY_DEBUG_CODE.DECISION_EXCLUDED, IMMUNITY_DEBUG_CODE.REASON_REFLECT
         )
         if CleveRoids.debug then
             DEFAULT_CHAT_FRAME:AddMessage(
