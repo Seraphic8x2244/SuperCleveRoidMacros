@@ -14,12 +14,19 @@ mouseover consolidation and WorldFrame-action suspension semantics.
 
 - Branch: `design/temp-cc-immunity`
 - Base: `main`
-- Branch head before this status refresh: `99963d76cb44a48c525b6250ccbdb4e83d81887c`
-- Branch relation before this status refresh: 128 ahead / 0 behind `main`
+- Branch head before this status refresh: `ad653f5401eb8c67e97e7f3e8a80d3a6934b307b`
+- Branch relation before this status refresh: 137 ahead / 0 behind `main`
 - TOC version: `@project-version@`
 - Latest framework/runtime behavior commit: `c23a80c4cff5d64765b25464b88738fdf93bfa31`
 - Latest immunity UI runtime commit: `6726ce1e39332581ba9145bad954341f0bd439d0`
 - Recent commits:
+  - `ad653f54` — Save immunitydebug journal
+  - `602a3c27` — Persist immunitydebug controls
+  - `44651eed` — Make immunitydebug a learner snooper
+  - `3bbb7dd2` — Revise immunitydebug snooper design
+  - `da741af8` — Document immunitydebug implementation status
+  - `1d1b8116` — Add immunitydebug slash command
+  - `d3efe5de` — Add runtime immunity debug diagnostics
   - `99963d76` — Close mouseover cast acceptance
   - `cac16d5e` — Record unit-frame and cast live pass
   - `53280257` — Track WorldFrame mouse scripts safely
@@ -56,13 +63,36 @@ mouseover consolidation and WorldFrame-action suspension semantics.
 ### Implementation checkpoint — immunitydebug
 
 - Branch: `design/temp-cc-immunity`
-- Starting head: `7f8a46d14ae1785922b917c6e136cdad15a04306`
-- Implementation commits: `d3efe5de` (runtime diagnostics) and `1d1b8116` (slash command/help).
-- Completed: runtime-only `/cleveroid immunitydebug [0|1]`; GUID/name-backed transient suspect/disproved display state; inline spell icons; yellow/green/red rendering; duplicate rendered-state suppression; authoritative IMMUNE observation after existing safeguards; school/family green evidence from successful SPELL_GO; green evidence from the existing CC/school removal paths; red refresh from existing persistence writes.
-- Static-checked: branch diff from the handoff changes only `Utility.lua`, `Core.lua`, and this handoff document; no SavedVariables declaration/schema, conditional grammar, learner decision, immunity data layout, polling loop, or generalized learner was added. No GitHub CI/status checks are configured for the implementation head.
-- Untested: all eight immunitydebug acceptance items below remain live-pending until user testing; do not mark them passed from static inspection.
-- Deferred: generalized learner/evidence persistence, Mob-ID storage migration, inferred broad-immunity persistence, and new public immunity grammar.
-- Exact next step: revise immunitydebug into a pure snooper over the existing learner, add the persistent enable preference and versioned machine-oriented diagnostic journal described below, document the decoder, then static-review before any scarce raid testing.
+- Revision handoff: `3bbb7dd219dac175d4cf604b586ae43245a0f9e9`.
+- Corrected implementation commits: `44651eed` (pure snooper +
+  journal instrumentation), `602a3c27` (persistent command controls), and
+  `ad653f54` (diagnostic SavedVariables declaration).
+- Completed: removed the debug-owned `suspects` / `disproved` model and all
+  generic `SPELL_GO` success inference; instrumented the real direct
+  `SPELL_MISS_SELF` IMMUNE/IMMUNE2 safeguard/decision path; instrumented actual
+  `Record*Immunity` writes and `Remove*Immunity` removals; persisted the
+  debug enable preference; added schema-v1 append-oriented
+  `CleveRoids_ImmunityDebug`; added `/cleveroid immunitydebug clear`; retained
+  compact chat output only for real learner decisions and real persistence
+  transitions.
+- Static-checked: the handoff-to-implementation comparison is exactly three
+  commits and changes only `Utility.lua`, `Core.lua`, and
+  `SuperCleveRoidMacros.toc`; no conditional grammar, real
+  `CleveRoids_ImmunityData` schema, learner safeguard order, generalized
+  learner, or polling loop changed. Debug instrumentation returns immediately
+  while disabled and its journal/display work is `pcall`-isolated while
+  enabled, so a diagnostic error cannot abort or redirect the learner path.
+  The old generic-success debug hook is absent. No GitHub CI/status checks are
+  configured for the implementation head.
+- Untested: all immunitydebug live acceptance items remain live-pending; no
+  scarce raid observation has been consumed by this corrected implementation.
+- Deferred: generalized learner/evidence persistence, Mob-ID migration of real
+  immunity storage, inferred broad-immunity persistence, new public immunity
+  grammar, diagnostic retention/pruning policy, and any dump/copy UI.
+- Exact next step: after this static-reviewed handoff is committed, do only the
+  cheap plumbing checks first (enable persistence across reload/login and
+  explicit journal clear), then begin the scarce live immunity acceptance
+  observations against a deliberately clean test dataset.
 
 ### Immunitydebug revision — snooper + persistent test journal — 2026-09-23
 
@@ -206,6 +236,157 @@ for raid evidence:
 All previous immunitydebug acceptance items remain **live-pending**. The old
 requirements that the debug flag/state be entirely runtime-only and that no
 immunitydebug SavedVariables exist are superseded by this revision.
+
+#### Implemented diagnostic journal schema v1 — decoder
+
+The implementation uses the dedicated SavedVariable
+`CleveRoids_ImmunityDebug`. It is diagnostic state only; the learner never
+queries it when deciding immunity.
+
+Top-level shape:
+
+```text
+v   schema version; currently 1
+en  persistent immunitydebug enable preference: 0 off, 1 on
+ns  monotonically incremented addon-load/session counter
+e   append-oriented array of journal records
+```
+
+A schema mismatch deliberately starts a fresh diagnostic journal with
+`v = 1`, `en = 0`, `ns = 0`, and an empty `e` array. This reset applies
+only to diagnostic state and never touches `CleveRoids_ImmunityData`.
+`/cleveroid immunitydebug clear` clears only `e`; it preserves `v`, `en`,
+and `ns`.
+
+Common record fields:
+
+```text
+t   absolute Unix-style timestamp from time(); 0 only if that API is unavailable
+s   session identifier copied from top-level ns
+r   milliseconds since the current addon load
+e   diagnostic event code
+g   target GUID string, when known
+m   numeric creature/Mob ID from UnitCreatureID, when the target is queryable
+n   localized NPC name, when known
+p   numeric spell ID, when known
+sc  raw Spell.dbc school enum for p, when available
+sm  raw spell-level Spell.dbc mechanic ID for p, when available
+em  three-element raw effect-mechanic array for p, when available
+```
+
+The raw school enum in `sc` follows the existing Vanilla/Nampower mapping:
+`0=Physical`, `1=Holy`, `2=Fire`, `3=Nature`, `4=Frost`,
+`5=Shadow`, `6=Arcane`. `sm` and `em` are unmodified DBC mechanic IDs,
+not debug-owned classifications. Relevant exact learned-CC mechanics currently
+include `1=Charm`, `2=Disorient`, `5=Fear`, `7=Root`, `9=Silence`,
+`10=Sleep`, `11=Snare`, `12=Stun`, `13=Freeze`, `14=Knockout`,
+`17=Polymorph`, `18=Banish`, `20=Shackle`, `24=Horror`, and
+`27=Daze`.
+
+Event code `e`:
+
+```text
+1  learner decision / rejection / exclusion observation
+2  real learned-immunity persistence write occurred
+3  real learned-immunity removal occurred
+```
+
+Decision records (`e = 1`) may additionally contain:
+
+```text
+x   raw SPELL_MISS result code
+q   learner-decision code
+z   rejection/exclusion reason code
+i   learner's canonical immunity type string when one was actually resolved
+dr  learner's existing DR bucket string when applicable
+u   numeric aura spell ID responsible for a temporary/guard rejection
+c   numeric auxiliary value; schema v1 uses this for the observed DR hit count
+h   textual auxiliary value; schema v1 uses this for the guard-aura type
+```
+
+Raw `x` values follow Nampower's existing miss constants:
+`1=MISS`, `2=RESIST`, `3=DODGE`, `4=PARRY`, `5=BLOCK`, `6=EVADE`,
+`7=IMMUNE`, `8=IMMUNE2`, `9=DEFLECT`, `10=ABSORB`, `11=REFLECT`.
+The authoritative automatic immunity learner is instrumented on
+`IMMUNE/IMMUNE2`; `REFLECT` is journalled as an explicit non-immunity
+exclusion.
+
+Decision code `q`:
+
+```text
+0  rejected / ignored by the immunity learner
+1  accepted for the real CC-immunity write path
+2  accepted for the real school/general-immunity write path
+3  explicitly excluded from immunity learning
+```
+
+Reason code `z`:
+
+```text
+0  no rejection reason; accepted learner path
+1  missing target identity and/or spell identity
+2  split-CC safeguard
+3  target GUID was recently recorded dead
+4  target is currently dead
+5  curated TempCC aura explains the immunity
+6  broad protection/reflection guard aura makes the observation inconclusive
+7  NPC-applicable DR safeguard
+8  no queryable target unit; aura checks cannot be completed
+9  REFLECT result; explicitly not immunity
+```
+
+The existing learner-native `dr` values are not diagnostic codes. Current
+stun safeguards can report `stun_control`, `stun_trigger`, or
+`stun_kidneyshot`. Likewise `i` is the learner's canonical immunity type,
+not a separate debug hypothesis.
+
+Mutation records (`e = 2` or `e = 3`) may additionally contain:
+
+```text
+k   exact real CleveRoids_ImmunityData storage key affected, e.g. cc_stun/fire
+b   authoritative recorded-state presence immediately before mutation: 0/1
+f   authoritative recorded-state presence immediately after mutation: 0/1
+h   optional mutation detail; schema v1 uses this for a conditional buff name
+```
+
+The mutation event is emitted only after the real persistence/removal function
+has actually changed `CleveRoids_ImmunityData`. A mutation record can omit
+`p`, `g`, or `m` when that information is not available at the persistence
+call site; the corresponding decision record retains the authoritative spell
+input and GUID when known.
+
+#### Static review of the corrected snooper — 2026-09-23
+
+- `suspects`, `disproved`, `ImmunityDebugObserveImmune`,
+  `ImmunityDebugObserveSpellSuccess`, `ImmunityDebugMarkDisproved`, and
+  `ImmunityDebugRefresh` are absent from the corrected implementation.
+- The generic `SPELL_GO numHit > 0` debug-success block was deleted; debug no
+  longer interprets successful casts as immunity evidence.
+- The direct IMMUNE/IMMUNE2 learner keeps its pre-existing decision order:
+  identity resolution, split-CC, death, TempCC, broad guard aura, DR,
+  queryability, then the existing real `RecordCCImmunity` or
+  `RecordImmunity` call.
+- Diagnostic calls on rejected branches occur immediately before the existing
+  return. Accepted decision records are emitted only after the unchanged real
+  record function has run.
+- Red chat output is emitted only by an actual real immunity write; green only
+  by an actual real immunity removal. This learner has no matching candidate
+  state for the old yellow display, so no yellow state is manufactured.
+- Every runtime journal/display entry point returns immediately when
+  immunitydebug is disabled. When enabled, journal/display code is wrapped in
+  `pcall`; its failure cannot prevent the existing learner write, removal, or
+  rejection path from completing.
+- The only new SavedVariable is `CleveRoids_ImmunityDebug`; the format and
+  semantics of `CleveRoids_ImmunityData` are untouched.
+- No new `OnUpdate`, polling loop, generalized evidence store, public
+  conditional, or real learner inference was added.
+- Compare `3bbb7dd2...design/temp-cc-immunity` before this documentation commit:
+  three commits ahead, zero behind, with changes limited to `Utility.lua`,
+  `Core.lua`, and `SuperCleveRoidMacros.toc`.
+- Branch relation to `main` at the reviewed implementation head:
+  137 ahead / 0 behind. GitHub reports no configured commit status checks.
+- This is static review only. All live acceptance items remain unpassed until
+  observed in WoW.
 
 ### Resume status — 2026-09-22
 
