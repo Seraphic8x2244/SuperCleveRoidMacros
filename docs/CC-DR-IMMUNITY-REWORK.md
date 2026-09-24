@@ -379,7 +379,7 @@ This validates the intended player-facing temporary-stun transition.
 
 ### Anti-Magic Shield — PARTIAL PASS
 
-While Anti-Magic Shield was active:
+Live-tested in Stratholme while Anti-Magic Shield was active:
 
 ```text
 Gaia Frostbolt + [noimmune] -> blocked
@@ -394,25 +394,6 @@ Still useful to verify:
 an appropriate Physical action remains eligible while Anti-Magic Shield is active
 no permanent Frost/Holy/Stun immunity is written from the temporary state
 ```
-
-### Stratholme Spellshield — PENDING
-
-Run the known Spellshield case with `immunitydebug` enabled.
-
-Afterward inspect the complete:
-
-```text
-CleveRoids_ImmunityDebug
-```
-
-plus relevant:
-
-```text
-CleveRoids_ImmunityData
-```
-
-The purpose is to compare the learner's actual decision path with the persisted
-immunity state.
 
 ### Blackwing Spellbinder — PENDING
 
@@ -452,10 +433,17 @@ validated against real immunity cases.
 Continue live immunity sampling without changing learner or persistence
 semantics.
 
-Next useful case:
+Finish the Anti-Magic Shield validation when convenient:
 
 ```text
-Stratholme Spellshield with immunitydebug enabled
+verify an appropriate Physical action remains eligible while the shield is active
+verify no permanent Frost/Holy/Stun immunity was written from the temporary state
+```
+
+Next major regression case:
+
+```text
+Blackwing Spellbinder with immunitydebug enabled
 ```
 
 Then inspect:
@@ -473,7 +461,5 @@ temporary safeguards behaved correctly
 the learner accepted/rejected the observation for the correct reason
 persisted immunity matches the learner decision
 ```
-
-Later perform the equivalent Blackwing Spellbinder test.
 
 Do not begin the generalized learner until these validation cases are understood.
