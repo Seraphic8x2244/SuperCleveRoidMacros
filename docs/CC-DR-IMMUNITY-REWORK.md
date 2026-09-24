@@ -1,538 +1,479 @@
-# CC, DR, Immunities and Temporary Immunities Rework
+# CC, DR and Immunity Rework
 
-## 1. Done
+Development/status document for the SCRM immunity work on
+`design/temp-cc-immunity`.
 
-- exact CC mechanic learning instead of coarse stun buckets
-- Vanilla Sap canonicalized to mechanic 14 / `knockout`
-- NPC DR safeguard limited to the three stun pools
-- DR count reset fixed
-- Kidney/control/trigger stun separation
-- Nampower `SPELL_MISS` argument order fixed
-- bare immunity checks include mechanic immunity
-- `TEMP_CC_IMMUNITIES` implemented
-- Sartura 15516 / Whirlwind 26083 / stun rule
-- `UnitCreatureID` + by-ID aura lookup
-- TempCC live conditional integration
-- TempCC guard in both automatic CC-learning routes
-- no TempCC persistence/schema change
-- broad mechanic-25 guard removed
-- curated `IMMUNITY_GUARD_AURA_IDS`
-- Ice Block and Anti-Magic Shield variants added
-- absorb/damage-reduction lookalikes excluded
-- TempCC path is numeric/locale-independent
-- hidden-CC aura confirmation uses localized Blizzard GlobalStrings
-- duplicate localized parsing hardened/removed
-- split-CC fallback localized
+This file records only the fork-specific immunity work that differs from or
+extends the upstream baseline. It is intentionally a concise recovery document,
+not a chronological development log.
 
----
+## Documentation and branch rules
 
-## 2. Validation and open work
+- `main` mirrors `brues-code/SuperCleveRoidMacros`.
+- `docs/CC-IMMUNITY-DR.md` and `docs/CLASSICAPI-TODO.md` are upstream baseline
+  documents and remain unchanged on this branch.
+- This file is the single fork-specific immunity design/status/handoff document.
+- Update existing sections when state changes instead of appending chronology.
+- Do not create additional immunity development/handoff documents.
+- Do not duplicate upstream documentation here unless this branch changes or
+  extends the upstream behaviour.
 
-### Sartura
+## Recovery snapshot
 
-Before test:
+- Branch: `design/temp-cc-immunity`
+- Base: `main`
+- Branch head before this documentation cleanup:
+  `10f32b2f08a6567eb64c98bc97847b7be82257fd`
+- TOC version: `@project-version@`
+- Latest Vanilla-Lua runtime fix:
+  `aa2b761d1c45d1a28c8354b2f13f216a21403569` — scope immunitydebug locals.
+- Runtime after that fix starts with no Lua errors.
+- Current phase: live validation of the existing immunity learner and temporary
+  immunity safeguards.
+- The generalized comparative learner has not started.
 
-```text
-/cleveroid removeccimmune Battleguard Sartura stun
-```
+## Branch-specific immunity model
 
-- [ ] outside Whirlwind: `[immune:stun]` false
-- [ ] during Whirlwind: `[immune:stun]` true
-- [ ] `[noimmune:stun]` HoJ refuses during Whirlwind
-- [ ] forced HoJ returns `IMMUNE`
-- [ ] no permanent `cc_stun`
-- [ ] after Whirlwind: condition clears / HoJ eligible
-- [ ] later stun can land
-- [ ] unrelated CC learning is not suppressed
-- [ ] direct miss + delayed verifier match
-- [ ] DR/general guards unchanged
-- [ ] no TempCC persistence
-- [ ] aura 26083 is visible through the client aura API
+The upstream exact-CC model remains the baseline. This branch extends immunity
+handling across several independent dimensions.
 
-### Generalized learner
+### Exact learned CC immunity
 
-Blackwing Spellbinder:
-- [ ] verify entry 12457 behaviour on target server
-- [ ] HoJ `IMMUNE`
-- [ ] Cheap Shot lands
-- [ ] Charge Stun lands
-- [ ] non-Holy magic `IMMUNE`
-- [ ] no false `cc_stun`
-- [ ] only confirm `spellimmune` with sufficient evidence
-
-Single-school target:
-- [ ] one school immune, another magical school lands
-- [ ] disprove `spellimmune`
-- [ ] learn only demonstrated school
-
-Broad CC target:
-- [ ] multiple CC methods fail
-- [ ] ordinary non-CC spells can land
-- [ ] distinguish `ccimmune` from `spellimmune`
-
-Absolute temporary immunity:
-- [ ] physical + magical effects fail while active
-- [ ] live `immune` true
-- [ ] no permanent broad record from temporary protection
-
-Temporary spell immunity:
-- [ ] identify verified Vanilla Spell Shield/Anti-Magic-style aura
-- [ ] magic fails, suitable physical effects still work
-- [ ] no permanent school/`spellimmune` from the temporary aura
-
-### Decisions before implementation
-
-1. Identify the exact Vanilla basis for `spellimmune`:
-   Blackwing Spellbinder + discussed ZG/Stratholme Spell Shield cases.
-2. Define conservative candidate -> confirmed rules so multiple narrow school
-   immunities cannot masquerade as `spellimmune`.
-
-Then decide:
-
-- [ ] exact semantics of school/`spellimmune`/`ccimmune`/`immune`
-- [ ] macro syntax, if any
-- [ ] query precedence
-- [ ] whether broad categories can be inferred from outcomes alone
-- [ ] candidate/evidence structure and target key
-- [ ] persistence of confirmed/candidate/negative evidence
-- [ ] separation of manual vs inferred records
-- [ ] SavedVariables migration before any schema change
-
-Preferred rule: confirm the narrowest explanation that fits the evidence.
-
----
-
-## 3. Known limitations / deferred
-
-- Mouseover miss learning remains conservative when no queryable unit can be
-  resolved; this avoids learning through unseen temporary buffs.
-- Legacy SavedVariables may contain `cc_sap`; no automatic migration.
-- Reflect handling could explicitly cancel matching pending verification.
-- Some unrelated old combat-log fallbacks still contain English phrases.
-- Extremely short temporary auras could end before delayed verification when no
-  direct miss event exists; Sartura is unaffected.
-- Do not split this into a new Lua module unless the learner grows enough to
-  justify it.
-
----
-
-## 4. Implementation target
-
-Active framework-stage implementation/recovery notes:
-`docs/IMMUNITY-FRAMEWORK-DEV.md`.
-
-
-Keep TempCC small:
+The current permanent CC learner uses these canonical immunity keys:
 
 ```text
-TEMP_CC_IMMUNITIES
-GetCreatureEntry
-IsTemporarilyCCImmune
-CheckCCImmunity integration
-two automatic-learning guards
+stun
+freeze
+knockout
+fear
+root
+silence
+sleep
+charm
+polymorph
+banish
+shackle
+horror
+disorient
+daze
+snare
 ```
 
-Generalized path:
+These are not the complete set of `[cc:*]` conditionals. They are the exact CC
+mechanics currently admitted to permanent immunity learning.
+
+Important Vanilla correction on this branch:
 
 ```text
-existing event
- -> temporary explanation?
- -> classify observation
- -> update compact per-NPC evidence
- -> confirm only when rules are satisfied
- -> immunity query consumes confirmed facts
+sap -> mechanic 14 / knockout
 ```
 
-`spellimmune` classification is now resolved as six-school non-physical school
-immunity, and spell-aware public immunity checks consume the action dimension
-set. Comparative learner confirmation rules remain deferred.
+`sap` is a compatibility alias, not a separate mechanic-30 immunity bucket.
 
----
+### School/action immunity
 
-## Appendix A — Journey
+```text
+physical
+holy
+fire
+nature
+frost
+shadow
+arcane
+bleed
+```
 
-This branch grew from several separate bugs that turned out to be one model problem:
+`unknown` may exist as a storage fallback but is not a queryable immunity
+dimension.
 
-- CC mechanics were collapsed too broadly: Gouge/Sap-style immunity could become
-  stun immunity.
-- Nampower `SPELL_MISS` arguments were read in the wrong order.
-- DR protection used the wrong grouping and did not reset correctly.
-- Sartura proved that a real `IMMUNE` can be temporary and encounter-specific.
-- The general protection guard was too broad and was replaced with curated IDs.
-- Anti-Magic Shield showed that magic immunity is not CC immunity.
-- Blackwing Spellbinder showed that HoJ can be immune while physical stuns still
-  land, so exact CC, school immunity, spell immunity, broad CC immunity and
-  absolute immunity must be separate.
+### Broad immunity
 
-The rework now covers CC classification, DR, permanent immunity learning,
-temporary immunity, and broad immunity inference.
+```text
+spell
+cc
+all
+```
 
----
+Meanings:
 
-## Appendix B — Core model
+```text
+spell
+    broad immunity to the six non-physical Vanilla schools:
+    Holy, Fire, Nature, Frost, Shadow and Arcane
 
-### B.1 Separate identities
+cc
+    broad immunity to CC mechanics
 
-| Identity | Meaning |
-|---|---|
-| `ccType` | Exact DBC mechanic used by `[cc:*]` and landing checks |
-| `immunityType` | Exact DBC mechanic stored for learned NPC CC immunity |
-| DR type | Vanilla DR pool; internal only |
-| school | fire/frost/nature/shadow/arcane/holy, plus physical/bleed |
-| `spellimmune` | broad immunity to the six non-physical Vanilla spell schools; school-mask based, not DmgClass based |
-| `ccimmune` | broad immunity to CC mechanics |
-| `immune` | absolute/broad immunity |
-| temporary explanation | live aura/DR/death/reflection/etc. that explains an `IMMUNE` now |
+all
+    absolute immunity
+```
 
-These axes can overlap.
+These dimensions remain distinct.
 
 Examples:
 
 ```text
-Blackwing Spellbinder: spellimmune=true, stunimmune=false
-Sartura Whirlwind:     temporary stunimmune=true
-Fire-immune NPC:       fireimmune=true, spellimmune=false
+Blackwing Spellbinder:
+    spell = true
+    stun  = false
+
+Sartura during Whirlwind:
+    stun  = true temporarily
+    spell = false
+    cc    = false
+
+Fire-immune NPC:
+    fire  = true
+    spell = false
 ```
 
-### B.2 Exact CC taxonomy
+Spell/action checks consume every relevant dimension.
 
-`[cc:*]` follows the Vanilla client DBC mechanic exactly.
-
-| DBC mechanic | ID | Canonical key |
-|---|---:|---|
-| Charm | 1 | `charm` |
-| Disoriented | 2 | `disorient` |
-| Disarm | 3 | `disarm` |
-| Distract | 4 | `distract` |
-| Fear | 5 | `fear` |
-| Fumble | 6 | `fumble` |
-| Root | 7 | `root` |
-| Pacify | 8 | `pacify` |
-| Silence | 9 | `silence` |
-| Sleep | 10 | `sleep` |
-| Snare | 11 | `snare` |
-| Stun | 12 | `stun` |
-| Freeze | 13 | `freeze` |
-| Knockout | 14 | `knockout` |
-| Bleed | 15 | `bleed` |
-| Polymorph | 17 | `polymorph` |
-| Banish | 18 | `banish` |
-| Shackle | 20 | `shackle` |
-| Turn | 23 | `turn` |
-| Horror | 24 | `horror` |
-| Interrupt | 26 | `interrupt` |
-| Daze | 27 | `daze` |
-
-Aliases:
+Examples:
 
 ```text
-slow -> snare
-disoriented -> disorient
-grip -> fumble
-sap -> knockout
-incap / incapacitate / incapacitated -> knockout (immunity input)
+Hammer of Justice
+    holy -> spell -> stun -> cc -> all
+
+Frostbolt
+    frost -> spell -> all
+
+Cheap Shot
+    physical -> stun -> cc -> all
 ```
 
-Vanilla Sap is mechanic 14. The server enum `MECHANIC_SAPPED = 30` is not a
-1.12 client DBC row.
+The first applicable immunity blocks the action.
 
-Mechanics 16, 19, 21, 22 and 25 are not exposed as CC.
+## Temporary immunity and non-permanent explanations
 
-Bare `[cc]` / `[cc:any]` remain aggregate loss-of-control checks via
-`CCTypesLossOfControl`.
+A real `IMMUNE` result is not automatically a permanent NPC fact.
 
-### B.3 DR is only a learning safeguard
+### TempCC
 
-DR matters here because DR level 4 can return `IMMUNE`, which must not become
-permanent NPC immunity.
-
-For NPCs, only these vMaNGOS `DRTYPE_ALL` pools matter:
+Encounter-specific temporary CC immunity is keyed by:
 
 ```text
-DIMINISHING_CONTROL_STUN
-DIMINISHING_TRIGGER_STUN
-DIMINISHING_KIDNEYSHOT
-```
-
-Everything else is player-only DR.
-
-Current mapping:
-
-```text
-Kidney Shot                   -> stun_kidneyshot
-Charge / Intercept stun       -> stun_control
-other mechanic-12 client cast -> stun_control
-other mechanic-12 proc        -> stun_trigger
-```
-
-Details retained from the audit:
-
-- Kidney Shot uses rogue family bit 21 (`0x00200000`).
-- Charge 7922 and Intercept 20253/20614/20615 are triggered exceptions that
-  belong to controlled stun.
-- client-cast vs proc is reconstructed from Nampower `SPELL_CAST_EVENT`.
-- `recentCCHits[targetGUID][drType]` resets after 20s.
-- `IMMUNE` is discarded as DR only after 3+ landed hits in that pool/window.
-
-Sources:
-`SpellEntry.h:52-79`, `SpellEntry.cpp:281-432`,
-`Unit.cpp:7881`, `SpellClassMask.h:228`.
-
-### B.4 Nampower miss payload
-
-```text
-arg1 = casterGuid
-arg2 = targetGuid
-arg3 = spellId
-arg4 = missInfo
-```
-
-Source: `nampower/spellevents.cpp:888-917`.
-
-### B.5 Current learned data
-
-`CleveRoids_ImmunityData` already stores:
-
-```text
-fire frost nature shadow arcane holy physical bleed unknown
-cc_<canonical mechanic>
-```
-
-Manual and buff-conditional records remain supported. This branch does not
-silently rewrite user data.
-
----
-
-## Appendix C — Temporary immunity
-
-### C.1 TempCCImmune
-
-Purpose:
-
-```text
-creature entry + active aura ID + exact CC mechanic -> temporary immunity
+creature entry -> aura spell ID -> exact CC mechanic
 ```
 
 Current rule:
 
-```lua
-[15516] = { -- Battleguard Sartura
-    [26083] = { stun = true }, -- Whirlwind
-},
+```text
+Battleguard Sartura
+creature 15516
+Whirlwind 26083
+temporary stun immunity
 ```
 
-Only add a rule when creature ID, aura ID, affected mechanic and temporary
-relationship are all verified.
+TempCC:
 
-Implementation:
+- is exact/mechanic-specific;
+- participates in live immunity queries;
+- guards both automatic CC-learning routes;
+- is never persisted to `CleveRoids_ImmunityData`;
+- does not imply broad `cc`, `spell` or `all` immunity.
 
-- creature identity: `UnitCreatureID(unit)`
-- aura lookup: `C_UnitAuras.GetUnitAuraBySpellID(unit, auraID)`
-- no NPC-name matching
-- no full aura scan
-- no SavedVariables writes
+### Temporary protection
 
-`CheckCCImmunity` checks TempCCImmune before learned immunity.
+Temporary protection is classified by cause rather than collapsed into one
+immunity type.
 
-Expected Sartura state:
+Current framework distinctions include:
 
 ```text
-outside Whirlwind -> [immune:stun] false
-during Whirlwind  -> [immune:stun] true
-after Whirlwind   -> [immune:stun] false
+full protection     -> all
+magic protection    -> spell
+physical protection -> physical
+reflection          -> non-immunity explanation
 ```
 
-Both automatic CC-learning paths use the same guard:
+Examples include Divine Protection/Divine Shield/Ice Block, Anti-Magic Shield,
+Blessing of Protection, and curated reflection auras.
 
-1. Nampower `SPELL_MISS -> IMMUNE`
-2. delayed missing-debuff verification
+Numeric creature/aura/spell IDs are authoritative. Names are display/debug
+information only.
 
-Only the matching mechanic is suppressed.
+Reflection, DR, death and similar explanations may reject a learning event but
+must never become permanent immunity themselves.
 
-### C.2 General temporary guard
+## Learner invariants
 
-`IMMUNITY_GUARD_AURA_IDS` prevents temporary protection/reflection from
-becoming permanent learned immunity.
+Do not change these during the current validation phase:
 
-Current verified groups:
+1. Temporary immunity must not become permanent learned immunity.
+2. TempCC is exact/mechanic-specific.
+3. Reflection is not immunity.
+4. Broad spell immunity is not equivalent to one school immunity.
+5. Spell immunity is not exact CC immunity.
+6. Broad CC immunity is not inferred merely from several exact-CC failures.
+7. Absolute immunity remains distinct from spell and physical protection.
+8. Existing user immunity data is not silently rewritten.
+9. `CleveRoids_ImmunityData` remains the authoritative real immunity store.
+10. No new polling or high-frequency `OnUpdate`.
+11. Public immunity macro syntax remains stable during validation.
+12. Do not begin the generalized comparative learner until the current learner
+    has been observed against known real cases.
 
-| Type | IDs |
-|---|---|
-| Divine Protection | 498, 5573 |
-| Divine Shield | 642, 1020, 13874 |
-| Ice Block | 11958, 27619 |
-| Anti-Magic Shield | 7121, 19645, 24021 |
-| Blessing of Protection | 1022, 5599, 10278 |
-| Reflection | curated spell-reflection / reflector IDs already in `Utility.lua` |
+The direct `SPELL_MISS_SELF` path is authoritative when available. Only
+`IMMUNE`/`IMMUNE2` results may reach real immunity learning; ordinary
+MISS/RESIST/DODGE/PARRY/BLOCK results do not teach permanent immunity.
 
-The table is a learning guard, not yet a typed live immunity source.
+Before a real write, the existing learner applies its current safeguards,
+including target/spell identity, split-CC handling, death state, TempCC,
+temporary protection/reflection, NPC-applicable DR and queryable-target
+requirements.
 
-Same-name effects are not sufficient evidence. Absorbs and damage reduction are
-excluded; TBC Spell Shield 33054 is not treated as Vanilla immunity.
+## Immunity diagnostics
 
-### C.3 Precedence
+### `/cleveroid immunities`
 
-Before permanent inference, explain `IMMUNE` through current state first:
+The immunity UI exposes recorded immunity and live temporary state for testing
+and management. It does not perform immunity inference.
+
+### `/cleveroid immunitydebug`
+
+`immunitydebug` is a snooper over the real learner. It must not act as a
+second learner.
+
+SavedVariable:
 
 ```text
-TempCCImmune
-typed/full protection
-magic/physical protection
-reflection
-DR
-recent death
-debuff-cap ambiguity
+CleveRoids_ImmunityDebug
 ```
 
-If explained, do not reinforce permanent immunity.
+The real learner never consumes this journal.
 
----
+### Schema v1 decoder
 
-## Appendix D — Generalized immunity learner
-
-### D.1 Vocabulary
-
-Proposed independent categories:
+Top level:
 
 ```text
-fireimmune
-frostimmune
-natureimmune
-shadowimmune
-arcaneimmune
-holyimmune
-spellimmune
-ccimmune
-<exact mechanic>immune
-immune
+v   schema version; currently 1
+en  immunitydebug enabled: 0/1
+ns  addon-load/session counter
+e   append-oriented journal records
 ```
 
-`physical` and `bleed` remain existing dimensions.
-
-Whether these become macro tokens is still open.
-
-### D.2 Observation before conclusion
-
-One `IMMUNE` can have several causes.
+Common record fields:
 
 ```text
-HoJ -> IMMUNE
-candidates: holyimmune, spellimmune, stunimmune, ccimmune, immune
-
-Charge Stun -> LANDS
-remove: stunimmune, ccimmune, immune
-
-Fireball -> IMMUNE
-candidate overlap with HoJ: spellimmune
+t   absolute timestamp
+s   session ID
+r   milliseconds since addon load
+e   event code
+g   target GUID
+m   creature/Mob ID
+n   localized NPC name
+p   spell ID
+sc  raw Spell.dbc school
+sm  raw spell mechanic ID
+em  raw three-effect mechanic array
 ```
 
-That still does not prove `spellimmune`: `holyimmune + fireimmune` could
-produce the same two observations.
-
-Use three conceptual states:
+School values:
 
 ```text
-unknown -> candidate -> confirmed
+0 Physical
+1 Holy
+2 Fire
+3 Nature
+4 Frost
+5 Shadow
+6 Arcane
 ```
 
-### D.3 Successful hits are eliminators
+Event codes:
 
 ```text
-Frostbolt lands -> not frostimmune / spellimmune / immune
-Cheap Shot lands -> not stunimmune / ccimmune / immune
-Fear lands -> not fearimmune / ccimmune / immune
+1 learner decision/rejection/exclusion
+2 real immunity persistence write
+3 real immunity removal
 ```
 
-Do not use inferred negative evidence to silently remove explicit/manual records.
-
-### D.4 Blackwing Spellbinder regression case
-
-vMaNGOS migration `20231216221145_world.sql` annotates creature 12457:
+Decision records may also contain:
 
 ```text
-Blackwing Spellbinder (HAS AURAS: Spell Immunity)
+x   raw SPELL_MISS result
+q   learner decision
+z   rejection/exclusion reason
+i   resolved canonical immunity type
+dr  learner DR bucket
+u   relevant temporary/guard aura ID
+c   auxiliary numeric value
+h   auxiliary textual/detail value
 ```
 
-It also records the useful stun split: physical/melee stuns can work while HoJ
-and grenade-style magical stuns can return `IMMUNE`.
-
-Required model:
+Raw miss values relevant to this journal:
 
 ```text
-spellimmune = true
-stunimmune  = false
+1 MISS
+2 RESIST
+3 DODGE
+4 PARRY
+5 BLOCK
+6 EVADE
+7 IMMUNE
+8 IMMUNE2
+9 DEFLECT
+10 ABSORB
+11 REFLECT
 ```
 
-An HoJ `IMMUNE` must therefore not create permanent `cc_stun`.
-
-The exact Vanilla Spell Immunity aura/effect still needs identifying.
-
-### D.5 Spell Shield / Anti-Magic cases
-
-The discussed ZG and Stratholme Spell Shield mobs may be temporary
-`spellimmune` examples. Before adding them, verify creature IDs, aura IDs and
-actual effect semantics.
-
-Anti-Magic Shield 7121/19645/24021 is already verified as broad magic immunity
-for learning-guard purposes.
-
-### D.6 `spellimmune` classification
-
-The Vanilla basis is school immunity, not "has a Spell.dbc row" and not
-`DmgClass`.
-
-vMaNGOS checks spell/mechanic immunity before the hit table. A broad magic
-school-immunity mask covers Holy, Fire, Nature, Frost, Shadow and Arcane while
-leaving Physical outside it. This explains the required regression split:
+Decision codes:
 
 ```text
-HoJ          -> Holy + stun -> blocked by spellimmune or stunimmune
-Cheap Shot   -> Physical + stun -> not blocked by spellimmune
-Charge Stun  -> Physical + stun -> not blocked by spellimmune
-Fireball     -> Fire -> blocked by spellimmune
+0 rejected / ignored
+1 accepted CC write path
+2 accepted school/general write path
+3 explicit exclusion
 ```
 
-Anti-Magic Shield is the live typed example of this six-school immunity model.
-Blackwing Spellbinder remains the permanent-regression example; its exact
-underlying aura ID may still be worth identifying, but the classifier primitive
-is resolved.
-
-
-### D.7 Event footprint
-
-Reuse existing events/data:
-
-- Nampower `SPELL_MISS -> IMMUNE`
-- successful `SPELL_GO`
-- confirmed CC/debuff application
-- spell ID / DBC school / exact mechanic
-- target GUID/name
-- DR pool
-- temporary guard state
-
-Preferred shape:
-
-```lua
-ObserveImmunity(target, spellID, result)
-```
-
-No new aura-scanning frame, target polling loop, high-frequency `OnUpdate`,
-duplicate combat-log parser, or whole-aura DBC classification pass.
-
-### D.8 Typed temporary guards
-
-Eventually replace the boolean general guard with typed cause information, e.g.:
+Reason codes:
 
 ```text
-FULL_IMMUNITY_AURAS
-SPELL_IMMUNITY_AURAS
-PHYSICAL_IMMUNITY_AURAS
-REFLECTION_AURAS
+0 accepted / no rejection
+1 missing target or spell identity
+2 split-CC safeguard
+3 recently dead target GUID
+4 target currently dead
+5 curated TempCC explains immunity
+6 temporary protection/reflection guard makes result inconclusive
+7 NPC DR safeguard
+8 no queryable target unit
+9 REFLECT; explicitly not immunity
 ```
 
-or an equivalent typed table.
+Mutation records may additionally contain:
 
-Keep reflection, magic protection, physical protection, absolute immunity and
-TempCC distinct.
+```text
+k   exact CleveRoids_ImmunityData storage key
+b   presence before mutation: 0/1
+f   presence after mutation: 0/1
+h   optional mutation detail
+```
 
----
+`/cleveroid immunitydebug clear` clears only the diagnostic journal. It must
+not clear or alter `CleveRoids_ImmunityData`.
+
+A schema mismatch resets only the debug journal/control structure, never real
+immunity data.
+
+## Live validation state
+
+### Sartura TempCC — PASS
+
+Live Hammer of Justice test:
+
+```text
+Whirlwind active:
+    [noimmune] HoJ is blocked as immune
+
+Whirlwind ends:
+    HoJ becomes eligible and fires
+```
+
+No unexpected learned-immunity entries were present in the user's dataset at
+that point.
+
+This validates the intended player-facing temporary-stun transition.
+
+### Anti-Magic Shield — PARTIAL PASS
+
+While Anti-Magic Shield was active:
+
+```text
+Gaia Frostbolt + [noimmune] -> blocked
+Hammer of Justice + [noimmune] -> blocked
+```
+
+This confirms live broad spell protection for at least Frost and Holy actions.
+
+Still useful to verify:
+
+```text
+an appropriate Physical action remains eligible while Anti-Magic Shield is active
+no permanent Frost/Holy/Stun immunity is written from the temporary state
+```
+
+### Stratholme Spellshield — PENDING
+
+Run the known Spellshield case with `immunitydebug` enabled.
+
+Afterward inspect the complete:
+
+```text
+CleveRoids_ImmunityDebug
+```
+
+plus relevant:
+
+```text
+CleveRoids_ImmunityData
+```
+
+The purpose is to compare the learner's actual decision path with the persisted
+immunity state.
+
+### Blackwing Spellbinder — PENDING
+
+Primary broad-spell-immunity regression case.
+
+Required distinction:
+
+```text
+magical actions such as HoJ -> IMMUNE
+physical stuns              -> can remain eligible
+```
+
+The test must confirm that broad spell immunity does not become false permanent
+stun immunity.
+
+## Deferred
+
+Do not begin during the current validation phase:
+
+```text
+generalized comparative immunity learner
+candidate/disproved/confirmed evidence model
+successful-hit elimination inference
+broad-immunity promotion thresholds
+learner evidence persistence
+inferred broad-immunity persistence
+Mob-ID migration of real immunity storage
+automatic removal of inferred immunity
+new public immunity grammar
+```
+
+These require a separate design decision after the existing learner has been
+validated against real immunity cases.
+
+## Exact next step
+
+Continue live immunity sampling without changing learner or persistence
+semantics.
+
+Next useful case:
+
+```text
+Stratholme Spellshield with immunitydebug enabled
+```
+
+Then inspect:
+
+```text
+CleveRoids_ImmunityDebug
+CleveRoids_ImmunityData
+```
+
+Decode the schema-v1 journal and verify that:
+
+```text
+the expected evidence reached the real learner
+temporary safeguards behaved correctly
+the learner accepted/rejected the observation for the correct reason
+persisted immunity matches the learner decision
+```
+
+Later perform the equivalent Blackwing Spellbinder test.
+
+Do not begin the generalized learner until these validation cases are understood.
