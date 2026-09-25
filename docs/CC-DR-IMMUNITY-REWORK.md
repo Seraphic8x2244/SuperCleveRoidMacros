@@ -395,6 +395,26 @@ an appropriate Physical action remains eligible while Anti-Magic Shield is activ
 no permanent Frost/Holy/Stun immunity is written from the temporary state
 ```
 
+### Hydrospawn / Frostbolt — FAIL: mixed school + CC classification
+
+Observed with Frostbolt:
+
+```text
+Frostbolt returned IMMUNE
+cc_snare was learned
+frost immunity was not learned
+```
+
+Current direct `SPELL_MISS_SELF IMMUNE` logic chooses an exact CC immunity when
+the spell exposes a learnable CC mechanic, otherwise it learns the spell school.
+Frostbolt exposes `snare`, so the CC path wins and the Frost-school path is
+never reached.
+
+This is a confirmed classification problem for spells that combine a damage
+school with a CC effect. Do not fix it by blindly recording both dimensions.
+Capture/review the immunitydebug trace for a representative case before
+changing learner semantics.
+
 ### Blackwing Spellbinder — PENDING
 
 Primary broad-spell-immunity regression case.
@@ -439,6 +459,9 @@ Finish the Anti-Magic Shield validation when convenient:
 verify an appropriate Physical action remains eligible while the shield is active
 verify no permanent Frost/Holy/Stun immunity was written from the temporary state
 ```
+
+Before changing learner semantics, capture/review an immunitydebug trace for a
+mixed school + CC failure such as Hydrospawn/Frostbolt.
 
 Next major regression case:
 
