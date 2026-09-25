@@ -22,14 +22,14 @@ not a chronological development log.
 
 - Branch: `design/temp-cc-immunity`
 - Base: `main`
-- Branch head before this documentation cleanup:
-  `10f32b2f08a6567eb64c98bc97847b7be82257fd`
+- Current handoff before the priority learner fix:
+  `8361d8ca4db4bd9c5e97367b306f22fb2ec50061`
 - TOC version: `@project-version@`
 - Latest Vanilla-Lua runtime fix:
   `aa2b761d1c45d1a28c8354b2f13f216a21403569` — scope immunitydebug locals.
 - Runtime after that fix starts with no Lua errors.
-- Current phase: live validation of the existing immunity learner and temporary
-  immunity safeguards.
+- Current phase: priority fix for the spell-class vs CC-effect learner boundary,
+  then resume live validation.
 - The generalized comparative learner has not started.
 
 ## Branch-specific immunity model
@@ -395,25 +395,29 @@ an appropriate Physical action remains eligible while Anti-Magic Shield is activ
 no permanent Frost/Holy/Stun immunity is written from the temporary state
 ```
 
-### Hydrospawn / Frostbolt — FAIL: mixed school + CC classification
+### Priority bug — spell-class vs CC-effect learning
 
-Observed with Frostbolt:
+Live testing exposed a general classification bug: a spell-level `IMMUNE`
+currently allows `GetSpellImmunityType()` to prefer any learnable CC mechanic
+found on the spell over the spell's damage school.
+
+First observed case:
 
 ```text
+Hydrospawn + Frostbolt
 Frostbolt returned IMMUNE
 cc_snare was learned
 frost immunity was not learned
 ```
 
-Current direct `SPELL_MISS_SELF IMMUNE` logic chooses an exact CC immunity when
-the spell exposes a learnable CC mechanic, otherwise it learns the spell school.
-Frostbolt exposes `snare`, so the CC path wins and the Frost-school path is
-never reached.
+This is not Frostbolt-specific. Any damaging spell with a secondary CC effect
+may be misclassified the same way.
 
-This is a confirmed classification problem for spells that combine a damage
-school with a CC effect. Do not fix it by blindly recording both dimensions.
-Capture/review the immunitydebug trace for a representative case before
-changing learner semantics.
+Spell-level `IMMUNE` evidence belongs to the spell/school path. CC immunity must
+come from evidence that the actual CC effect failed. Do not fix this by recording
+both dimensions from one spell-level `IMMUNE`.
+
+This bug is the next implementation priority.
 
 ### Blackwing Spellbinder — PENDING
 
@@ -450,39 +454,21 @@ validated against real immunity cases.
 
 ## Exact next step
 
-Continue live immunity sampling without changing learner or persistence
-semantics.
+Fix the general spell-class vs CC-effect learner boundary before further
+immunity feature work.
 
-Finish the Anti-Magic Shield validation when convenient:
-
-```text
-verify an appropriate Physical action remains eligible while the shield is active
-verify no permanent Frost/Holy/Stun immunity was written from the temporary state
-```
-
-Before changing learner semantics, capture/review an immunitydebug trace for a
-mixed school + CC failure such as Hydrospawn/Frostbolt.
-
-Next major regression case:
+Audit the direct `SPELL_MISS_SELF IMMUNE` and related fallback paths so that:
 
 ```text
-Blackwing Spellbinder with immunitydebug enabled
+spell-level IMMUNE from a damaging spell -> spell/school evidence
+CC immunity -> only evidence that the actual CC effect failed
 ```
 
-Then inspect:
+Frostbolt/Hydrospawn is the first known reproducer, not a special-case target.
 
-```text
-CleveRoids_ImmunityDebug
-CleveRoids_ImmunityData
-```
+Preserve all current TempCC, temporary-protection, DR, reflection, death,
+persistence and public macro semantics. Do not start the generalized comparative
+learner as part of this fix.
 
-Decode the schema-v1 journal and verify that:
-
-```text
-the expected evidence reached the real learner
-temporary safeguards behaved correctly
-the learner accepted/rejected the observation for the correct reason
-persisted immunity matches the learner decision
-```
-
-Do not begin the generalized learner until these validation cases are understood.
+After the fix, regression-test the Hydrospawn/Frostbolt case, then resume the
+pending Blackwing Spellbinder validation.
