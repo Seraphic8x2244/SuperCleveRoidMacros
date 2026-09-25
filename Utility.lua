@@ -3219,9 +3219,11 @@ delayedTrackingFrame:SetScript("OnUpdate", function()
               )
             end
           elseif CleveRoids.usingSpellMissEvents then
-            -- Aura absence is not proof of immunity when Nampower already
-            -- provides the exact miss reason. Permanent CC immunity is learned
-            -- only by ProcessSpellMissSelf on IMMUNE/IMMUNE2.
+            -- Aura absence alone is not proof of immunity when Nampower supplies
+            -- spell-level miss reasons. ProcessSpellMissSelf may teach CC only
+            -- for non-damaging CC actions; a damaging mixed spell's generic
+            -- IMMUNE is school evidence and must never be promoted to CC here
+            -- without separate evidence that the CC effect itself failed.
             if debug then
               DEFAULT_CHAT_FRAME:AddMessage(
                 _string_format("|cffaaaaaa[CC Inconclusive]|r %s missing on %s - authoritative SPELL_MISS did not report IMMUNE, not recording permanent immunity",
@@ -6923,6 +6925,52 @@ end
 
 CleveRoids.GetSpellImmunityType = GetSpellImmunityType
 
+-- SPELL_MISS_SELF describes the spell-level outcome, not which individual
+-- effect on a mixed spell failed. A generic IMMUNE from a spell that can deal
+-- damage therefore belongs to the spell/school learner; secondary CC mechanics
+-- must not steal that observation. CC-only spells can still use the direct
+-- IMMUNE result because their failed spell action is the CC effect itself.
+--
+-- Keep this DBC-driven. Effect IDs are Vanilla SpellEffects that directly deal
+-- health damage; aura IDs cover periodic damage/leech components.
+function CleveRoids.SpellHasDamageComponent(spellID)
+    if not spellID or spellID <= 0 or not GetSpellRecField then
+        return false
+    end
+
+    local effects = GetSpellRecField(spellID, "effect")
+    if type(effects) == "table" then
+        for i = 1, 3 do
+            local effectID = effects[i]
+            if effectID == 1   -- SPELL_EFFECT_INSTAKILL
+               or effectID == 2   -- SPELL_EFFECT_SCHOOL_DAMAGE
+               or effectID == 7   -- SPELL_EFFECT_ENVIRONMENTAL_DAMAGE
+               or effectID == 9   -- SPELL_EFFECT_HEALTH_LEECH
+               or effectID == 17  -- SPELL_EFFECT_WEAPON_DAMAGE_NOSCHOOL
+               or effectID == 31  -- SPELL_EFFECT_WEAPON_PERCENT_DAMAGE
+               or effectID == 58  -- SPELL_EFFECT_WEAPON_DAMAGE
+               or effectID == 62  -- SPELL_EFFECT_POWER_BURN
+               or effectID == 121 then -- SPELL_EFFECT_NORMALIZED_WEAPON_DMG
+                return true
+            end
+        end
+    end
+
+    local auraNames = GetSpellRecField(spellID, "effectApplyAuraName")
+    if type(auraNames) == "table" then
+        for i = 1, 3 do
+            local auraID = auraNames[i]
+            if auraID == 3   -- SPELL_AURA_PERIODIC_DAMAGE
+               or auraID == 53  -- SPELL_AURA_PERIODIC_LEECH
+               or auraID == 89 then -- SPELL_AURA_PERIODIC_DAMAGE_PERCENT
+                return true
+            end
+        end
+    end
+
+    return false
+end
+
 -- Vanilla broad magic/spell immunity is school-based, not DmgClass-based.
 -- The server checks spell/mechanic immunity before entering the hit table, so
 -- Hammer of Justice's Holy school is enough for a six-school magic-immunity
@@ -9445,18 +9493,29 @@ local function ProcessSpellMissSelf(spellId, targetGuid, missInfo)
             local ccType = GetSpellCCType(spellId)
             local immunityType = GetSpellImmunityType(spellId) or ccType
 
-            -- A curated encounter aura can explain this exact CC IMMUNE result.
-            if queryUnit and immunityType then
-                local tempCCImmune, tempAuraID = IsTemporarilyCCImmune(queryUnit, immunityType)
+            -- SPELL_MISS_SELF is spell-level evidence. Only a non-damaging CC
+            -- action may treat that result as direct evidence that its CC effect
+            -- failed. Mixed damage+CC spells route the same IMMUNE to the school
+            -- learner; their secondary CC must be established by effect-level
+            -- evidence instead.
+            local learnerCCType = immunityType
+            if learnerCCType and CleveRoids.SpellHasDamageComponent(spellId) then
+                learnerCCType = nil
+            end
+
+            -- A curated encounter aura can explain an exact CC IMMUNE result.
+            -- It must not suppress school learning for a damaging mixed spell.
+            if queryUnit and learnerCCType then
+                local tempCCImmune, tempAuraID = IsTemporarilyCCImmune(queryUnit, learnerCCType)
                 if tempCCImmune then
                     if CleveRoids.debug then
                         local auraName = C_Spell.GetSpellName(tempAuraID) or ("SpellID:" .. tostring(tempAuraID))
-                        CleveRoids.Print("|cff00aaff[SPELL_MISS Temp CC Skip]|r " .. targetName .. " has " .. auraName .. " - temporary " .. immunityType .. " immunity")
+                        CleveRoids.Print("|cff00aaff[SPELL_MISS Temp CC Skip]|r " .. targetName .. " has " .. auraName .. " - temporary " .. learnerCCType .. " immunity")
                     end
                     CleveRoids.ImmunityDebugDecision(
                         targetGuid, targetName, spellId, missInfo, queryUnit,
                         IMMUNITY_DEBUG_CODE.DECISION_REJECT, IMMUNITY_DEBUG_CODE.REASON_TEMP_CC,
-                        immunityType, nil, tempAuraID
+                        learnerCCType, nil, tempAuraID
                     )
                     return
                 end
@@ -9472,14 +9531,15 @@ local function ProcessSpellMissSelf(spellId, targetGuid, missInfo)
                     CleveRoids.ImmunityDebugDecision(
                         targetGuid, targetName, spellId, missInfo, queryUnit,
                         IMMUNITY_DEBUG_CODE.DECISION_REJECT, IMMUNITY_DEBUG_CODE.REASON_GUARD_AURA,
-                        immunityType, nil, immunityAuraID, nil, immunityAuraType
+                        learnerCCType, nil, immunityAuraID, nil, immunityAuraType
                     )
                     return
                 end
             end
 
-            -- Check NPC-applicable DR before recording permanent CC immunity.
-            local drType = GetSpellImmunityDRType(spellId)
+            -- DR only explains a failed CC effect; it is not a reason to reject
+            -- spell/school evidence from a damaging mixed spell.
+            local drType = learnerCCType and GetSpellImmunityDRType(spellId) or nil
             if drType and targetGuid then
                 local drEntry = lib.recentCCHits[targetGuid] and lib.recentCCHits[targetGuid][drType]
                 if drEntry and (GetTime() - drEntry.lastHitTime) < DR_RESET_WINDOW and drEntry.count >= 3 then
@@ -9489,7 +9549,7 @@ local function ProcessSpellMissSelf(spellId, targetGuid, missInfo)
                     CleveRoids.ImmunityDebugDecision(
                         targetGuid, targetName, spellId, missInfo, queryUnit,
                         IMMUNITY_DEBUG_CODE.DECISION_REJECT, IMMUNITY_DEBUG_CODE.REASON_DR,
-                        immunityType, drType, nil, drEntry.count
+                        learnerCCType, drType, nil, drEntry.count
                     )
                     return
                 end
@@ -9503,26 +9563,25 @@ local function ProcessSpellMissSelf(spellId, targetGuid, missInfo)
                 CleveRoids.ImmunityDebugDecision(
                     targetGuid, targetName, spellId, missInfo, nil,
                     IMMUNITY_DEBUG_CODE.DECISION_REJECT, IMMUNITY_DEBUG_CODE.REASON_NO_QUERY_UNIT,
-                    immunityType, drType
+                    learnerCCType, drType
                 )
                 return
             end
 
-            -- Record as permanent immunity. immunitydebug only records the learner's
-            -- actual decision and the real write performed by Record*Immunity.
-            if immunityType then
-                RecordCCImmunity(targetName, immunityType, nil, spellName)
+            -- Record exactly one permanent dimension from this spell-level
+            -- observation. Mixed damage+CC spells are school evidence only.
+            if learnerCCType then
+                RecordCCImmunity(targetName, learnerCCType, nil, spellName)
                 CleveRoids.ImmunityDebugDecision(
                     targetGuid, targetName, spellId, missInfo, queryUnit,
                     IMMUNITY_DEBUG_CODE.DECISION_ACCEPT_CC, IMMUNITY_DEBUG_CODE.REASON_NONE,
-                    immunityType, drType
+                    learnerCCType, drType
                 )
             else
                 RecordImmunity(targetName, spellName, nil, spellId)
                 CleveRoids.ImmunityDebugDecision(
                     targetGuid, targetName, spellId, missInfo, queryUnit,
-                    IMMUNITY_DEBUG_CODE.DECISION_ACCEPT_SCHOOL, IMMUNITY_DEBUG_CODE.REASON_NONE,
-                    nil, drType
+                    IMMUNITY_DEBUG_CODE.DECISION_ACCEPT_SCHOOL, IMMUNITY_DEBUG_CODE.REASON_NONE
                 )
             end
         end
