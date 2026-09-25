@@ -22,14 +22,15 @@ not a chronological development log.
 
 - Branch: `design/temp-cc-immunity`
 - Base: `main`
-- Current handoff before the priority learner fix:
-  `8361d8ca4db4bd9c5e97367b306f22fb2ec50061`
+- Priority learner-fix handoff: `e3bb90015f0bd341614fa8bc8d0dd532737531a7`.
+- Current implementation commit:
+  `edd53975621e452b29281603790565e7a98aa67c` — route spell-level
+  `IMMUNE` evidence to the spell/school learner only.
 - TOC version: `@project-version@`
 - Latest Vanilla-Lua runtime fix:
   `aa2b761d1c45d1a28c8354b2f13f216a21403569` — scope immunitydebug locals.
 - Runtime after that fix starts with no Lua errors.
-- Current phase: priority fix for the spell-class vs CC-effect learner boundary,
-  then resume live validation.
+- Current phase: live regression validation of the corrected learner boundary.
 - The generalized comparative learner has not started.
 
 ## Branch-specific immunity model
@@ -395,31 +396,41 @@ an appropriate Physical action remains eligible while Anti-Magic Shield is activ
 no permanent Frost/Holy/Stun immunity is written from the temporary state
 ```
 
-### Priority bug — spell-class vs CC-effect learning
+### Spell-class vs CC-effect learner boundary — FIXED, LIVE TEST PENDING
 
-Live testing exposed a general classification bug: a spell-level `IMMUNE`
-currently allows `GetSpellImmunityType()` to prefer any learnable CC mechanic
-found on the spell over the spell's damage school.
+The direct `SPELL_MISS_SELF IMMUNE/IMMUNE2` learner now treats the event as
+spell-level evidence only. A CC mechanic present on the spell is retained solely
+for existing TempCC/DR safeguards; it can no longer select the permanent CC
+write path.
 
-First observed case:
+First known reproducer:
 
 ```text
 Hydrospawn + Frostbolt
-Frostbolt returned IMMUNE
-cc_snare was learned
-frost immunity was not learned
+
+before:
+    IMMUNE -> cc_snare
+
+after:
+    IMMUNE -> frost
+    no cc_snare write
 ```
 
-This is not Frostbolt-specific. Any damaging spell with a secondary CC effect
-may be misclassified the same way.
+The fix is intentionally general rather than Frostbolt-specific. It also closes
+the same false-CC route for non-damaging magical CC actions such as Hammer of
+Justice: a generic spell-level `IMMUNE` no longer proves stun immunity.
 
-Spell-level `IMMUNE` evidence belongs to the spell/school path. CC immunity must
-come from evidence that the actual CC effect failed. Do not fix this by recording
-both dimensions from one spell-level `IMMUNE`.
+The direct path still preserves the existing split-CC, death, TempCC,
+temporary-protection/reflection, DR and queryable-target guards before any
+school write.
 
-This bug is the next implementation priority.
+CC persistence remains separate. The delayed CC verifier is the effect-level
+path; when authoritative `SPELL_MISS` events are active, aura absence alone
+remains inconclusive and cannot be promoted to permanent CC immunity.
 
-### Blackwing Spellbinder — PENDING
+No generalized comparative learner or broad-immunity promotion was added.
+
+### Blackwing Spellbinder — PENDING LIVE REGRESSION
 
 Primary broad-spell-immunity regression case.
 
@@ -430,8 +441,11 @@ magical actions such as HoJ -> IMMUNE
 physical stuns              -> can remain eligible
 ```
 
-The test must confirm that broad spell immunity does not become false permanent
-stun immunity.
+With the corrected learner boundary, a generic HoJ `IMMUNE` can no longer
+write `cc_stun`; its direct learner observation follows the Holy school path.
+The live test must confirm that behaviour and that a physical stun remains
+eligible. Broad `spell` promotion itself remains deferred to the generalized
+learner.
 
 ## Deferred
 
@@ -454,21 +468,31 @@ validated against real immunity cases.
 
 ## Exact next step
 
-Fix the general spell-class vs CC-effect learner boundary before further
-immunity feature work.
+Live-test the corrected boundary before further immunity feature work.
 
-Audit the direct `SPELL_MISS_SELF IMMUNE` and related fallback paths so that:
+First regression:
 
 ```text
-spell-level IMMUNE from a damaging spell -> spell/school evidence
-CC immunity -> only evidence that the actual CC effect failed
+Hydrospawn + Frostbolt
+expect frost immunity write
+expect no cc_snare write
 ```
 
-Frostbolt/Hydrospawn is the first known reproducer, not a special-case target.
+Then resume the Blackwing Spellbinder validation:
 
-Preserve all current TempCC, temporary-protection, DR, reflection, death,
-persistence and public macro semantics. Do not start the generalized comparative
-learner as part of this fix.
+```text
+HoJ IMMUNE must not write cc_stun
+physical stun must remain eligible unless independently blocked
+```
 
-After the fix, regression-test the Hydrospawn/Frostbolt case, then resume the
-pending Blackwing Spellbinder validation.
+Also keep watching the existing safeguards during those tests:
+
+```text
+TempCC remains temporary
+temporary protection/reflection does not persist
+DR and death do not become permanent immunity
+existing persistence and public macro syntax remain unchanged
+```
+
+Do not begin the generalized comparative learner until these regression cases
+have been observed live.
