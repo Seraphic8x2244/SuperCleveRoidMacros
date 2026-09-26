@@ -2488,6 +2488,14 @@ local IMMUNITY_AURAS = {
         [10278] = true,  -- Blessing of Protection (Rank 3)
     },
 
+    root = {
+        [1044] = true,   -- Blessing of Freedom
+    },
+
+    snare = {
+        [1044] = true,   -- Blessing of Freedom
+    },
+
     reflect = {
         -- Spell Reflection
         [9941] = true,
@@ -2580,6 +2588,13 @@ end
 local function IsTemporarilyCCImmune(unit, ccType)
     if not unit or not ccType or not UnitExists(unit) then
         return false
+    end
+
+    -- Typed temporary CC auras apply to players and NPCs alike. These are live
+    -- state only and must never be promoted to permanent learned immunity.
+    local typedAuraID = GetActiveImmunityAura(unit, ccType)
+    if typedAuraID then
+        return true, typedAuraID
     end
 
     local creatureEntry = GetCreatureEntry(unit)
@@ -7038,6 +7053,7 @@ do
     local IMMUNITY_DEBUG_REASON_NO_QUERY_UNIT = 8
     local IMMUNITY_DEBUG_REASON_REFLECT = 9
     local IMMUNITY_DEBUG_REASON_AMBIGUOUS_CAUSE = 10
+    local IMMUNITY_DEBUG_REASON_PLAYER_TARGET = 11
     
     local IMMUNITY_DEBUG_LABELS = {
         charm = "Charm", disorient = "Disorient", disarm = "Disarm", distract = "Distract",
@@ -7062,6 +7078,7 @@ do
         [IMMUNITY_DEBUG_REASON_NO_QUERY_UNIT] = "no query unit",
         [IMMUNITY_DEBUG_REASON_REFLECT] = "REFLECT",
         [IMMUNITY_DEBUG_REASON_AMBIGUOUS_CAUSE] = "ambiguous immunity cause",
+        [IMMUNITY_DEBUG_REASON_PLAYER_TARGET] = "player target",
     }
     
     local immunityDebugSessionStart = GetTime()
@@ -7292,6 +7309,7 @@ do
     IMMUNITY_DEBUG_CODE.REASON_NO_QUERY_UNIT = IMMUNITY_DEBUG_REASON_NO_QUERY_UNIT
     IMMUNITY_DEBUG_CODE.REASON_REFLECT = IMMUNITY_DEBUG_REASON_REFLECT
     IMMUNITY_DEBUG_CODE.REASON_AMBIGUOUS_CAUSE = IMMUNITY_DEBUG_REASON_AMBIGUOUS_CAUSE
+    IMMUNITY_DEBUG_CODE.REASON_PLAYER_TARGET = IMMUNITY_DEBUG_REASON_PLAYER_TARGET
 end
 
 -- NPC immunity learning only needs DR groups that can actually diminish creatures.
@@ -7464,15 +7482,16 @@ local function CheckCCImmunity(unitId, ccType)
 
     ccType = NormalizeCCImmunityType(ccType)
 
-    -- CC immunity only tracked for NPCs
-    if UnitIsPlayer(unitId) then
-        return false
-    end
-
-    -- Curated temporary encounter immunity is live state, not learned state.
+    -- Temporary CC immunity is live state and may legitimately apply to players
+    -- (for example Blessing of Freedom root/snare immunity).
     local tempCCImmune, tempAuraID = IsTemporarilyCCImmune(unitId, ccType)
     if tempCCImmune then
         return true, IMMUNITY_SOURCE.temporary_cc, tempAuraID
+    end
+
+    -- Permanent/recorded CC immunity is NPC-only.
+    if UnitIsPlayer(unitId) then
+        return false
     end
 
     local targetName = UnitName(unitId)
@@ -8023,6 +8042,14 @@ local function ParseImmunityCombatLog()
         -- Check if target is queryable for buff check
         local canQuery = UnitExists("target") and UnitName("target") == targetName
         if canQuery then
+            if UnitIsPlayer("target") then
+                if CleveRoids.debug then
+                    CleveRoids.Print("|cff00aaff[CombatLog Player Skip]|r " .. targetName .. " is a player - not recording " .. school .. " immunity")
+                end
+                CancelPendingVerification(targetName, nil)
+                return
+            end
+
             local immunityBuff = HasImmunityGuardAura("target")
             if immunityBuff then
                 if CleveRoids.debug then
@@ -9456,6 +9483,19 @@ local function ProcessSpellMissSelf(spellId, targetGuid, missInfo)
                 queryUnit = "target"
             elseif hasExtTokens and UnitExists(targetGuid) then
                 queryUnit = targetGuid
+            end
+
+            -- Player targets may have valid temporary immunity state, but they
+            -- must never contribute permanent learned immunity.
+            if queryUnit and UnitIsPlayer(queryUnit) then
+                if CleveRoids.debug then
+                    CleveRoids.Print("|cff00aaff[SPELL_MISS Player Skip]|r " .. targetName .. " is a player - not recording permanent immunity")
+                end
+                CleveRoids.ImmunityDebugDecision(
+                    targetGuid, targetName, spellId, missInfo, queryUnit,
+                    IMMUNITY_DEBUG_CODE.DECISION_REJECT, IMMUNITY_DEBUG_CODE.REASON_PLAYER_TARGET
+                )
+                return
             end
 
             local ccType = GetSpellCCType(spellId)
