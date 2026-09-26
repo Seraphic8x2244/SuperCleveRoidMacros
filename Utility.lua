@@ -9531,9 +9531,10 @@ local function ProcessSpellMissSelf(spellId, targetGuid, missInfo)
                 return
             end
 
-            -- IMMUNE2 is not a school result. On vMaNGOS it is written when the
-            -- final target effectMask is empty after per-effect rejection. Nampower
-            -- exposes no effect index, and Turtle/Octo packet semantics are not yet
+            -- IMMUNE2 is not a school result. On vMaNGOS it is written whenever
+            -- the final target effectMask is empty; per-effect immunity is one
+            -- direct route to that state. Nampower exposes no effect index, and
+            -- Turtle/Octo packet semantics are not yet
             -- independently proven, so the portable direct learner must not persist
             -- any dimension from IMMUNE2.
             if missInfo == MISSINFO_IMMUNE2 then
