@@ -22,15 +22,17 @@ not a chronological development log.
 
 - Branch: `design/temp-cc-immunity`
 - Base: `main`
-- Priority learner-fix handoff: `e3bb90015f0bd341614fa8bc8d0dd532737531a7`.
+- Priority learner-fix handoff:
+  `e3bb90015f0bd341614fa8bc8d0dd532737531a7`.
 - Current implementation commit:
-  `edd53975621e452b29281603790565e7a98aa67c` — route spell-level
-  `IMMUNE` evidence to the spell/school learner only.
+  `edd53975621e452b29281603790565e7a98aa67c` — direct spell-level
+  `IMMUNE` currently routes to school; this is now known to be too broad.
 - TOC version: `@project-version@`
 - Latest Vanilla-Lua runtime fix:
   `aa2b761d1c45d1a28c8354b2f13f216a21403569` — scope immunitydebug locals.
 - Runtime after that fix starts with no Lua errors.
-- Current phase: live regression validation of the corrected learner boundary.
+- Current phase: audit available per-effect evidence, then correct the learner
+  boundary.
 - The generalized comparative learner has not started.
 
 ## Branch-specific immunity model
@@ -81,11 +83,29 @@ nature
 frost
 shadow
 arcane
-bleed
 ```
 
 `unknown` may exist as a storage fallback but is not a queryable immunity
 dimension.
+
+### Independent effect immunity
+
+Current independent effect immunity:
+
+```text
+bleed
+```
+
+The learner design must also preserve these distinctions when supported:
+
+```text
+poison != nature
+curse  != shadow
+disease remains distinct from school immunity
+```
+
+School, CC/mechanic and effect-family immunity are orthogonal. Do not infer one
+axis from another.
 
 ### Broad immunity
 
@@ -214,10 +234,19 @@ Do not change these during the current validation phase:
 11. Public immunity macro syntax remains stable during validation.
 12. Do not begin the generalized comparative learner until the current learner
     has been observed against known real cases.
+13. Learn only the immunity dimension uniquely proven by the observed effect
+    result. If multiple dimensions could explain the same evidence, persist
+    nothing.
 
-The direct `SPELL_MISS_SELF` path is authoritative when available. Only
-`IMMUNE`/`IMMUNE2` results may reach real immunity learning; ordinary
-MISS/RESIST/DODGE/PARRY/BLOCK results do not teach permanent immunity.
+The direct `SPELL_MISS_SELF` path is authoritative for the spell-level miss
+result when available. Only `IMMUNE`/`IMMUNE2` can contribute positive immunity
+evidence; ordinary MISS/RESIST/DODGE/PARRY/BLOCK results do not teach permanent
+immunity.
+
+A generic `IMMUNE` proves that the action was immune, but not necessarily which
+component caused it. School/action, CC/mechanic, bleed and other effect-family
+immunities must remain separate unless the observed evidence uniquely identifies
+the failed dimension.
 
 Before a real write, the existing learner applies its current safeguards,
 including target/spell identity, split-CC handling, death state, TempCC,
@@ -396,56 +425,93 @@ an appropriate Physical action remains eligible while Anti-Magic Shield is activ
 no permanent Frost/Holy/Stun immunity is written from the temporary state
 ```
 
-### Spell-class vs CC-effect learner boundary — FIXED, LIVE TEST PENDING
+### Immunity learner boundary — DESIGN REVISED, IMPLEMENTATION PENDING
 
-The direct `SPELL_MISS_SELF IMMUNE/IMMUNE2` learner now treats the event as
-spell-level evidence only. A CC mechanic present on the spell is retained solely
-for existing TempCC/DR safeguards; it can no longer select the permanent CC
-write path.
+Do not classify permanent immunity from spell identity alone. Learn only the
+dimension proven by the observed effect result.
 
-First known reproducer:
+Core rule:
+
+```text
+unique failed dimension   -> learn it
+multiple plausible causes -> ambiguous; learn nothing
+```
+
+Examples:
+
+```text
+Frostbolt: Frost damage + snare
+damage specifically immune        -> frost
+damage lands, snare fails         -> cc_snare
+undifferentiated IMMUNE           -> ambiguous
+
+Rake: physical hit + bleed
+hit specifically immune           -> physical
+hit lands, bleed fails            -> bleed
+combined/undifferentiated IMMUNE  -> ambiguous
+
+Rupture: no independent hit; bleed is the damage effect
+generic IMMUNE                    -> physical vs bleed ambiguous
+
+Hammer of Justice: Holy + stun, no damage
+generic IMMUNE                    -> holy vs stun ambiguous
+
+Intercept: physical damage + stun
+damage specifically immune        -> physical
+damage lands, stun fails          -> cc_stun
+undifferentiated IMMUNE           -> ambiguous
+```
+
+The same principle applies to other effect families:
+
+```text
+poison immunity != nature immunity
+curse immunity  != shadow immunity
+disease immunity remains independent if supported
+```
+
+The original Frostbolt failure exposed a general learner-boundary bug:
 
 ```text
 Hydrospawn + Frostbolt
-
-before:
-    IMMUNE -> cc_snare
-
-after:
-    IMMUNE -> frost
-    no cc_snare write
+IMMUNE -> incorrectly learned cc_snare
 ```
 
-The fix is intentionally general rather than Frostbolt-specific. It also closes
-the same false-CC route for non-damaging magical CC actions such as Hammer of
-Justice: a generic spell-level `IMMUNE` no longer proves stun immunity.
+The first correction stopped direct `IMMUNE` from selecting the CC write path,
+but the current implementation then went too far in the opposite direction by
+routing generic direct `IMMUNE` to school immunity.
 
-The direct path still preserves the existing split-CC, death, TempCC,
-temporary-protection/reflection, DR and queryable-target guards before any
-school write.
+That implementation is not the final learner design.
 
-CC persistence remains separate. The delayed CC verifier is the effect-level
-path; when authoritative `SPELL_MISS` events are active, aura absence alone
-remains inconclusive and cannot be promoted to permanent CC immunity.
+CC/effect persistence requires evidence that the actual secondary effect failed.
+School persistence likewise requires evidence that the school/action component
+is the uniquely identified failure. An undifferentiated whole-action `IMMUNE`
+must not choose between plausible dimensions.
 
-No generalized comparative learner or broad-immunity promotion was added.
+Preserve the existing split-CC, death, TempCC, temporary-protection/reflection,
+DR and queryable-target safeguards.
 
-### Blackwing Spellbinder — PENDING LIVE REGRESSION
+No generalized comparative learner or broad-immunity promotion is part of this
+correction.
 
-Primary broad-spell-immunity regression case.
+### Blackwing Spellbinder — PENDING
+
+Primary spell-vs-CC ambiguity regression case.
 
 Required distinction:
 
 ```text
-magical actions such as HoJ -> IMMUNE
-physical stuns              -> can remain eligible
+Hammer of Justice IMMUNE
+    -> Holy/spell vs stun ambiguous from a generic spell-level result
+
+physical stun
+    -> remains independently eligible unless its own evidence proves immunity
 ```
 
-With the corrected learner boundary, a generic HoJ `IMMUNE` can no longer
-write `cc_stun`; its direct learner observation follows the Holy school path.
-The live test must confirm that behaviour and that a physical stun remains
-eligible. Broad `spell` promotion itself remains deferred to the generalized
-learner.
+A generic HoJ `IMMUNE` must not write either `holy` or `cc_stun` without
+effect-specific evidence.
+
+Broad `spell` promotion remains deferred to the generalized learner.
 
 ## Deferred
 
@@ -468,31 +534,38 @@ validated against real immunity cases.
 
 ## Exact next step
 
-Live-test the corrected boundary before further immunity feature work.
+Audit what Nampower/combat-log evidence actually distinguishes individual effect
+failure from whole-action `IMMUNE`, then revise the current learner around that
+evidence boundary.
 
-First regression:
+Implementation rule:
+
+```text
+unique failed dimension   -> learn it
+multiple plausible causes -> ambiguous; learn nothing
+```
+
+Key regression cases after implementation:
 
 ```text
 Hydrospawn + Frostbolt
-expect frost immunity write
-expect no cc_snare write
+Rake
+Rupture
+Blackwing Spellbinder + HoJ
+Intercept
+poison-immune target
+curse-immune target
 ```
 
-Then resume the Blackwing Spellbinder validation:
-
-```text
-HoJ IMMUNE must not write cc_stun
-physical stun must remain eligible unless independently blocked
-```
-
-Also keep watching the existing safeguards during those tests:
+During regression testing also confirm:
 
 ```text
 TempCC remains temporary
 temporary protection/reflection does not persist
 DR and death do not become permanent immunity
+split-CC safeguards remain intact
 existing persistence and public macro syntax remain unchanged
 ```
 
-Do not begin the generalized comparative learner until these regression cases
-have been observed live.
+Do not begin the generalized comparative learner until the corrected per-event
+learner boundary has been implemented and observed against these cases.
