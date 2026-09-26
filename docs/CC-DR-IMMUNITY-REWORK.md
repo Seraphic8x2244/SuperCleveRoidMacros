@@ -33,6 +33,13 @@ not a chronological development log.
 - Runtime after that fix starts with no Lua errors.
 - Current phase: audit the three server-side immunity outcome paths, then
   correct the learner boundary from the resulting evidence map.
+- **Runtime learner testing is blocked until that correction lands.** The current
+  generic direct `IMMUNE -> school` behaviour is known-buggy and may learn the
+  wrong permanent immunity; do not ask for further learner testing on this build.
+- Portability target: one learner for **vMaNGOS and Turtle/Octo**. `IMMUNE` and
+  `IMMUNE2` are existing upstream Nampower/SCRM signals and are assumed
+  available on Turtle/Octo, but their exact server-side semantics remain
+  unverified. Do not bake a vMaNGOS-only interpretation into shared learner logic.
 - The generalized comparative learner has not started.
 
 ## Branch-specific immunity model
@@ -948,6 +955,11 @@ be caused by:
 - aura-state immunity;
 - effect-type immunity.
 
+Use vMaNGOS as the concrete server implementation we can inspect, but separate
+packet/Nampower facts from vMaNGOS-specific semantics. The resulting learner must
+remain portable to Turtle/Octo; where Turtle/Octo semantics are not yet proven,
+keep that assumption isolated and testable rather than treating it as universal.
+
 Then validate the result against the representative spells:
 
 - Frostbolt;
@@ -984,7 +996,8 @@ which immunity dimensions are capable of producing the exact runtime outcome we 
 ```
 
 Only after that mapping is complete should the minimal learner correction be
-designed.
+designed and implemented. That corrected build is the next meaningful runtime
+test build; further learner testing of the current build is not useful.
 
 The intended learner rule remains:
 
