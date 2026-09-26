@@ -24,22 +24,23 @@ not a chronological development log.
 - Base: `main`
 - Priority learner-fix handoff:
   `e3bb90015f0bd341614fa8bc8d0dd532737531a7`.
-- Current implementation commit:
-  `edd53975621e452b29281603790565e7a98aa67c` — direct spell-level
-  `IMMUNE` currently routes to school; this is now known to be too broad.
+- Corrected learner implementation:
+  `d5a2f772e380f9b6d34624cd36e10ae63dd70fb5` — direct
+  `IMMUNE` is now narrowed before school persistence and `IMMUNE2` is
+  non-learning evidence.
 - TOC version: `@project-version@`
-- Latest Vanilla-Lua runtime fix:
-  `aa2b761d1c45d1a28c8354b2f13f216a21403569` — scope immunitydebug locals.
-- Runtime after that fix starts with no Lua errors.
-- Current phase: audit the three server-side immunity outcome paths, then
-  correct the learner boundary from the resulting evidence map.
-- **Runtime learner testing is blocked until that correction lands.** The current
-  generic direct `IMMUNE -> school` behaviour is known-buggy and may learn the
-  wrong permanent immunity; do not ask for further learner testing on this build.
-- Portability target: one learner for **vMaNGOS and Turtle/Octo**. `IMMUNE` and
-  `IMMUNE2` are existing upstream Nampower/SCRM signals and are assumed
-  available on Turtle/Octo, but their exact server-side semantics remain
-  unverified. Do not bake a vMaNGOS-only interpretation into shared learner logic.
+- Latest known-good runtime before this correction:
+  `aa2b761d1c45d1a28c8354b2f13f216a21403569` — immunitydebug local-scope
+  runtime fix; that build started with no Lua errors.
+- Current phase: the server outcome audit and smallest safe learner correction
+  are complete. The corrected learner has **not** yet had a runtime load/test
+  pass.
+- Runtime learner testing is now unblocked **for the corrected build only**.
+  Do not return to the pre-correction generic `IMMUNE -> school` build.
+- Portability target remains one learner for **vMaNGOS and Turtle/Octo**.
+  vMaNGOS semantics are proven below. Turtle/Octo `IMMUNE`/`IMMUNE2`
+  semantics remain an explicit compatibility assumption to verify; the
+  vMaNGOS-specific positive inference is kept local to the direct miss learner.
 - The generalized comparative learner has not started.
 
 ## Branch-specific immunity model
@@ -378,6 +379,7 @@ Reason codes:
 7 NPC DR safeguard
 8 no queryable target unit
 9 REFLECT; explicitly not immunity
+10 ambiguous immunity cause / raw result does not identify one safe dimension
 ```
 
 Mutation records may additionally contain:
@@ -582,193 +584,132 @@ That observation is consistent with the server implementation.
 
 ##### `IMMUNE2`
 
-Before `SPELL_GO` targets are written, the server checks the final effect mask.
+vMaNGOS writes `IMMUNE2` when the final target `effectMask` is zero as
+`SPELL_GO` targets are serialized.
 
-If:
+Per-effect immunity is one direct way to reach that state:
+
+1. `IsImmuneToSpellEffect()` rejects an effect;
+2. that effect bit is omitted/removed;
+3. if no effect bits remain, the outgoing miss condition becomes `IMMUNE2`.
+
+The important correction is that `IMMUNE2` is a **final zero-mask result**, not
+an effect-cause code. Other spell-target logic can also clear an effect mask.
+Nampower exposes the raw result but no effect index or server-side rejection
+reason.
+
+Therefore the direct learner treats `IMMUNE2` as:
 
 ```text
-effectMask == 0
+no executable effect bits remained
+!=
+a uniquely identified school / mechanic / aura-state / effect-type immunity
 ```
 
-then:
-
-```text
-missCondition = IMMUNE2
-```
-
-Therefore `IMMUNE2` means:
-
-> every applicable spell effect for that target was removed as immune.
-
-This is stronger evidence than a generic per-effect failure, but it still does
-not necessarily identify the immunity dimension if multiple dimensions could
-independently explain all effects failing.
+No permanent immunity dimension is written from raw `IMMUNE2`.
 
 ##### `IMMUNE`
 
-The server also performs a whole-spell immunity check using
-`IsImmuneToSpell()`.
+vMaNGOS whole-spell `IMMUNE` is produced by the whole-spell hit path.
 
-That path can include:
+The relevant direct causes are:
 
-- dispel-type immunity;
-- spell-school immunity;
-- spell-level mechanic immunity;
-- other whole-spell restrictions.
+- spell-school immunity via `IsImmuneToSpell()`;
+- damage-school immunity via `IsImmuneToDamage()`;
+- spell Dispel-family immunity via `IMMUNITY_DISPEL`;
+- spell-level mechanic immunity via `IMMUNITY_MECHANIC`.
 
-Therefore:
+For delayed spells, `Spell::CheckAtDelay()` can also change the target result
+to `IMMUNE` when `CheckTargetCreatureType()` no longer matches. That is not a
+permanent immunity dimension at all, so a spell with a non-zero
+`TargetCreatureType` cannot safely teach from a generic `IMMUNE`.
 
-> `IMMUNE` is whole-spell immunity evidence, but not automatically
-> school-immunity evidence.
+Per-effect mechanic, aura-state and effect-type immunity are handled through
+`IsImmuneToSpellEffect()`; on the inspected vMaNGOS path they remove effect
+bits rather than directly producing whole-spell `IMMUNE`.
 
-The current direct learner remains too aggressive if it interprets every
-`IMMUNE` as spell school.
-
-#### Representative cases under the revised model
-
-##### Frostbolt — Frost damage + snare
-
-Static structure:
+The smallest safe direct rule is therefore:
 
 ```text
-Frost school
-+ direct Frost damage
-+ snare aura
+IMMUNE
++ known DBC school
++ spell-level mechanic == 0
++ Dispel == 0
++ TargetCreatureType == 0
+=> school/action is the only represented whole-spell cause
+=> learn the literal DBC school
+
+otherwise
+=> ambiguous
+=> learn nothing
 ```
 
-If only the snare is immune:
+School immunity and damage immunity are distinct server checks, but both operate
+on the same school mask and map to the same existing SCRM school/action
+dimension. They therefore do not create a persistence ambiguity for this narrow
+learner.
 
-```text
-damage effect remains in effectMask
-snare effect is removed
-spell still counts as a hit
-no separate IMMUNE is necessarily emitted
-```
+The direct path intentionally forces the literal Spell.dbc school. This avoids
+misclassifying a whole-spell Physical `IMMUNE` as `bleed` merely because the
+spell also carries a bleed effect/mechanic.
 
-Therefore a Frostbolt slow immunity is **not** by itself a plausible explanation
-for every generic whole-spell `IMMUNE`.
+#### Final vMaNGOS outcome/cause map
 
-This materially weakens the earlier assumption that:
+The table below means **direct/sufficient path for that observed outcome**.
+A cause can coexist with another cause without being the reason encoded by that
+outcome.
 
-```text
-Frostbolt IMMUNE -> { frost, snare }
-```
+| Candidate cause | Silent individual effect rejection | `SPELL_MISS_SELF IMMUNE` | `SPELL_MISS_SELF IMMUNE2` |
+| --- | --- | --- | --- |
+| school immunity | no | yes | not by itself |
+| damage immunity | no | yes | not by itself |
+| dispel-family immunity | no | yes | not by itself |
+| spell-level mechanic immunity | no | yes | not by itself |
+| per-effect mechanic immunity | yes | no | yes if all remaining effect bits are removed |
+| aura-state immunity | yes | no | yes if all remaining effect bits are removed |
+| effect-type immunity | yes | no | yes if all remaining effect bits are removed |
 
-must always be treated as ambiguous.
+Additional non-immunity ambiguity:
 
-However `IMMUNE` still cannot immediately be equated with Frost immunity
-because whole-spell immunity may arise through another whole-spell dimension.
+| Cause | Outcome |
+| --- | --- |
+| delayed target-creature-type mismatch | can be rewritten to `IMMUNE` by `Spell::CheckAtDelay()` |
+| any other path that leaves final `effectMask == 0` | can surface as `IMMUNE2`; raw `IMMUNE2` does not identify why |
 
-Further classification of the `IMMUNE` path is required.
+Concrete vMaNGOS source points audited:
 
-##### Rake — physical hit + bleed
+- `Unit::IsImmuneToSpell()`;
+- `Unit::IsImmuneToDamage()`;
+- `Unit::IsImmuneToSpellEffect()`;
+- `Creature::IsImmuneToSpell*()`;
+- `SpellCaster::SpellHitResult()`;
+- `Spell::AddUnitTarget()`;
+- `Spell::CheckAtDelay()`;
+- `Spell::WriteSpellGoTargets()`.
 
-Static structure:
+Nampower's current SpellRec field map was also checked. The direct classifier
+uses existing fields `school`, `mechanic`, `dispel`, and
+`targetCreatureType`; no new client dependency is introduced.
 
-```text
-physical direct damage
-+ bleed aura
-```
+#### Representative cases under the finalized direct rule
 
-Rake's bleed mechanic is stored on an individual Spell.dbc effect.
+These are direct-event classifications only. They do not add the deferred
+cross-event comparative learner.
 
-An effect-level bleed immunity may remove the bleed effect while allowing the
-direct physical hit to land.
+| Representative | Relevant static dimensions | Exact runtime outcome interpretation | Permanent learning from the direct event |
+| --- | --- | --- | --- |
+| Frostbolt | Frost school; Dispel=Magic; per-effect snare | snare-only rejection may be silent; generic `IMMUNE` has Frost-school/damage vs Magic-dispel alternatives | no write from generic `IMMUNE`; no write from `IMMUNE2` |
+| Rake | Physical school; no spell-level mechanic/dispel; direct hit + effect-level bleed | bleed-only rejection may be silent; generic `IMMUNE` has only the existing Physical school/action whole-spell dimension | generic `IMMUNE` may learn **physical**; never reinterpret this direct result as bleed |
+| Rupture | Physical school; spell-level Bleed mechanic; no dispel | generic `IMMUNE` can be Physical school/damage or Bleed mechanic | no write |
+| Hammer of Justice | Holy school; spell-level Stun mechanic; Dispel=Magic | generic `IMMUNE` has multiple whole-spell causes before any effect inference | no Holy or stun write |
+| Intercept parent | Physical school; no spell-level mechanic/dispel; trigger-spell effect | classify the actual spell ID in the Nampower event; parent `IMMUNE` can narrow to Physical | parent generic `IMMUNE` may learn physical |
+| Intercept Stun trigger | Physical school; spell-level Stun mechanic | generic `IMMUNE` is Physical vs Stun ambiguous | no write |
+| poison spell/debuff | school such as Nature + Dispel=Poison | generic `IMMUNE` can be school/damage or Poison-family immunity | no write |
+| Curse of Agony example | Shadow school + Dispel=Curse | generic `IMMUNE` can be Shadow/damage or Curse-family immunity | no write |
+| Devouring Plague example | Shadow school + Dispel=Disease | generic `IMMUNE` can be Shadow/damage or Disease-family immunity | no write |
 
-Positive runtime evidence can therefore distinguish:
-
-```text
-physical damage succeeded
-bleed aura did not appear
-```
-
-but absence of the bleed alone still needs careful classification before
-permanent learning.
-
-##### Rupture — bleed with no independent direct hit
-
-Rupture does not provide the same independent direct-hit evidence as Rake.
-
-Its harmful effect can carry overlapping concepts such as:
-
-```text
-physical spell school
-+ bleed mechanic
-```
-
-Even if the failed effect is known, the failed **dimension** may remain
-ambiguous.
-
-This remains an example where effect identification alone does not necessarily
-permit permanent learning.
-
-##### Hammer of Justice — Holy + stun
-
-HoJ has no independent damage component.
-
-Its relevant hostile effect is a stun carried by a Holy spell.
-
-If the entire effect is rejected, the evidence may still have more than one
-plausible whole-spell cause.
-
-Do not assume:
-
-```text
-HoJ IMMUNE -> stun immune
-```
-
-or:
-
-```text
-HoJ IMMUNE -> holy immune
-```
-
-without narrowing the applicable immunity path.
-
-##### Intercept — physical damage + stun
-
-Intercept includes a trigger-spell relationship.
-
-ClassicAPI currently provides the effect structure but does not expose the
-triggered spell ID through the wrapper used by SCRM.
-
-Nampower raw SpellRec data does expose `effectTriggerSpell`.
-
-The eventual candidate builder may therefore need both APIs for complete static
-decomposition.
-
-The same runtime principle applies:
-
-```text
-damage success can positively eliminate some hypotheses
-```
-
-but generic `IMMUNE` alone does not identify the failed dimension.
-
-##### Poison / Curse / Disease
-
-ClassicAPI exposes these independently through the spell's dispel type.
-
-Examples may therefore contain two separate static dimensions:
-
-```text
-Nature + Poison
-Shadow + Curse
-Shadow + Disease
-```
-
-These must remain independent learner categories.
-
-Do not collapse:
-
-```text
-poison -> nature
-curse -> shadow
-disease -> spell school
-```
-
-A whole-spell `IMMUNE` may originate from either the dispel-family immunity
-path or the school-immunity path.
+This intentionally leaves some real immunities unlearned. False negatives are
+acceptable at this stage; false permanent writes are not.
 
 #### Revised evidence rule
 
@@ -852,44 +793,56 @@ actual stun aura exists
 Only after eliminating positively disproven candidates should permanent learning
 occur.
 
-#### Current conclusion
+#### Audit conclusion and landed correction
 
-ClassicAPI is more useful than originally assumed, but not because it exposes
-individual failure events.
-
-Its value is:
+The original working correction:
 
 ```text
-accurate static decomposition
-+ authoritative aura-state verification
+every direct IMMUNE -> school
 ```
 
-Nampower remains the stronger runtime source for:
+was unsafe.
+
+The next proposed correction:
 
 ```text
-actual spell damage
-+ explicit spell miss/immunity events
+generic IMMUNE -> enumerate every school/effect/mechanic contained in the spell
 ```
 
-Neither source currently exposes:
+was also too coarse because vMaNGOS often rejects individual effects silently.
+
+The landed minimal correction is narrower:
 
 ```text
-this exact Spell.dbc effect failed for this exact immunity reason
+IMMUNE2
+    -> never persist directly
+
+IMMUNE
+    -> inspect only valid whole-spell causes
+    -> school/damage collapse to current school/action persistence
+    -> any spell-level mechanic, Dispel family, target-type restriction,
+       or missing DBC school makes the result inconclusive
+    -> otherwise persist the literal DBC school
 ```
 
-The important new finding is that the server often handles effect-level
-immunity **silently**, while `IMMUNE` and `IMMUNE2` represent stronger
-target/spell-level outcomes.
-
-Therefore the previous proposed correction:
+Implementation commit:
 
 ```text
-generic IMMUNE
--> enumerate every school/effect/mechanic candidate in the spell
--> if multiple, learn nothing
+d5a2f772e380f9b6d34624cd36e10ae63dd70fb5
 ```
 
-is itself too coarse.
+The existing target/spell identity, split-CC, death, TempCC, temporary
+protection/reflection, NPC DR, queryable-target, persistence and public macro
+safeguards remain in place.
+
+Portability boundary:
+
+- raw Nampower `IMMUNE`/`IMMUNE2` remains the shared observable interface;
+- raw `IMMUNE2` is conservatively non-learning on every core;
+- the positive `IMMUNE -> school/action` narrowing currently follows the
+  inspected vMaNGOS whole-spell semantics;
+- Turtle/Octo compatibility is still an explicit assumption to verify in
+  runtime testing, not a claimed proven server implementation detail.
 
 ### Blackwing Spellbinder — PENDING
 
@@ -930,6 +883,48 @@ These require a separate design decision after the existing learner has been
 validated against real immunity cases.
 
 ## Exact next step
+
+The audit and smallest safe learner correction have landed. The next step is a
+focused validation pass of the corrected build; do not add generalized inference
+before this passes.
+
+Validation order:
+
+1. load the addon and confirm no Vanilla-Lua startup/runtime error;
+2. enable `/cleveroid immunitydebug` and clear old diagnostic evidence;
+3. verify a generic `IMMUNE` on a spell with no spell-level mechanic, no
+   Dispel family and no target-creature restriction can still write its literal
+   DBC school;
+4. verify Frostbolt does **not** turn a generic result into a permanent snare or
+   Frost write merely from the direct event; its Dispel=Magic alternate keeps
+   the direct result ambiguous;
+5. verify Hammer of Justice on the Blackwing Spellbinder regression case writes
+   neither Holy nor Stun from a generic `IMMUNE`;
+6. verify an `IMMUNE2` event produces an immunitydebug rejection and no
+   permanent write;
+7. recheck TempCC, temporary protection/reflection, NPC DR, death and split-CC
+   safeguards for regressions.
+
+Record the raw miss code and the learner decision/reason for each focused case.
+If Turtle/Octo testing becomes available, first verify whether their
+`IMMUNE`/`IMMUNE2` split matches the assumptions above before broadening
+positive learning there.
+
+Still do **not** implement:
+
+- generalized cross-event comparative inference;
+- loose time-window correlation;
+- speculative effect-level learning from aura absence;
+- new persistence categories;
+- broad-immunity promotion.
+
+The intended invariant remains:
+
+```text
+one remaining valid cause -> learn
+multiple remaining valid causes -> ambiguous; learn nothing
+```
+
 
 Audit the three server-side immunity outcome paths and map each one to the
 immunity dimensions that can actually produce it.
