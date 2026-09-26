@@ -888,6 +888,67 @@ actual stun aura exists
 Only after eliminating positively disproven candidates should permanent learning
 occur.
 
+#### Persistent Mob-ID knowledge + live observation architecture
+
+The generalized learner should use a hybrid model rather than either repeatedly
+re-learning every mob from scratch or persisting raw combat history.
+
+Persistent knowledge is keyed by **creature/Mob ID** and stores only compact,
+long-lived facts that can improve future inference:
+
+- confirmed permanent immunity dimensions;
+- confirmed susceptibility / disproved immunity dimensions;
+- unresolved candidate evidence when one observation still has several valid
+  explanations.
+
+Unresolved evidence must survive reloads, resets and later encounters. If an
+`IMMUNE` result leaves several plausible permanent causes today, later positive
+evidence may disprove candidates until one cause remains and can be promoted to
+a confirmed immunity. "Not recorded as immune" must therefore never mean
+"confirmed susceptible".
+
+Do **not** persist raw combat-event history or transient state. Current DR,
+temporary protection/CC auras, death/despawn state and individual cast timing
+remain live-only evidence.
+
+Runtime observation should be lightweight and event-driven:
+
+- Nampower supplies spell/caster/target outcomes, damage and aura/debuff events;
+- relevant evidence must include **all observable casters**, not only the player;
+- ClassicAPI supplies cached spell decomposition and targeted authoritative aura
+  checks when an ambiguous case actually needs them;
+- spell-ID classification should be cached so ordinary combat events reduce to
+  a cheap lookup and early exit;
+- the learner should query known Mob-ID facts first and perform deeper
+  cross-event reasoning only for unknown, unresolved or contradictory evidence;
+- no continuous mob/aura scanning and no new high-frequency polling should be
+  introduced.
+
+NPC DR is a correctness prerequisite for this model. The existing
+`recentCCHits` safeguard is currently populated from player-owned verified CC,
+which is insufficient once comparative inference begins. Before DR is used as
+positive/negative evidence by the generalized learner, SCRM must record
+**qualifying landed stuns from all observable casters**, target-centrically, in
+the existing independent Vanilla NPC DR buckets:
+
+```text
+stun_control
+stun_trigger
+stun_kidneyshot
+```
+
+These are separate DR categories that share the broad CC type `stun`; they must
+not be collapsed into one stun counter. Runtime DR state remains temporary and
+must never be written into the permanent Mob-ID knowledge store.
+
+The safety invariant does not change:
+
+```text
+one remaining valid permanent cause -> learn / promote it
+multiple remaining valid causes -> preserve compact unresolved evidence
+transient cause still plausible -> do not persist a permanent immunity
+```
+
 #### Audit conclusion and landed correction
 
 The original working correction:
@@ -976,6 +1037,11 @@ new public immunity grammar
 
 These require a separate design decision after the existing learner has been
 validated against real immunity cases.
+
+Before generalized comparative inference starts, fix the existing NPC DR
+correctness gap described above: all observable qualifying landed stuns must feed
+the three separate target-centric DR buckets. Do not let the future learner use
+absence of player-only DR evidence to eliminate DR as a possible cause.
 
 ## Exact next step
 
