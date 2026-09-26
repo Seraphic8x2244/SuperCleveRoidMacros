@@ -25,7 +25,7 @@ not a chronological development log.
 - Priority learner-fix handoff:
   `e3bb90015f0bd341614fa8bc8d0dd532737531a7`.
 - Corrected learner implementation:
-  `d5a2f772e380f9b6d34624cd36e10ae63dd70fb5` — direct
+  `6df12256213c73cc5236abb716b7ef8e7c692a3a` — direct
   `IMMUNE` is now narrowed before school persistence and `IMMUNE2` is
   non-learning evidence.
 - TOC version: `@project-version@`
@@ -828,7 +828,7 @@ IMMUNE
 Implementation commit:
 
 ```text
-d5a2f772e380f9b6d34624cd36e10ae63dd70fb5
+6df12256213c73cc5236abb716b7ef8e7c692a3a
 ```
 
 The existing target/spell identity, split-CC, death, TempCC, temporary
