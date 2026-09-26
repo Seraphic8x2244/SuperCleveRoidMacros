@@ -31,8 +31,8 @@ not a chronological development log.
 - Latest Vanilla-Lua runtime fix:
   `aa2b761d1c45d1a28c8354b2f13f216a21403569` — scope immunitydebug locals.
 - Runtime after that fix starts with no Lua errors.
-- Current phase: audit available per-effect evidence, then correct the learner
-  boundary.
+- Current phase: audit the three server-side immunity outcome paths, then
+  correct the learner boundary from the resulting evidence map.
 - The generalized comparative learner has not started.
 
 ## Branch-specific immunity model
@@ -425,74 +425,464 @@ an appropriate Physical action remains eligible while Anti-Magic Shield is activ
 no permanent Frost/Holy/Stun immunity is written from the temporary state
 ```
 
-### Immunity learner boundary — DESIGN REVISED, IMPLEMENTATION PENDING
+### Individual effect-failure evidence audit — REVISED
 
-Do not classify permanent immunity from spell identity alone. Learn only the
-dimension proven by the observed effect result.
+The evidence audit changed the working model in an important way.
 
-Core rule:
+The previous assumption was too broad:
+
+> a generic `SPELL_MISS_SELF IMMUNE` may have been caused by any immune effect
+> contained in the spell
+
+Server-side review shows that this is not generally how mixed-effect spells are
+reported.
+
+#### ClassicAPI is already a hard requirement
+
+Current brues-code SCRM already requires:
+
+- Nampower v3.0.0+;
+- ClassicAPI v1.15.8+;
+- UnitXP_SP3.
+
+`ClassicAPI.lua` explicitly describes ClassicAPI as a hard requirement, and
+`Core.lua` enforces the minimum version. The learner therefore does not need to
+preserve a Nampower-only runtime path.
+
+ClassicAPI may be used freely where it gives stronger evidence.
+
+#### Static spell evidence
+
+ClassicAPI provides substantially better static spell decomposition than the
+learner currently uses.
+
+For arbitrary spell IDs it can provide:
+
+- spell school;
+- spell-level mechanic;
+- individual Spell.dbc effects;
+- per-effect mechanics;
+- applied aura types;
+- spell dispel type such as Magic / Curse / Disease / Poison;
+- authoritative target aura state through `C_UnitAuras`.
+
+This is especially useful for mixed spells such as:
+
+- Frostbolt — Frost damage + snare;
+- Rake — physical direct hit + bleed aura;
+- Hammer of Justice — Holy spell + stun aura;
+- poison — Nature school + Poison dispel family;
+- curse — usually Shadow school + Curse dispel family;
+- disease — school + Disease dispel family.
+
+ClassicAPI does **not** currently provide a runtime event identifying which
+individual spell effect failed.
+
+Better spell metadata must therefore not be confused with better failure
+evidence.
+
+#### Nampower runtime evidence
+
+Relevant existing Nampower evidence:
+
+##### `SPELL_MISS_SELF`
+
+Provides:
+
+- caster GUID;
+- target GUID;
+- spell ID;
+- miss reason.
+
+For immunity the important values are:
+
+- `IMMUNE`;
+- `IMMUNE2`.
+
+It does **not** include an effect index.
+
+##### `SPELL_GO`
+
+Provides spell completion plus hit/miss target counts.
+
+It does not identify which individual effect succeeded or failed.
+
+##### `SPELL_DAMAGE_EVENT_SELF`
+
+Provides strong positive evidence that actual spell damage occurred for a
+specific:
+
+- caster;
+- target;
+- spell ID;
+- runtime damage school.
+
+This is stronger than inferring damage success from `SPELL_GO`.
+
+##### `AURA_CAST_ON_OTHER`
+
+This must **not** be treated as authoritative proof that an aura actually
+landed.
+
+Nampower generates `AURA_CAST` from:
+
+- the target being present in the `SPELL_GO` hit list;
+- the spell's static Spell.dbc aura effects.
+
+It does not first verify that the aura exists in the target's actual aura state.
+
+For mixed spells, a target can therefore count as a spell hit while one
+individual aura effect has been rejected.
+
+##### Actual aura state
+
+Stronger positive evidence comes from:
+
+- `DEBUFF_ADDED_*`;
+- ClassicAPI `C_UnitAuras`;
+- existing delayed aura/debuff verification.
+
+These can prove that an aura actually exists.
+
+Aura absence alone still does not automatically prove why the aura failed.
+
+#### Important server-side finding: effect immunity is often silent
+
+Review of the vMaNGOS spell execution path materially changes the interpretation
+of `IMMUNE`.
+
+The server internally tracks an `effectMask` for each target.
+
+For each spell effect:
+
+1. `IsImmuneToSpellEffect()` is checked.
+2. If that individual effect is immune, its bit is removed from the target's
+   `effectMask`.
+3. Other non-immune effects are still allowed to execute.
+
+This means:
+
+> an individual secondary effect may be immune without producing a separate
+> spell-miss event.
+
+This matches observed Frostbolt behaviour:
+
+- Frost damage lands;
+- Frostbolt slow is immune;
+- scrolling combat text does not show a separate `Immune` for the slow.
+
+That observation is consistent with the server implementation.
+
+##### `IMMUNE2`
+
+Before `SPELL_GO` targets are written, the server checks the final effect mask.
+
+If:
 
 ```text
-unique failed dimension   -> learn it
+effectMask == 0
+```
+
+then:
+
+```text
+missCondition = IMMUNE2
+```
+
+Therefore `IMMUNE2` means:
+
+> every applicable spell effect for that target was removed as immune.
+
+This is stronger evidence than a generic per-effect failure, but it still does
+not necessarily identify the immunity dimension if multiple dimensions could
+independently explain all effects failing.
+
+##### `IMMUNE`
+
+The server also performs a whole-spell immunity check using
+`IsImmuneToSpell()`.
+
+That path can include:
+
+- dispel-type immunity;
+- spell-school immunity;
+- spell-level mechanic immunity;
+- other whole-spell restrictions.
+
+Therefore:
+
+> `IMMUNE` is whole-spell immunity evidence, but not automatically
+> school-immunity evidence.
+
+The current direct learner remains too aggressive if it interprets every
+`IMMUNE` as spell school.
+
+#### Representative cases under the revised model
+
+##### Frostbolt — Frost damage + snare
+
+Static structure:
+
+```text
+Frost school
++ direct Frost damage
++ snare aura
+```
+
+If only the snare is immune:
+
+```text
+damage effect remains in effectMask
+snare effect is removed
+spell still counts as a hit
+no separate IMMUNE is necessarily emitted
+```
+
+Therefore a Frostbolt slow immunity is **not** by itself a plausible explanation
+for every generic whole-spell `IMMUNE`.
+
+This materially weakens the earlier assumption that:
+
+```text
+Frostbolt IMMUNE -> { frost, snare }
+```
+
+must always be treated as ambiguous.
+
+However `IMMUNE` still cannot immediately be equated with Frost immunity
+because whole-spell immunity may arise through another whole-spell dimension.
+
+Further classification of the `IMMUNE` path is required.
+
+##### Rake — physical hit + bleed
+
+Static structure:
+
+```text
+physical direct damage
++ bleed aura
+```
+
+Rake's bleed mechanic is stored on an individual Spell.dbc effect.
+
+An effect-level bleed immunity may remove the bleed effect while allowing the
+direct physical hit to land.
+
+Positive runtime evidence can therefore distinguish:
+
+```text
+physical damage succeeded
+bleed aura did not appear
+```
+
+but absence of the bleed alone still needs careful classification before
+permanent learning.
+
+##### Rupture — bleed with no independent direct hit
+
+Rupture does not provide the same independent direct-hit evidence as Rake.
+
+Its harmful effect can carry overlapping concepts such as:
+
+```text
+physical spell school
++ bleed mechanic
+```
+
+Even if the failed effect is known, the failed **dimension** may remain
+ambiguous.
+
+This remains an example where effect identification alone does not necessarily
+permit permanent learning.
+
+##### Hammer of Justice — Holy + stun
+
+HoJ has no independent damage component.
+
+Its relevant hostile effect is a stun carried by a Holy spell.
+
+If the entire effect is rejected, the evidence may still have more than one
+plausible whole-spell cause.
+
+Do not assume:
+
+```text
+HoJ IMMUNE -> stun immune
+```
+
+or:
+
+```text
+HoJ IMMUNE -> holy immune
+```
+
+without narrowing the applicable immunity path.
+
+##### Intercept — physical damage + stun
+
+Intercept includes a trigger-spell relationship.
+
+ClassicAPI currently provides the effect structure but does not expose the
+triggered spell ID through the wrapper used by SCRM.
+
+Nampower raw SpellRec data does expose `effectTriggerSpell`.
+
+The eventual candidate builder may therefore need both APIs for complete static
+decomposition.
+
+The same runtime principle applies:
+
+```text
+damage success can positively eliminate some hypotheses
+```
+
+but generic `IMMUNE` alone does not identify the failed dimension.
+
+##### Poison / Curse / Disease
+
+ClassicAPI exposes these independently through the spell's dispel type.
+
+Examples may therefore contain two separate static dimensions:
+
+```text
+Nature + Poison
+Shadow + Curse
+Shadow + Disease
+```
+
+These must remain independent learner categories.
+
+Do not collapse:
+
+```text
+poison -> nature
+curse -> shadow
+disease -> spell school
+```
+
+A whole-spell `IMMUNE` may originate from either the dispel-family immunity
+path or the school-immunity path.
+
+#### Revised evidence rule
+
+The overall design rule remains:
+
+```text
+unique failed dimension -> learn it
 multiple plausible causes -> ambiguous; learn nothing
 ```
+
+But the candidate set must now be built from the **actual server failure path**,
+not merely from every effect contained in the spell.
+
+In particular:
+
+```text
+silent effect-level failure
+```
+
+must not automatically be added as an explanation for:
+
+```text
+whole-spell SPELL_MISS_SELF IMMUNE
+```
+
+The learner must distinguish at least:
+
+```text
+individual effect rejected
+whole spell immune
+all effects immune
+```
+
+before choosing what dimensions are candidates.
+
+#### Combined evidence model
+
+The strongest eventual learner is likely to combine:
+
+##### ClassicAPI
+
+For:
+
+- spell decomposition;
+- school;
+- spell-level mechanic;
+- per-effect mechanic;
+- aura types;
+- dispel family;
+- authoritative actual aura state.
+
+##### Nampower
+
+For:
+
+- `SPELL_MISS_SELF IMMUNE`;
+- `SPELL_MISS_SELF IMMUNE2`;
+- `SPELL_GO`;
+- actual damage success;
+- spell/caster/target correlation.
+
+Positive evidence should be used to eliminate impossible causes.
 
 Examples:
 
 ```text
-Frostbolt: Frost damage + snare
-damage specifically immune        -> frost
-damage lands, snare fails         -> cc_snare
-undifferentiated IMMUNE           -> ambiguous
-
-Rake: physical hit + bleed
-hit specifically immune           -> physical
-hit lands, bleed fails            -> bleed
-combined/undifferentiated IMMUNE  -> ambiguous
-
-Rupture: no independent hit; bleed is the damage effect
-generic IMMUNE                    -> physical vs bleed ambiguous
-
-Hammer of Justice: Holy + stun, no damage
-generic IMMUNE                    -> holy vs stun ambiguous
-
-Intercept: physical damage + stun
-damage specifically immune        -> physical
-damage lands, stun fails          -> cc_stun
-undifferentiated IMMUNE           -> ambiguous
+actual Frost damage occurred
+=> Frost-school immunity did not block that damage component
 ```
-
-The same principle applies to other effect families:
 
 ```text
-poison immunity != nature immunity
-curse immunity  != shadow immunity
-disease immunity remains independent if supported
+actual physical Rake hit occurred
+=> the direct physical component was not immune
 ```
-
-The original Frostbolt failure exposed a general learner-boundary bug:
 
 ```text
-Hydrospawn + Frostbolt
-IMMUNE -> incorrectly learned cc_snare
+actual stun aura exists
+=> stun immunity did not reject that application
 ```
 
-The first correction stopped direct `IMMUNE` from selecting the CC write path,
-but the current implementation then went too far in the opposite direction by
-routing generic direct `IMMUNE` to school immunity.
+Only after eliminating positively disproven candidates should permanent learning
+occur.
 
-That implementation is not the final learner design.
+#### Current conclusion
 
-CC/effect persistence requires evidence that the actual secondary effect failed.
-School persistence likewise requires evidence that the school/action component
-is the uniquely identified failure. An undifferentiated whole-action `IMMUNE`
-must not choose between plausible dimensions.
+ClassicAPI is more useful than originally assumed, but not because it exposes
+individual failure events.
 
-Preserve the existing split-CC, death, TempCC, temporary-protection/reflection,
-DR and queryable-target safeguards.
+Its value is:
 
-No generalized comparative learner or broad-immunity promotion is part of this
-correction.
+```text
+accurate static decomposition
++ authoritative aura-state verification
+```
+
+Nampower remains the stronger runtime source for:
+
+```text
+actual spell damage
++ explicit spell miss/immunity events
+```
+
+Neither source currently exposes:
+
+```text
+this exact Spell.dbc effect failed for this exact immunity reason
+```
+
+The important new finding is that the server often handles effect-level
+immunity **silently**, while `IMMUNE` and `IMMUNE2` represent stronger
+target/spell-level outcomes.
+
+Therefore the previous proposed correction:
+
+```text
+generic IMMUNE
+-> enumerate every school/effect/mechanic candidate in the spell
+-> if multiple, learn nothing
+```
+
+is itself too coarse.
 
 ### Blackwing Spellbinder — PENDING
 
@@ -534,38 +924,81 @@ validated against real immunity cases.
 
 ## Exact next step
 
-Audit what Nampower/combat-log evidence actually distinguishes individual effect
-failure from whole-action `IMMUNE`, then revise the current learner around that
-evidence boundary.
+Audit the three server-side immunity outcome paths and map each one to the
+immunity dimensions that can actually produce it.
 
-Implementation rule:
+Do this **before changing the learner again**.
 
-```text
-unique failed dimension   -> learn it
-multiple plausible causes -> ambiguous; learn nothing
-```
-
-Key regression cases after implementation:
+The three outcomes to distinguish are:
 
 ```text
-Hydrospawn + Frostbolt
-Rake
-Rupture
-Blackwing Spellbinder + HoJ
-Intercept
-poison-immune target
-curse-immune target
+1. silent individual effect rejection
+2. SPELL_MISS_SELF IMMUNE
+3. SPELL_MISS_SELF IMMUNE2
 ```
 
-During regression testing also confirm:
+For each outcome, trace the relevant vMaNGOS checks and determine whether it can
+be caused by:
+
+- school immunity;
+- damage immunity;
+- dispel-family immunity;
+- spell-level mechanic immunity;
+- per-effect mechanic immunity;
+- aura-state immunity;
+- effect-type immunity.
+
+Then validate the result against the representative spells:
+
+- Frostbolt;
+- Rake;
+- Rupture;
+- Hammer of Justice;
+- Intercept;
+- poison;
+- curse;
+- disease where relevant.
+
+For every representative spell, record:
 
 ```text
-TempCC remains temporary
-temporary protection/reflection does not persist
-DR and death do not become permanent immunity
-split-CC safeguards remain intact
-existing persistence and public macro syntax remain unchanged
+static immunity dimensions
+server failure path
+Nampower event produced
+ClassicAPI evidence available
+what the event proves
+what remains ambiguous
+whether permanent learning is safe
 ```
 
-Do not begin the generalized comparative learner until the corrected per-event
-learner boundary has been implemented and observed against these cases.
+The key question is no longer:
+
+```text
+what immunity dimensions does this spell contain?
+```
+
+It is:
+
+```text
+which immunity dimensions are capable of producing the exact runtime outcome we observed?
+```
+
+Only after that mapping is complete should the minimal learner correction be
+designed.
+
+The intended learner rule remains:
+
+```text
+one remaining valid cause -> learn
+multiple remaining valid causes -> ambiguous; learn nothing
+```
+
+Do not yet implement:
+
+- generalized cross-event comparative inference;
+- loose time-window correlation;
+- speculative effect-level learning from aura absence;
+- new persistence categories unless the audit proves they are required.
+
+Preserve all existing TempCC, temporary-protection, reflection, DR, death,
+split-CC, persistence, and public macro safeguards.
