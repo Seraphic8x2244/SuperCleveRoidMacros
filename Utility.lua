@@ -3220,9 +3220,9 @@ delayedTrackingFrame:SetScript("OnUpdate", function()
             end
           elseif CleveRoids.usingSpellMissEvents then
             -- Aura absence alone is not proof of CC immunity when Nampower
-            -- supplies the exact spell-level miss reason. SPELL_MISS_SELF learns
-            -- only spell/school immunity; CC persistence requires evidence that
-            -- the actual CC effect failed rather than a generic spell IMMUNE.
+            -- supplies the exact spell-level miss result. The direct learner only
+            -- persists a whole-spell IMMUNE after its cause narrows uniquely to
+            -- school/action; IMMUNE2 and effect-level absence stay inconclusive.
             if debug then
               DEFAULT_CHAT_FRAME:AddMessage(
                 _string_format("|cffaaaaaa[CC Inconclusive]|r %s missing on %s - authoritative SPELL_MISS did not report IMMUNE, not recording permanent immunity",
@@ -7037,6 +7037,7 @@ do
     local IMMUNITY_DEBUG_REASON_DR = 7
     local IMMUNITY_DEBUG_REASON_NO_QUERY_UNIT = 8
     local IMMUNITY_DEBUG_REASON_REFLECT = 9
+    local IMMUNITY_DEBUG_REASON_AMBIGUOUS_CAUSE = 10
     
     local IMMUNITY_DEBUG_LABELS = {
         charm = "Charm", disorient = "Disorient", disarm = "Disarm", distract = "Distract",
@@ -7060,6 +7061,7 @@ do
         [IMMUNITY_DEBUG_REASON_DR] = "DR safeguard",
         [IMMUNITY_DEBUG_REASON_NO_QUERY_UNIT] = "no query unit",
         [IMMUNITY_DEBUG_REASON_REFLECT] = "REFLECT",
+        [IMMUNITY_DEBUG_REASON_AMBIGUOUS_CAUSE] = "ambiguous immunity cause",
     }
     
     local immunityDebugSessionStart = GetTime()
@@ -7289,6 +7291,7 @@ do
     IMMUNITY_DEBUG_CODE.REASON_DR = IMMUNITY_DEBUG_REASON_DR
     IMMUNITY_DEBUG_CODE.REASON_NO_QUERY_UNIT = IMMUNITY_DEBUG_REASON_NO_QUERY_UNIT
     IMMUNITY_DEBUG_CODE.REASON_REFLECT = IMMUNITY_DEBUG_REASON_REFLECT
+    IMMUNITY_DEBUG_CODE.REASON_AMBIGUOUS_CAUSE = IMMUNITY_DEBUG_REASON_AMBIGUOUS_CAUSE
 end
 
 -- NPC immunity learning only needs DR groups that can actually diminish creatures.
@@ -7520,7 +7523,9 @@ CleveRoids.CheckCCImmunity = CheckCCImmunity
 --   spellName: Name of the spell that was resisted/immune
 --   conditionalBuff: Optional buff name required for the immunity
 --   spellID: Optional spell ID for more accurate school detection
-local function RecordImmunity(npcName, spellName, conditionalBuff, spellID)
+--   forceDbcSchool: Keep the literal Spell.dbc school; used only after a direct
+--                   whole-spell IMMUNE has been narrowed to school/action.
+local function RecordImmunity(npcName, spellName, conditionalBuff, spellID, forceDbcSchool)
     if not npcName or (not spellName and not spellID) or npcName == "" then
         return
     end
@@ -7530,9 +7535,19 @@ local function RecordImmunity(npcName, spellName, conditionalBuff, spellID)
     -- immunity recording needs the actual DBC school — physical immunity IS a real thing.
     local school = nil
 
+    -- A narrowed whole-spell IMMUNE must keep the literal DBC school. In
+    -- particular, Physical must not be reinterpreted as bleed merely because
+    -- one effect on the spell carries a bleed mechanic.
+    if forceDbcSchool and spellID and GetSpellRecField then
+        local dbcSchool = GetSpellRecField(spellID, "school")
+        if dbcSchool ~= nil and SCHOOL_NAMES[dbcSchool] then
+            school = SCHOOL_NAMES[dbcSchool]
+        end
+    end
+
     -- SPLIT DAMAGE SPELLS: Use initial hit school, not the debuff school.
     -- e.g., Pounce stun-immune doesn't mean bleed-immune.
-    if spellName then
+    if not school and spellName then
         local baseName = string.gsub(spellName, "%s*%(.-%)%s*$", "")
         if SPLIT_DAMAGE_SPELLS[baseName] then
             school = SPLIT_DAMAGE_SPELLS[baseName].initial
@@ -7552,7 +7567,7 @@ local function RecordImmunity(npcName, spellName, conditionalBuff, spellID)
         -- Split damage spells (Rake/Pounce/Garrote) are already handled above — their cast spell
         -- triggers IMMUNE for the initial physical hit, so "physical" is correct for those.
         -- Pure bleed spells (Rip, etc.) that reach this path need the override.
-        if school == "physical" and CleveRoids.BleedSpellIDs and CleveRoids.BleedSpellIDs[spellID] then
+        if not forceDbcSchool and school == "physical" and CleveRoids.BleedSpellIDs and CleveRoids.BleedSpellIDs[spellID] then
             school = "bleed"
             if CleveRoids.debug then
                 CleveRoids.Print("|cff00aaff[Bleed Override]|r " .. (spellName or tostring(spellID)) .. " immunity recorded as 'bleed' (DBC school=physical, but spell is a bleed)")
@@ -9516,14 +9531,74 @@ local function ProcessSpellMissSelf(spellId, targetGuid, missInfo)
                 return
             end
 
-            -- Record only the spell/school dimension from this spell-level
-            -- observation. CC persistence is reserved for effect-level evidence.
-            RecordImmunity(targetName, spellName, nil, spellId)
-            CleveRoids.ImmunityDebugDecision(
-                targetGuid, targetName, spellId, missInfo, queryUnit,
-                IMMUNITY_DEBUG_CODE.DECISION_ACCEPT_SCHOOL, IMMUNITY_DEBUG_CODE.REASON_NONE,
-                nil, drType
-            )
+            -- IMMUNE2 is not a school result. On vMaNGOS it is written when the
+            -- final target effectMask is empty after per-effect rejection. Nampower
+            -- exposes no effect index, and Turtle/Octo packet semantics are not yet
+            -- independently proven, so the portable direct learner must not persist
+            -- any dimension from IMMUNE2.
+            if missInfo == MISSINFO_IMMUNE2 then
+                if CleveRoids.debug then
+                    CleveRoids.Print("|cff00aaff[SPELL_MISS Inconclusive]|r " .. spellName .. " returned IMMUNE2 on " .. targetName .. " - no effect-level cause is uniquely proven")
+                end
+                CleveRoids.ImmunityDebugDecision(
+                    targetGuid, targetName, spellId, missInfo, queryUnit,
+                    IMMUNITY_DEBUG_CODE.DECISION_REJECT, IMMUNITY_DEBUG_CODE.REASON_AMBIGUOUS_CAUSE,
+                    immunityType, drType, nil, nil, "IMMUNE2 has no effect index/cause"
+                )
+            else
+                -- vMaNGOS whole-spell IMMUNE can be produced by school/damage
+                -- immunity, spell Dispel-family immunity, or the spell-level
+                -- Mechanic. Delayed spells can also be changed to IMMUNE when a
+                -- target-creature-type restriction no longer matches. Only school
+                -- and damage immunity collapse to the same existing SCRM school
+                -- dimension; any other static route makes the observation
+                -- ambiguous and therefore non-learnable.
+                local spellMechanic = GetSpellRecField and GetSpellRecField(spellId, "mechanic") or nil
+                local dispelType = GetSpellRecField and GetSpellRecField(spellId, "dispel") or nil
+                local targetCreatureType = GetSpellRecField and GetSpellRecField(spellId, "targetCreatureType") or nil
+                local dbcSchool = GetSpellRecField and GetSpellRecField(spellId, "school") or nil
+                local schoolName = dbcSchool ~= nil and SCHOOL_NAMES[dbcSchool] or nil
+                local ambiguousDetail = nil
+
+                if spellMechanic and spellMechanic > 0 then
+                    ambiguousDetail = "spell mechanic=" .. tostring(spellMechanic)
+                end
+                if dispelType and dispelType > 0 then
+                    local detail = "dispel=" .. tostring(dispelType)
+                    ambiguousDetail = ambiguousDetail and (ambiguousDetail .. ", " .. detail) or detail
+                end
+                if targetCreatureType and targetCreatureType > 0 then
+                    local detail = "targetCreatureType=" .. tostring(targetCreatureType)
+                    ambiguousDetail = ambiguousDetail and (ambiguousDetail .. ", " .. detail) or detail
+                end
+                if not schoolName or schoolName == "unknown" then
+                    local detail = "no queryable DBC school"
+                    ambiguousDetail = ambiguousDetail and (ambiguousDetail .. ", " .. detail) or detail
+                end
+
+                if ambiguousDetail then
+                    if CleveRoids.debug then
+                        CleveRoids.Print("|cff00aaff[SPELL_MISS Inconclusive]|r " .. spellName .. " IMMUNE on " .. targetName .. " has alternate whole-spell cause(s): " .. ambiguousDetail)
+                    end
+                    CleveRoids.ImmunityDebugDecision(
+                        targetGuid, targetName, spellId, missInfo, queryUnit,
+                        IMMUNITY_DEBUG_CODE.DECISION_REJECT, IMMUNITY_DEBUG_CODE.REASON_AMBIGUOUS_CAUSE,
+                        immunityType, drType, nil, nil, ambiguousDetail
+                    )
+                else
+                    -- With no spell-level mechanic, dispel family, or target-type
+                    -- restriction, the remaining vMaNGOS whole-spell immunity
+                    -- routes are school/damage immunity. Both map to the same SCRM
+                    -- school/action dimension, so this is the narrow direct case
+                    -- where permanent learning is safe.
+                    RecordImmunity(targetName, spellName, nil, spellId, true)
+                    CleveRoids.ImmunityDebugDecision(
+                        targetGuid, targetName, spellId, missInfo, queryUnit,
+                        IMMUNITY_DEBUG_CODE.DECISION_ACCEPT_SCHOOL, IMMUNITY_DEBUG_CODE.REASON_NONE,
+                        nil, drType
+                    )
+                end
+            end
         end
 
         -- Populate backward-compat tables for SPELL_GO correlation
