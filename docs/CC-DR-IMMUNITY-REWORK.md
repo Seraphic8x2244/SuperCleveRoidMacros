@@ -32,20 +32,19 @@ not a chronological development log.
 - Latest known-good runtime before this correction:
   `aa2b761d1c45d1a28c8354b2f13f216a21403569` — immunitydebug local-scope
   runtime fix; that build started with no Lua errors.
-- Current phase: the server outcome audit and first learner correction are
-  complete, but a new player-target leak was found before focused validation.
-  The corrected learner has **not** yet had a clean runtime validation pass.
-- **Focused learner testing is paused again until the player-exemption micro-fix
-  lands.** Do not return to the pre-correction generic `IMMUNE -> school`
-  build.
-- New anomaly: a player target appears to have learned permanent `physical`
-  immunity after an NPC attempted movement CC while Blessing of Freedom was
-  active. Static review confirms the direct `SPELL_MISS_SELF` learner lacks
-  the `UnitIsPlayer` rejection already present in several older delayed
-  learner paths.
-- Blessing of Protection is already represented as temporary `physical`
-  immunity. Blessing of Freedom is not yet represented as a typed temporary
-  movement-impairment source.
+- Current phase: the player-target immunity leak micro-fix has landed after the
+  first learner correction. The corrected learner has **not** yet had a clean
+  runtime validation pass.
+- **Focused learner testing is unblocked again for the current branch only.**
+  Do not return to the pre-correction generic `IMMUNE -> school` build and do
+  not begin the generalized comparative learner.
+- The direct `SPELL_MISS_SELF` learner now rejects player targets before any
+  permanent write. The legacy text-only school fallback was also found during
+  the persistence audit and now rejects players.
+- The delayed bleed, non-bleed, CC and shared-debuff persistence routes retain
+  their existing `UnitIsPlayer` guards.
+- Blessing of Protection remains typed temporary `physical` immunity.
+  Blessing of Freedom is now typed temporary `root` + `snare` immunity.
 - Portability target remains one learner for **vMaNGOS and Turtle/Octo**.
   vMaNGOS semantics are proven below. Turtle/Octo `IMMUNE`/`IMMUNE2`
   semantics remain an explicit compatibility assumption to verify; the
@@ -419,6 +418,7 @@ Reason codes:
 8 no queryable target unit
 9 REFLECT; explicitly not immunity
 10 ambiguous immunity cause / raw result does not identify one safe dimension
+11 player target; permanent learning is categorically excluded
 ```
 
 Mutation records may additionally contain:
@@ -473,7 +473,7 @@ an appropriate Physical action remains eligible while Anti-Magic Shield is activ
 no permanent Frost/Holy/Stun immunity is written from the temporary state
 ```
 
-### Player-target immunity leak — FOUND
+### Player-target immunity leak — FIX LANDED; RUNTIME REPLAY PENDING
 
 Observed micro-anomaly:
 
@@ -488,26 +488,35 @@ The exact runtime event has not yet been replayed under `immunitydebug`, so
 the causal sequence is still labelled **likely**, not proven from a captured
 journal.
 
-Static code review does prove the safety hole:
+Static code review proved the original safety hole and the persistence audit
+found one additional fallback worth closing:
 
 - bleed/non-bleed delayed verification already rejects `UnitIsPlayer`;
 - delayed CC verification already rejects `UnitIsPlayer`;
 - shared-debuff verification already rejects `UnitIsPlayer`;
 - recorded immunity queries are already NPC-specific;
-- the new direct `ProcessSpellMissSelf()` persistence path does **not**
-  currently reject a player target before permanent learning.
+- the direct `ProcessSpellMissSelf()` learner previously lacked a player
+  rejection before permanent learning;
+- the legacy text-only school persistence fallback also lacked an explicit
+  player rejection.
 
-That makes the direct `SPELL_MISS_SELF` learner the most plausible source of
-the observed permanent player record.
+The landed micro-fix now:
 
-Related temporary-aura state:
+- rejects a queryable player target in `ProcessSpellMissSelf()` before any
+  permanent learner decision/write;
+- adds the same protection to the legacy text-only school fallback;
+- records an `immunitydebug` decision reason of `player target` for the
+  direct rejection;
+- preserves Blessing of Protection as typed temporary `physical` immunity;
+- adds Blessing of Freedom spell ID 1044 as typed temporary `root` and
+  `snare` immunity;
+- resolves temporary CC aura state before the NPC-only recorded-CC gate, so a
+  player may correctly be reported temporarily root/snare immune without ever
+  contributing a permanent record.
 
-- Blessing of Protection is already curated as temporary `physical` immunity;
-- because typed temporary `physical` state is resolved before recorded
-  NPC-only school data, BoP can still correctly describe live physical immunity
-  on a player without requiring any permanent player record;
-- Blessing of Freedom is currently missing from the typed temporary immunity
-  model and should provide temporary root/snare (movement-impairment) immunity.
+Implementation commit:
+
+`dcd522e9e66b54a6f38a563184d949f4a640be25`
 
 Required rule:
 
@@ -516,8 +525,9 @@ temporary player immunity is valid live state
 permanent player immunity learning is never valid
 ```
 
-This is a validation blocker because the learner has now demonstrated a path
-that can pollute persistent immunity data with a player name.
+The blocker is fixed in code. The original live anomaly still needs a focused
+runtime replay to confirm that no permanent player record is written under
+Blessing of Freedom or Blessing of Protection.
 
 ### Individual effect-failure evidence audit — REVISED
 
@@ -969,30 +979,21 @@ validated against real immunity cases.
 
 ## Exact next step
 
-Before resuming the focused learner validation, land one small safety correction
-for the newly discovered player-target leak.
+The player-exemption micro-fix and persistence-path audit have landed. Resume
+the focused learner validation now; do **not** begin generalized comparative
+inference before this pass succeeds.
 
-Required correction:
-
-1. add an early player-target rejection to the direct
-   `ProcessSpellMissSelf()` learning path before any permanent immunity write;
-2. audit every automatic `RecordImmunity` / `RecordCCImmunity` call path and
-   confirm an equivalent player exclusion exists. The older delayed bleed,
-   non-bleed, CC and shared-debuff routes already have explicit `UnitIsPlayer`
-   guards; preserve them;
-3. add Blessing of Freedom to the typed temporary-immunity model as
-   movement-impairment immunity covering root + snare;
-4. preserve Blessing of Protection as typed temporary `physical` immunity;
-5. do **not** make player exemption suppress live temporary immunity queries:
-   the rule is no permanent player learning, not "players can never currently
-   be immune."
-
-After that micro-fix lands, resume the previously planned focused validation:
+Validation order:
 
 1. load the addon and confirm no Vanilla-Lua startup/runtime error;
 2. enable `/cleveroid immunitydebug` and clear old diagnostic evidence;
 3. first reproduce/cover a player under Blessing of Freedom and Blessing of
-   Protection and confirm no permanent player record can be written;
+   Protection:
+   - Blessing of Freedom should report live temporary root/snare immunity;
+   - Blessing of Protection should report live temporary physical immunity;
+   - neither case may create or retain any permanent player immunity record;
+   - the direct miss journal should show `player target` rejection when
+     applicable;
 4. verify a generic `IMMUNE` on an NPC spell with no spell-level mechanic, no
    Dispel family and no target-creature restriction can still write its literal
    DBC school;
