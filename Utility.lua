@@ -9461,12 +9461,14 @@ local function ProcessSpellMissSelf(spellId, targetGuid, missInfo)
             local ccType = GetSpellCCType(spellId)
             local immunityType = GetSpellImmunityType(spellId) or ccType
 
-            -- SPELL_MISS_SELF is spell-level evidence. Its generic IMMUNE result
-            -- belongs to the spell/school learner; merely finding a CC mechanic
-            -- on the spell is not evidence that the CC effect itself was immune.
+            -- SPELL_MISS_SELF is target/spell-level evidence. A generic
+            -- IMMUNE reaches the school learner only after the whole-spell cause
+            -- audit below narrows it uniquely to school/action; merely finding a
+            -- CC mechanic on the spell is not evidence that the CC effect itself
+            -- was immune.
             --
             -- Keep the CC classification here only for safeguards that can
-            -- explain why the spell-level result is inconclusive (TempCC/DR).
+            -- explain why the result is inconclusive (TempCC/DR).
             if queryUnit and immunityType then
                 local tempCCImmune, tempAuraID = IsTemporarilyCCImmune(queryUnit, immunityType)
                 if tempCCImmune then
