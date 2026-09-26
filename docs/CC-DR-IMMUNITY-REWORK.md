@@ -32,11 +32,20 @@ not a chronological development log.
 - Latest known-good runtime before this correction:
   `aa2b761d1c45d1a28c8354b2f13f216a21403569` — immunitydebug local-scope
   runtime fix; that build started with no Lua errors.
-- Current phase: the server outcome audit and smallest safe learner correction
-  are complete. The corrected learner has **not** yet had a runtime load/test
-  pass.
-- Runtime learner testing is now unblocked **for the corrected build only**.
-  Do not return to the pre-correction generic `IMMUNE -> school` build.
+- Current phase: the server outcome audit and first learner correction are
+  complete, but a new player-target leak was found before focused validation.
+  The corrected learner has **not** yet had a clean runtime validation pass.
+- **Focused learner testing is paused again until the player-exemption micro-fix
+  lands.** Do not return to the pre-correction generic `IMMUNE -> school`
+  build.
+- New anomaly: a player target appears to have learned permanent `physical`
+  immunity after an NPC attempted movement CC while Blessing of Freedom was
+  active. Static review confirms the direct `SPELL_MISS_SELF` learner lacks
+  the `UnitIsPlayer` rejection already present in several older delayed
+  learner paths.
+- Blessing of Protection is already represented as temporary `physical`
+  immunity. Blessing of Freedom is not yet represented as a typed temporary
+  movement-impairment source.
 - Portability target remains one learner for **vMaNGOS and Turtle/Octo**.
   vMaNGOS semantics are proven below. Turtle/Octo `IMMUNE`/`IMMUNE2`
   semantics remain an explicit compatibility assumption to verify; the
@@ -219,11 +228,37 @@ reflection          -> non-immunity explanation
 Examples include Divine Protection/Divine Shield/Ice Block, Anti-Magic Shield,
 Blessing of Protection, and curated reflection auras.
 
+Paladin player protections need two explicit temporary meanings:
+
+```text
+Blessing of Freedom
+    -> temporary movement-impairment immunity
+    -> at minimum root + snare for the immunity model
+    -> never persisted
+
+Blessing of Protection
+    -> temporary physical immunity
+    -> never persisted
+```
+
+Blessing of Protection is already present in the current typed temporary
+`physical` aura bucket. Blessing of Freedom is not yet represented in the
+typed temporary-aura model and must be added before the next learner validation
+pass.
+
+Player exemption is stronger than these aura-specific explanations:
+
+```text
+player target
+    -> may still expose live temporary immunity state
+    -> must never contribute permanent learned immunity
+```
+
 Numeric creature/aura/spell IDs are authoritative. Names are display/debug
 information only.
 
-Reflection, DR, death and similar explanations may reject a learning event but
-must never become permanent immunity themselves.
+Reflection, DR, death, player temporary protections and similar explanations
+may reject a learning event but must never become permanent immunity themselves.
 
 ## Learner invariants
 
@@ -245,6 +280,10 @@ Do not change these during the current validation phase:
 13. Learn only the immunity dimension uniquely proven by the observed effect
     result. If multiple dimensions could explain the same evidence, persist
     nothing.
+14. **Player targets are categorically excluded from permanent immunity
+    learning.** This applies to every automatic learner route, regardless of
+    miss code, aura state, PvP mechanic or temporary protection. Live temporary
+    immunity queries may still describe a player's current state.
 
 The direct `SPELL_MISS_SELF` path is authoritative for the spell-level miss
 result when available. Only `IMMUNE`/`IMMUNE2` can contribute positive immunity
@@ -433,6 +472,52 @@ Still useful to verify:
 an appropriate Physical action remains eligible while Anti-Magic Shield is active
 no permanent Frost/Holy/Stun immunity is written from the temporary state
 ```
+
+### Player-target immunity leak — FOUND
+
+Observed micro-anomaly:
+
+```text
+player friend
++ Blessing of Freedom active
++ NPC attempts movement CC/root
+-> player later appears in permanent immunity data as physical-immune
+```
+
+The exact runtime event has not yet been replayed under `immunitydebug`, so
+the causal sequence is still labelled **likely**, not proven from a captured
+journal.
+
+Static code review does prove the safety hole:
+
+- bleed/non-bleed delayed verification already rejects `UnitIsPlayer`;
+- delayed CC verification already rejects `UnitIsPlayer`;
+- shared-debuff verification already rejects `UnitIsPlayer`;
+- recorded immunity queries are already NPC-specific;
+- the new direct `ProcessSpellMissSelf()` persistence path does **not**
+  currently reject a player target before permanent learning.
+
+That makes the direct `SPELL_MISS_SELF` learner the most plausible source of
+the observed permanent player record.
+
+Related temporary-aura state:
+
+- Blessing of Protection is already curated as temporary `physical` immunity;
+- because typed temporary `physical` state is resolved before recorded
+  NPC-only school data, BoP can still correctly describe live physical immunity
+  on a player without requiring any permanent player record;
+- Blessing of Freedom is currently missing from the typed temporary immunity
+  model and should provide temporary root/snare (movement-impairment) immunity.
+
+Required rule:
+
+```text
+temporary player immunity is valid live state
+permanent player immunity learning is never valid
+```
+
+This is a validation blocker because the learner has now demonstrated a path
+that can pollute persistent immunity data with a player name.
 
 ### Individual effect-failure evidence audit — REVISED
 
@@ -884,28 +969,43 @@ validated against real immunity cases.
 
 ## Exact next step
 
-The audit and smallest safe learner correction have landed. The next step is a
-focused validation pass of the corrected build; do not add generalized inference
-before this passes.
+Before resuming the focused learner validation, land one small safety correction
+for the newly discovered player-target leak.
 
-Validation order:
+Required correction:
+
+1. add an early player-target rejection to the direct
+   `ProcessSpellMissSelf()` learning path before any permanent immunity write;
+2. audit every automatic `RecordImmunity` / `RecordCCImmunity` call path and
+   confirm an equivalent player exclusion exists. The older delayed bleed,
+   non-bleed, CC and shared-debuff routes already have explicit `UnitIsPlayer`
+   guards; preserve them;
+3. add Blessing of Freedom to the typed temporary-immunity model as
+   movement-impairment immunity covering root + snare;
+4. preserve Blessing of Protection as typed temporary `physical` immunity;
+5. do **not** make player exemption suppress live temporary immunity queries:
+   the rule is no permanent player learning, not "players can never currently
+   be immune."
+
+After that micro-fix lands, resume the previously planned focused validation:
 
 1. load the addon and confirm no Vanilla-Lua startup/runtime error;
 2. enable `/cleveroid immunitydebug` and clear old diagnostic evidence;
-3. verify a generic `IMMUNE` on a spell with no spell-level mechanic, no
+3. first reproduce/cover a player under Blessing of Freedom and Blessing of
+   Protection and confirm no permanent player record can be written;
+4. verify a generic `IMMUNE` on an NPC spell with no spell-level mechanic, no
    Dispel family and no target-creature restriction can still write its literal
    DBC school;
-4. verify Frostbolt does **not** turn a generic result into a permanent snare or
-   Frost write merely from the direct event; its Dispel=Magic alternate keeps
-   the direct result ambiguous;
-5. verify Hammer of Justice on the Blackwing Spellbinder regression case writes
+5. verify Frostbolt does **not** turn a generic result into a permanent snare or
+   Frost write merely from the direct event;
+6. verify Hammer of Justice on the Blackwing Spellbinder regression case writes
    neither Holy nor Stun from a generic `IMMUNE`;
-6. verify an `IMMUNE2` event produces an immunitydebug rejection and no
+7. verify an `IMMUNE2` event produces an immunitydebug rejection and no
    permanent write;
-7. recheck TempCC, temporary protection/reflection, NPC DR, death and split-CC
+8. recheck TempCC, temporary protection/reflection, NPC DR, death and split-CC
    safeguards for regressions.
 
-Record the raw miss code and the learner decision/reason for each focused case.
+Record the raw miss code and learner decision/reason for each focused case.
 If Turtle/Octo testing becomes available, first verify whether their
 `IMMUNE`/`IMMUNE2` split matches the assumptions above before broadening
 positive learning there.
