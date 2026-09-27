@@ -28,13 +28,17 @@ not a chronological development log.
   `6df12256213c73cc5236abb716b7ef8e7c692a3a` — direct
   `IMMUNE` is now narrowed before school persistence and `IMMUNE2` is
   non-learning evidence.
+- Blackwing Spellbinder HoJ regression fix:
+  `43850cb6b3025c09ce480f994fe573dab33f6577` — the final direct-school
+  ambiguity gate now retains resolved CC/effect mechanics and falls back to
+  ClassicAPI's spell Dispel type when Nampower's raw field is nil.
 - TOC version: `@project-version@`
 - Latest known-good runtime before this correction:
   `aa2b761d1c45d1a28c8354b2f13f216a21403569` — immunitydebug local-scope
   runtime fix; that build started with no Lua errors.
-- Current phase: the player-target immunity leak micro-fix has landed after the
-  first learner correction. The corrected learner has **not** yet had a clean
-  runtime validation pass.
+- Current phase: the player-target immunity leak micro-fix and the focused HoJ
+  direct-learner regression fix have landed. The corrected learner has **not**
+  yet had a clean runtime validation pass after the HoJ fix.
 - **Focused learner testing is unblocked again for the current branch only.**
   Do not return to the pre-correction generic `IMMUNE -> school` build and do
   not begin the generalized comparative learner.
@@ -1000,9 +1004,9 @@ Portability boundary:
 - Turtle/Octo compatibility is still an explicit assumption to verify in
   runtime testing, not a claimed proven server implementation detail.
 
-### Blackwing Spellbinder — PARTIAL PASS / HoJ REGRESSION FOUND
+### Blackwing Spellbinder — HoJ FIX LANDED; RUNTIME RETEST PENDING
 
-Focused runtime results:
+Focused runtime results before the fix:
 
 ```text
 Fire Blast IMMUNE
@@ -1011,35 +1015,45 @@ Fire Blast IMMUNE
 
 Frostbolt IMMUNE
     -> Frost not learned
-    -> expected under the current conservative Dispel-family ambiguity rule
+    -> expected under the current conservative ambiguity rule
 
 Hammer of Justice IMMUNE
     -> Holy learned
     -> FAIL; expected neither Holy nor Stun
 ```
 
-The HoJ failure is now localized to the direct `SPELL_MISS_SELF` learner.
-SCRM already resolves HoJ as a stun through `GetSpellImmunityType()`, including
-per-effect mechanics, but the final direct-school ambiguity check currently
-re-checks only the spell-level `mechanic` plus `dispel`,
-`targetCreatureType` and school. It can therefore discard CC information that
-was already resolved earlier and incorrectly conclude that Holy is uniquely
-proven.
+The HoJ failure was localized to the direct `SPELL_MISS_SELF` learner:
+`GetSpellImmunityType()` already resolved HoJ as Stun from effect-level
+mechanics, but the final school-learning gate discarded that classification.
 
-Required correction before further trust in direct school learning:
+The focused correction now:
 
-- reuse the resolved CC/immunity classification in the final ambiguity decision;
-- any resolved CC/mechanic alternative must prevent a direct school write;
-- retain the existing Dispel-family and target-creature safeguards;
-- include the resolved CC/effect-mechanic reason in `immunitydebug`;
-- if the raw Nampower `dispel` field is nil/unavailable, use ClassicAPI as a
-  hard-requirement fallback rather than treating missing metadata as no
-  alternative cause.
+- reuses the resolved CC/immunity classification in the final ambiguity decision;
+- rejects a direct school write whenever that classification resolves to a CC
+  mechanic, including effect-level Stun;
+- retains the existing spell-level mechanic, target-creature and Dispel-family
+  safeguards;
+- falls back to ClassicAPI `C_Spell.GetSpellDispelType()` only when Nampower's
+  raw `dispel` field is nil/unavailable;
+- includes the resolved CC/effect-mechanic reason in `immunitydebug`.
 
-This is a focused bug fix to the current conservative learner, not the deferred
-generalized comparative learner.
+Implementation commit:
 
-Broad `spell` promotion remains deferred.
+```text
+43850cb6b3025c09ce480f994fe573dab33f6577
+```
+
+Expected replay on Blackwing Spellbinder:
+
+```text
+Hammer of Justice IMMUNE
+    -> ambiguous: resolved CC/effect mechanic=stun
+    -> no Holy write
+    -> no Stun write
+```
+
+This remains a focused correction to the current conservative learner. The
+generalized comparative learner and broad `spell` promotion remain deferred.
 
 ## Deferred
 
@@ -1087,9 +1101,9 @@ Validation order:
    DBC school;
 5. verify Frostbolt does **not** turn a generic result into a permanent snare or
    Frost write merely from the direct event;
-6. fix the confirmed Hammer of Justice regression on Blackwing Spellbinder:
-   resolved effect-level Stun must make the generic `IMMUNE` ambiguous, so
-   neither Holy nor Stun is written;
+6. replay the fixed Hammer of Justice case on Blackwing Spellbinder:
+   resolved effect-level Stun must make the generic `IMMUNE` ambiguous, with
+   neither Holy nor Stun written; record the `immunitydebug` ambiguity detail;
 7. verify an `IMMUNE2` event produces an immunitydebug rejection and no
    permanent write;
 8. recheck TempCC, temporary protection/reflection, NPC DR, death and split-CC
