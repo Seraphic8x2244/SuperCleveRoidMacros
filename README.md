@@ -1,5 +1,14 @@
 # SuperCleveRoid Macros
 
+> [!CAUTION]
+> ## Highly experimental immunity / DR / CC rework
+>
+> **This branch is development and testing work only. Do not use it as a normal/release addon, and do not merge it upstream into brues-code yet.**
+>
+> The immunity, diminishing-returns (DR), and crowd-control (CC) systems are being substantially reworked and are **incomplete**. The current learner is intentionally conservative in several areas, may fail to learn real immunities, and still has unresolved design/runtime work before the new model is considered trustworthy. Persistent immunity/evidence storage, comparative inference, all-caster NPC DR tracking, and related validation are still under development.
+>
+> Behaviour, learned data, and internal storage may change without compatibility guarantees while this work continues. This branch is intended for active development, instrumentation, and controlled runtime testing only.
+
 Enhanced macro addon for World of Warcraft 1.12.1 (Vanilla/Turtle WoW) with dynamic tooltips, conditional execution, and extended syntax.
 
 **[Full Documentation on the Wiki](https://github.com/brues-code/SuperCleveRoidMacros/wiki)**
