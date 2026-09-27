@@ -9590,21 +9590,34 @@ local function ProcessSpellMissSelf(spellId, targetGuid, missInfo)
                 )
             else
                 -- vMaNGOS whole-spell IMMUNE can be produced by school/damage
-                -- immunity, spell Dispel-family immunity, or the spell-level
-                -- Mechanic. Delayed spells can also be changed to IMMUNE when a
-                -- target-creature-type restriction no longer matches. Only school
-                -- and damage immunity collapse to the same existing SCRM school
-                -- dimension; any other static route makes the observation
-                -- ambiguous and therefore non-learnable.
+                -- immunity, spell Dispel-family immunity, or a mechanic. The
+                -- resolved SCRM immunity classification can also expose a CC
+                -- mechanic stored only on an effect; do not discard that already
+                -- resolved alternative before the final school write. Delayed
+                -- spells can also be changed to IMMUNE when a target-creature-type
+                -- restriction no longer matches. Only school and damage immunity
+                -- collapse to the same existing SCRM school dimension; any other
+                -- represented route makes the observation ambiguous and therefore
+                -- non-learnable.
                 local spellMechanic = GetSpellRecField and GetSpellRecField(spellId, "mechanic") or nil
                 local dispelType = GetSpellRecField and GetSpellRecField(spellId, "dispel") or nil
+                if dispelType == nil and C_Spell and C_Spell.GetSpellDispelType then
+                    -- ClassicAPI is a hard requirement. Nampower's raw SpellRec
+                    -- field can be unavailable/nil, which must not be interpreted
+                    -- as "no Dispel-family alternative".
+                    dispelType = C_Spell.GetSpellDispelType(spellId)
+                end
                 local targetCreatureType = GetSpellRecField and GetSpellRecField(spellId, "targetCreatureType") or nil
                 local dbcSchool = GetSpellRecField and GetSpellRecField(spellId, "school") or nil
                 local schoolName = dbcSchool ~= nil and SCHOOL_NAMES[dbcSchool] or nil
                 local ambiguousDetail = nil
 
+                if immunityType and CC_IMMUNITY_TYPES[immunityType] then
+                    ambiguousDetail = "resolved CC/effect mechanic=" .. tostring(immunityType)
+                end
                 if spellMechanic and spellMechanic > 0 then
-                    ambiguousDetail = "spell mechanic=" .. tostring(spellMechanic)
+                    local detail = "spell mechanic=" .. tostring(spellMechanic)
+                    ambiguousDetail = ambiguousDetail and (ambiguousDetail .. ", " .. detail) or detail
                 end
                 if dispelType and dispelType > 0 then
                     local detail = "dispel=" .. tostring(dispelType)
