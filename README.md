@@ -1,7 +1,7 @@
 # SuperCleveRoid Macros
 
 > [!CAUTION]
-> ## Highly experimental immunity / DR / CC rework
+> ## ⚠️ Highly experimental immunity / DR / CC rework
 >
 > **This branch is development and testing work only. Do not use it as a normal/release addon, and do not merge it upstream into brues-code yet.**
 >
