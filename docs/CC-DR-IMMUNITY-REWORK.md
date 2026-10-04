@@ -928,6 +928,55 @@ Runtime observation should be lightweight and event-driven:
 - no continuous mob/aura scanning and no new high-frequency polling should be
   introduced.
 
+#### Pre-implementation deep-evidence audit — COMPLETE
+
+The focused audit needed before choosing the generalized learner policy is now
+complete. It did not start generalized inference code.
+
+Runtime evidence coverage is sufficient for the intended backend:
+
+- `SPELL_MISS_SELF` / `SPELL_MISS_OTHER` provide caster GUID, target GUID,
+  spell ID and miss reason for the player and other observable casters;
+- `SPELL_DAMAGE_EVENT_SELF` / `SPELL_DAMAGE_EVENT_OTHER` provide direct
+  positive evidence that a spell damage component actually landed, including
+  caster GUID, target GUID, spell ID and runtime school;
+- Nampower BUFF/DEBUFF gain events provide authoritative evidence that an aura
+  actually exists on a tracked unit, including target GUID and spell ID;
+- `AURA_CAST_ON_*` includes caster GUID and effect metadata but remains
+  correlation metadata, not authoritative aura-success evidence. Nampower builds
+  it from the SpellGo hit-target list plus static spell effects, so it must never
+  by itself disprove an immunity;
+- ClassicAPI authoritative aura data may supply `sourceGUID` / `sourceUnit`
+  when available, which can improve attribution but is not required for the
+  core positive-evidence model.
+
+Mob identity is also sufficient. ClassicAPI's `UnitCreatureID(unit)` accepts a
+raw GUID token directly and resolves the live creature-template entry from the
+object when available. Its out-of-view GUID fallback is exact for stock-Vanilla
+single-entry spawns, but Turtle-style multi-entry creature spawns can carry a
+different template entry in the GUID. Therefore permanent Mob-ID evidence should
+only be promoted from a live/resolvable identity; unresolved/out-of-view GUID
+evidence should remain transient until the live Mob ID is known.
+
+One correctness gap remains in all-caster NPC stun DR classification. vMaNGOS
+chooses controlled-vs-triggered stun DR using a runtime `triggered` flag.
+Nampower's OTHER miss/damage/aura events do not expose that flag, and the
+existing `WasClientInitiatedSpell()` test is player-only. Known explicit spell
+IDs can still be classified exactly. For an otherwise-unclassifiable landed stun
+from another caster, the safe backend behavior is to retain a transient
+"DR category uncertain" guard that prevents DR-dependent permanent inference
+until the reset window expires rather than guessing a DR bucket. This may create
+temporary false negatives but cannot create a false permanent immunity.
+
+The remaining work before implementation is therefore policy/design rather than
+additional immunity-semantics research:
+
+- exact persistent state-transition / contradiction / revocation rules;
+- migration treatment for legacy name-keyed recorded immunities;
+- how much compact provenance to retain without storing raw combat history;
+- SCT presentation and verbosity. SCT should consume centralized learner
+  state-transition notifications rather than raw combat events.
+
 NPC DR is a correctness prerequisite for this model. The existing
 `recentCCHits` safeguard is currently populated from player-owned verified CC,
 which is insufficient once comparative inference begins. Before DR is used as
@@ -1081,7 +1130,7 @@ absence of player-only DR evidence to eliminate DR as a possible cause.
 
 ## Exact next step
 
-The player-exemption micro-fix and persistence-path audit have landed. Resume
+The player-exemption micro-fix, persistence-path audit and deep-evidence pre-implementation audit have landed. Design choices for the generalized backend may now be finalized, but generalized inference implementation still waits for the focused runtime validation pass below. Resume
 the focused learner validation now; do **not** begin generalized comparative
 inference before this pass succeeds.
 
