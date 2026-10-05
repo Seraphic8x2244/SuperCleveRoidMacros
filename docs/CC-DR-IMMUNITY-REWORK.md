@@ -36,12 +36,13 @@ not a chronological development log.
 - Latest known-good runtime before this correction:
   `aa2b761d1c45d1a28c8354b2f13f216a21403569` — immunitydebug local-scope
   runtime fix; that build started with no Lua errors.
-- Current phase: the player-target immunity leak micro-fix and the focused HoJ
-  direct-learner regression fix have landed. The corrected learner has **not**
-  yet had a clean runtime validation pass after the HoJ fix.
-- **Focused learner testing is unblocked again for the current branch only.**
-  Do not return to the pre-correction generic `IMMUNE -> school` build and do
-  not begin the generalized comparative learner.
+- Current phase: bounded generalized-backend implementation is underway.
+  Slices 0-2 are complete: conservative static checkpoint, HearthDB/schema
+  foundation, and the normalized observation pipeline. Permanent comparative
+  inference has not started.
+- Do not runtime-test between implementation slices. The corrected conservative
+  learner plus the assembled generalized backend are validated together in
+  Slice 8.
 - The direct `SPELL_MISS_SELF` learner now rejects player targets before any
   permanent write. The legacy text-only school fallback was also found during
   the persistence audit and now rejects players.
@@ -53,7 +54,9 @@ not a chronological development log.
   vMaNGOS semantics are proven below. Turtle/Octo `IMMUNE`/`IMMUNE2`
   semantics remain an explicit compatibility assumption to verify; the
   vMaNGOS-specific positive inference is kept local to the direct miss learner.
-- The generalized comparative learner has not started.
+- Generalized permanent inference has not started. The new code currently stops at
+  storage/schema plus normalized diagnostic observations; no HearthDB facts or
+  hypotheses are produced from combat yet.
 
 ## Branch-specific immunity model
 
@@ -278,8 +281,9 @@ Do not change these during the current validation phase:
 9. `CleveRoids_ImmunityData` remains the authoritative real immunity store.
 10. No new polling or high-frequency `OnUpdate`.
 11. Public immunity macro syntax remains stable during validation.
-12. Do not begin the generalized comparative learner until the current learner
-    has been observed against known real cases.
+12. Build the generalized backend only through the bounded slice sequence. Do not
+    runtime-test between implementation slices; run the combined conservative
+    and generalized validation matrix in Slice 8.
 13. Learn only the immunity dimension uniquely proven by the observed effect
     result. If multiple dimensions could explain the same evidence, persist
     nothing.
@@ -1280,23 +1284,58 @@ until Slice 8.
 Stop condition: Slice 1 complete; proceed to Slice 2 in a fresh development
 chat.
 
-### Slice 2 — normalized observation pipeline
+### Slice 2 — normalized observation pipeline — COMPLETE
 
 Purpose: create the single evidence input seam before inference exists.
 
-Scope:
+Implemented at code checkpoint
+`cea27a03b2d9d8ab4753f29e563dca3023374d95`:
 
-- normalize SELF/OTHER Nampower miss, damage, aura/debuff and death observations;
-- resolve live target identity to Mob ID using ClassicAPI;
-- cache spell decomposition/classification;
-- represent authoritative positive success separately from ambiguous immune
-  observations;
-- retain core-specific interpretation at the adapter boundary;
-- diagnostics only: no durable facts/hypotheses yet.
+- added `ImmunityObservations.lua` as an isolated event-driven normalization
+  seam loaded after `ClassicAPI.lua`; it has no persistence or production
+  immunity-query consumer yet;
+- normalized both SELF and OTHER Nampower spell-miss and spell-damage events,
+  all BUFF/DEBUFF added/removed variants, and `UNIT_DIED`;
+- authoritative damage-landed observations and authoritative actual aura
+  presence are represented separately from ambiguous `IMMUNE`/`IMMUNE2`
+  observations; full aura removals and ordinary misses remain neutral evidence;
+- `AURA_CAST_ON_*` is intentionally not registered or consumed as positive
+  evidence because it is correlation metadata rather than authoritative aura
+  state;
+- added ClassicAPI wrappers that resolve a combat-event GUID through
+  `UnitTokenFromGUID`, immediately re-verify the live token GUID, and only then
+  call `UnitCreatureID`; the raw-GUID out-of-view fallback is therefore not
+  accepted as a live Mob ID;
+- cached spell profiles include DBC school, spell-level mechanic, per-effect
+  mechanics, raw effect/aura records, dispel family and normalized SCRM mechanic
+  dimensions; aura-name fallback classification is only used when no recognized
+  explicit mechanic exists;
+- the input boundary exposes selectable `portable`, `vmangos`, and
+  `octowow` miss adapters. `portable` is the default, vMaNGOS-specific
+  `IMMUNE`/`IMMUNE2` descriptions remain diagnostic metadata, and OctoWoW
+  semantics remain explicitly unverified until Slice 8;
+- a listener seam plus compact counters/last-observation diagnostics were added,
+  but there are no inference listeners in Slice 2.
 
-Stop condition: the normalized observation seams and diagnostics are complete
-and statically reviewable without changing learner output. Runtime event
-verification is deferred to the final validation slice.
+Static review completed:
+
+- the required ClassicAPI identity and spell-decomposition APIs were verified
+  against the repository's required ClassicAPI v1.15.8 tag;
+- the code checkpoint changes only `ClassicAPI.lua`,
+  `ImmunityObservations.lua`, and `SuperCleveRoidMacros.toc`;
+- static registration/scope checks cover SELF/OTHER miss, damage, buff/debuff
+  add/remove and death observations;
+- a structural Lua block-balance check passed for the new module;
+- scope scans confirm the new pipeline does not call HearthDB/ImmunityStorage,
+  `RecordImmunity`, NPC DR state or `AURA_CAST_ON_*`;
+- the existing conservative learner remains untouched and therefore remains the
+  only code producing current permanent learner output.
+
+No runtime testing was performed. Runtime event verification remains deferred
+until Slice 8.
+
+Stop condition: Slice 2 complete; proceed to Slice 3 in a fresh development
+chat.
 
 ### Slice 3 — transient-context and all-caster NPC DR safety
 
@@ -1414,8 +1453,8 @@ core differences isolated to normalized observation adapters.
 
 ## Exact next step
 
-Slices 0 and 1 are complete. Start a fresh development chat for **Slice 2
-only**: the normalized observation pipeline.
+Slices 0, 1 and 2 are complete. Start a fresh development chat for **Slice 3
+only**: transient-context and all-caster NPC DR safety.
 
 Do not runtime-test between implementation slices. Continue through the bounded
 implementation sequence with static review/document/commit handoffs, then run
