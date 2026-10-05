@@ -1185,10 +1185,11 @@ Hammer of Justice IMMUNE
 ```
 
 This remains a focused correction to the current conservative learner.
-Generalized comparative implementation remains gated only until Slice 0's
-focused runtime checkpoint passes; after that, proceed through the staged plan
-below. Broad `spell` promotion remains outside the initial slices unless later
-evidence justifies it.
+The generalized comparative implementation may now proceed through the staged
+development plan below. Runtime validation is deferred until the complete
+implementation is assembled; do not insert in-game test gates between
+development slices. Broad `spell` promotion remains outside the initial slices
+unless later evidence justifies it.
 
 ## Generalized backend development sequence
 
@@ -1197,58 +1198,42 @@ to finish, statically review, document and commit in one development chat.
 Do not begin the next slice in the same chat unless the current slice is
 trivially small.
 
+The slices are context/tooling boundaries, not runtime-test gates. Do not
+runtime-test between implementation slices. Assemble the complete backend first,
+then perform the focused and cross-core runtime matrix in the final validation
+slice.
+
 The runtime rule during development is **one active learner**. New backend code
 may be built behind an explicit development gate, but when the generalized
 learner is enabled it must suppress the old permanent-learning write path rather
 than allowing two learners to compete.
 
-### Slice 0 — focused legacy validation checkpoint
+### Slice 0 — conservative learner static checkpoint — COMPLETE
 
-Purpose: close the already-pending HoJ/player/temp-protection validation before
-changing the learner architecture.
+Purpose: verify that the currently landed conservative learner still has the
+intended safety boundaries before changing the learner architecture, without
+introducing an in-game test gate.
 
-Static preflight at handoff `f145aed3ba5620d3267cb9be5891b3adab8d1934`:
+Completed static review at handoff
+`f145aed3ba5620d3267cb9be5891b3adab8d1934`:
 
-- branch head matches the supplied handoff exactly;
+- branch head matched the supplied handoff;
 - the six commits after the HoJ fix `43850cb6b3025c09ce480f994fe573dab33f6577`
-  change only this document, so the learner code under test is unchanged;
-- static review confirms the current direct learner still places player,
-  split-CC, death, TempCC, temporary protection/reflection, NPC-DR,
-  queryable-target and `IMMUNE2` rejection gates before permanent persistence;
-- this preflight is not a substitute for the in-client runtime pass.
+  changed only this document, so the learner code under review was unchanged;
+- the direct learner still places player, split-CC, death, TempCC, temporary
+  protection/reflection, NPC-DR, queryable-target and `IMMUNE2` rejection gates
+  before permanent persistence;
+- the HoJ correction still makes resolved Stun/effect-mechanic evidence an
+  ambiguity before any Holy school write;
+- no HearthDB or generalized learner implementation was started during this
+  checkpoint.
 
-Focused runtime validation order:
+The previously planned live HoJ/player/`IMMUNE2`/TempCC/protection/reflection/
+NPC-DR/death/split-CC matrix is retained for the final runtime validation slice;
+it is not required between implementation slices.
 
-1. load the addon and confirm no Vanilla-Lua startup/runtime error;
-2. enable `/cleveroid immunitydebug` and clear old diagnostic evidence;
-3. reproduce/cover a player under Blessing of Freedom and Blessing of
-   Protection:
-   - Blessing of Freedom should report live temporary root/snare immunity;
-   - Blessing of Protection should report live temporary physical immunity;
-   - neither case may create or retain any permanent player immunity record;
-   - the direct miss journal should show `player target` rejection when
-     applicable;
-4. verify a generic `IMMUNE` on an NPC spell with no spell-level mechanic, no
-   Dispel family and no target-creature restriction can still write its literal
-   DBC school;
-5. verify Frostbolt does **not** turn a generic result into a permanent snare or
-   Frost write merely from the direct event;
-6. retest Hammer of Justice on Blackwing Spellbinder: resolved effect-level
-   Stun must make the generic `IMMUNE` ambiguous, so neither Holy nor Stun is
-   written;
-7. verify an `IMMUNE2` event produces an `immunitydebug` rejection and no
-   permanent write;
-8. recheck TempCC, temporary protection/reflection, NPC DR, death and split-CC
-   safeguards for regressions.
-
-Record the raw miss code and learner decision/reason for each focused case.
-Document results only; fix only regressions in the currently landed conservative
-learner. If Turtle/Octo testing becomes available, first verify whether its
-`IMMUNE`/`IMMUNE2` split matches the current portability assumption before
-broadening positive learning there.
-
-Stop condition: focused matrix passes or a narrowly scoped regression fix is
-landed and handed back for retest.
+Stop condition: static checkpoint complete; proceed to Slice 1 in a fresh
+development chat.
 
 ### Slice 1 — HearthDB dependency and schema foundation
 
@@ -1266,8 +1251,8 @@ Scope:
 - add diagnostics for HearthDB missing/open/schema errors;
 - no combat-event learning and no migration of legacy immunity SavedVariables.
 
-Stop condition: DB lifecycle/schema can be statically reviewed and runtime
-smoke-tested independently.
+Stop condition: DB lifecycle/schema and diagnostics are complete and statically
+reviewed. Runtime smoke testing is deferred to the final validation slice.
 
 ### Slice 2 — normalized observation pipeline
 
@@ -1283,8 +1268,9 @@ Scope:
 - retain core-specific interpretation at the adapter boundary;
 - diagnostics only: no durable facts/hypotheses yet.
 
-Stop condition: raw events produce correct normalized debug observations for
-player and other casters without changing learner output.
+Stop condition: the normalized observation seams and diagnostics are complete
+and statically reviewable without changing learner output. Runtime event
+verification is deferred to the final validation slice.
 
 ### Slice 3 — transient-context and all-caster NPC DR safety
 
@@ -1301,8 +1287,9 @@ Scope:
   explanations through the normalized pipeline;
 - still no permanent comparative inference.
 
-Stop condition: the backend can reliably say when permanent inference is
-blocked by transient context.
+Stop condition: transient-context and DR blocking logic is complete and
+statically reviewable. Runtime verification is deferred to the final validation
+slice.
 
 ### Slice 4 — durable vulnerability and hypothesis engine
 
@@ -1317,9 +1304,10 @@ Scope:
 - suspected remains derived from unresolved hypothesis membership;
 - no broad-immunity promotion and no public macro/query cutover yet.
 
-Stop condition: a candidate set can progress from all-yellow suspicion through
-green eliminations across encounters/reloads, without confirming immunity unless
-the formal rule is met.
+Stop condition: candidate/hypothesis state transitions and persistence paths are
+implemented and statically reviewable, without confirming immunity unless the
+formal rule is met. Runtime progression across encounters/reloads is deferred to
+the final validation slice.
 
 ### Slice 5 — permanent confirmation, revocation and dynamic suspicion
 
@@ -1337,8 +1325,9 @@ Scope:
   dynamic flag;
 - persist compact conclusion provenance, not raw combat history.
 
-Stop condition: red/green/orange transitions are deterministic and survive
-reloads.
+Stop condition: red/green/orange transition logic and persistence are complete
+and statically deterministic. Runtime reload/persistence verification is
+deferred to the final validation slice.
 
 ### Slice 6 — production cutover and query integration
 
@@ -1353,8 +1342,9 @@ Scope:
   separate inputs, normalized through the same query model where practical;
 - verify known-fact fast paths avoid needless re-investigation.
 
-Stop condition: only one active learner/storage model controls production
-immunity decisions.
+Stop condition: static control flow shows only one active learner/storage model
+can control production immunity decisions. Runtime cutover verification is
+deferred to the final validation slice.
 
 ### Slice 7 — learning SCT / immunity-screen diagnostics
 
@@ -1371,15 +1361,21 @@ Scope:
 - expose enough Mob-ID/fact/hypothesis provenance in the immunity screen to
   diagnose incorrect transitions.
 
-Stop condition: the user can watch a hypothesis converge during ordinary combat.
+Stop condition: the learning-SCT/immunity-screen surfaces are wired to
+centralized learner state transitions and statically reviewable. Visual/runtime
+validation is deferred to the final validation slice.
 
 ### Slice 8 — cross-core runtime matrix and cleanup
 
-Purpose: validate the completed pipeline on the intended ecosystems.
+Purpose: validate the completed pipeline on the intended ecosystems after all
+implementation slices are assembled.
 
 Scope:
 
-- vMaNGOS 1.12.1 full focused + comparative runtime matrix;
+- first run the deferred conservative-learner regression matrix covering HoJ,
+  player-target rejection, `IMMUNE2`, TempCC, temporary protection/reflection,
+  NPC DR, death and split-CC safeguards;
+- then run the vMaNGOS 1.12.1 full comparative runtime matrix;
 - OctoWoW/Turtle-family verification of raw `IMMUNE`/`IMMUNE2` semantics and
   normalized adapters;
 - stress repeated encounters/reloads and DB persistence;
@@ -1392,10 +1388,12 @@ core differences isolated to normalized observation adapters.
 
 ## Exact next step
 
-Start with **Slice 0 only**: complete the already-pending focused runtime
-validation of the current conservative learner. Once that checkpoint passes,
-start a fresh development chat for Slice 1 (HearthDB dependency and schema
-foundation).
+Slice 0's static conservative-learner checkpoint is complete. Start a fresh
+development chat for **Slice 1 only**: HearthDB dependency and schema foundation.
+
+Do not runtime-test between implementation slices. Continue through the bounded
+implementation sequence with static review/document/commit handoffs, then run
+the combined conservative + generalized runtime validation in Slice 8.
 
 The generalized learner's permanent-inference invariant remains:
 
