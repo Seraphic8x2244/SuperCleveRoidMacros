@@ -2618,6 +2618,54 @@ end
 
 CleveRoids.IsTemporarilyCCImmune = IsTemporarilyCCImmune
 
+-- Slice 3 normalized-transient bridge. Keep the curated numeric definitions
+-- authoritative here so the generalized backend does not duplicate them.
+local function GetTransientImmunityAuraEffects(spellID, mobID)
+    spellID = tonumber(spellID)
+    mobID = tonumber(mobID)
+    if not spellID then return {} end
+
+    local effects = {}
+    local seen = {}
+
+    local function addEffect(source, dimension, auraType)
+        local key = tostring(source) .. ":" .. tostring(dimension or auraType or "")
+        if seen[key] then return end
+        seen[key] = true
+        table.insert(effects, {
+            source = source,
+            dimension = dimension,
+            auraType = auraType,
+            auraID = spellID,
+        })
+    end
+
+    for auraType, auraIDs in pairs(IMMUNITY_AURAS) do
+        if auraIDs[spellID] then
+            if auraType == "reflect" then
+                addEffect("reflection", nil, auraType)
+            elseif auraType == "root" or auraType == "snare" then
+                addEffect("temporary_cc", auraType, auraType)
+            else
+                addEffect("temporary_aura", auraType, auraType)
+            end
+        end
+    end
+
+    local mobRules = mobID and TEMP_CC_IMMUNITIES[mobID]
+    local mechanics = mobRules and mobRules[spellID]
+    if mechanics then
+        for ccType in pairs(mechanics) do
+            addEffect("temporary_cc", ccType, "temp_cc")
+        end
+    end
+
+    return effects
+end
+
+CleveRoids.GetTransientImmunityAuraEffects = GetTransientImmunityAuraEffects
+CleveRoids.HasImmunityGuardAura = HasImmunityGuardAura
+
 -- PERFORMANCE: Throttling - run at 20Hz max instead of every frame (60+Hz)
 -- Minimum delay is 0.2s, so 20Hz (50ms) gives us 4 checks per minimum delay
 local _lastDelayedTrackingUpdate = 0
@@ -7375,6 +7423,43 @@ local function GetSpellImmunityDRType(spellID)
 end
 
 CleveRoids.GetSpellImmunityDRType = GetSpellImmunityDRType
+
+-- Generalized-backend DR classification must not reuse the legacy fallback that
+-- guesses every non-client-initiated stun is triggered. For the player's own
+-- casts the existing runtime cast evidence is usable. For another caster it is
+-- only safe to classify spell IDs whose Vanilla bucket is explicit.
+local function ClassifyNPCStunDR(spellID, casterGUID)
+    spellID = tonumber(spellID)
+    if not spellID or GetSpellCCType(spellID) ~= "stun" then
+        return nil, false, "not_stun"
+    end
+
+    if IsKidneyShotSpell(spellID) then
+        return "stun_kidneyshot", true, "kidney_shot"
+    end
+
+    if STUN_CONTROL_DR_OVERRIDES[spellID] then
+        return "stun_control", true, "explicit_control"
+    end
+
+    local playerGUID = CleveRoids.GetGUID and CleveRoids.GetGUID("player") or nil
+    if playerGUID and casterGUID then
+        if CleveRoids.NormalizeGUID then
+            playerGUID = CleveRoids.NormalizeGUID(playerGUID)
+            casterGUID = CleveRoids.NormalizeGUID(casterGUID)
+        end
+        if playerGUID == casterGUID then
+            if WasClientInitiatedSpell(spellID) then
+                return "stun_control", true, "player_client_cast"
+            end
+            return "stun_trigger", true, "player_triggered"
+        end
+    end
+
+    return nil, false, "controlled_vs_triggered_unknown"
+end
+
+CleveRoids.ClassifyNPCStunDR = ClassifyNPCStunDR
 
 -- Record a CC immunity (permanent or buff-based)
 -- Parameters:
