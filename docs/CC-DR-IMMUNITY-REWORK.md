@@ -1417,7 +1417,7 @@ chat.
 Purpose: add persistent learning without yet broadening public immunity behavior.
 
 Implemented at code checkpoint
-`029a59e9fda1ef13d25778087b6082409d25780f`:
+`dad3406ea1099b28259851fd71cfacf9be8201ac`:
 
 - added `ImmunityKnowledge.lua` as a listener after the normalized transient
   reducer. It writes only the HearthDB knowledge store and does not mutate the
@@ -1443,7 +1443,10 @@ Implemented at code checkpoint
   verified;
 - a spell with a static target-creature restriction likewise abstains from
   durable whole-spell hypothesis creation because that is a known non-permanent
-  alternative explanation;
+  alternative explanation. The same conservative abstention applies when a
+  spell-level mechanic or Dispel family is present but has no recognized durable
+  Slice 4 dimension, so an unmodelled cause cannot be silently dropped and later
+  over-confirmed;
 - transient explanations from Slice 3 are checked before hypothesis persistence:
   reflection, death, DR/uncertain DR, unresolved live identity, broad temporary
   protection and applicable exact temporary immunity block the observation;
@@ -1480,8 +1483,9 @@ Static review completed:
   common-reducer branch on core name;
 - TOC order is transient reducer -> durable knowledge reducer -> immunity UI,
   so hypothesis persistence can consume the complete transient safety context;
-- the incomplete `IMMUNE2` and target-creature restriction abstention paths
-  are present at the code checkpoint.
+- the incomplete `IMMUNE2`, target-creature restriction, unrecognized
+  spell-mechanic and unrecognized Dispel-family abstention paths are present at
+  the final code checkpoint.
 
 No runtime testing was performed. Cross-encounter/reload persistence and
 cross-core behavior remain deferred until Slice 8.
