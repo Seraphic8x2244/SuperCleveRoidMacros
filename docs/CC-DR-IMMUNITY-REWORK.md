@@ -37,18 +37,18 @@ not a chronological development log.
   `aa2b761d1c45d1a28c8354b2f13f216a21403569` — immunitydebug local-scope
   runtime fix; that build started with no Lua errors.
 - Current phase: bounded generalized-backend implementation is underway.
-  Slices 0-5 are complete: conservative static checkpoint, HearthDB/schema
+  Slices 0-6 are complete: conservative static checkpoint, HearthDB/schema
   foundation, normalized observations, transient/DR safety, durable
-  vulnerability/hypothesis persistence, and permanent confirmation/revocation
-  with dynamic suspicion. Production cutover/query integration has not started.
+  vulnerability/hypothesis persistence, permanent confirmation/revocation with
+  dynamic suspicion, and production cutover/query integration. Slice 7
+  learning-SCT/immunity-screen diagnostics have not started.
 - Do not runtime-test between implementation slices. The corrected conservative
   learner plus the assembled generalized backend are validated together in
   Slice 8.
-- The direct `SPELL_MISS_SELF` learner now rejects player targets before any
-  permanent write. The legacy text-only school fallback was also found during
-  the persistence audit and now rejects players.
-- The delayed bleed, non-bleed, CC and shared-debuff persistence routes retain
-  their existing `UnitIsPlayer` guards.
+- The old direct `SPELL_MISS_SELF`, delayed bleed/non-bleed/CC/shared-debuff
+  and text-only persistence paths remain only as pre-cutover compatibility code.
+  When the generalized backend is active their permanent SavedVariables writes
+  are suppressed; storage failure does not reactivate them.
 - Blessing of Protection remains typed temporary `physical` immunity.
   Blessing of Freedom is now typed temporary `root` + `snare` immunity.
 - Portability target remains one learner for **vMaNGOS and Turtle/Octo**.
@@ -59,8 +59,9 @@ not a chronological development log.
   hypotheses in HearthDB, confirms an exact permanent immunity only after one
   valid permanent candidate remains, revokes that exact fact on authoritative
   success, and preserves a disproved confirmed immunity with the independent
-  dynamic/conditional-suspicion flag. Broad-immunity promotion and production
-  query cutover remain deferred.
+  dynamic/conditional-suspicion flag. Production immunity queries now consume
+  those Mob-ID-keyed facts. Broad-immunity promotion and Slice 7 UI/SCT
+  diagnostics remain deferred.
 
 ## Branch-specific immunity model
 
@@ -1558,22 +1559,73 @@ remain deferred until Slice 8.
 Stop condition: Slice 5 complete; proceed to Slice 6 in a fresh development
 chat.
 
-### Slice 6 — production cutover and query integration
+### Slice 6 — production cutover and query integration — COMPLETE
 
 Purpose: make the generalized backend the sole active immunity knowledge source.
 
-Scope:
+Implemented at code checkpoint
+`419a31b58de9ee4e60c7b2ac95bcf79f49687351`:
 
-- route existing immunity queries/macros/UI reads through HearthDB-backed facts;
-- when generalized learner is active, disable/remove old permanent learner writes;
-- remove dependence on legacy name-keyed immunity data for learned facts;
-- preserve hand-coded/static immunity mechanisms only where they are genuinely
-  separate inputs, normalized through the same query model where practical;
-- verify known-fact fast paths avoid needless re-investigation.
+- `CleveRoids.CheckImmunity`, exact CC queries and spell-action dimension
+  queries now consume confirmed Mob-ID-keyed HearthDB facts through
+  `ImmunityKnowledge`; existing `[immune]` / `[noimmune]` macro conditionals
+  already funnel through that query seam and required no parser changes;
+- action queries now include the generalized learner's exact dispel-family
+  dimensions (`dispel_magic`, `curse`, `disease`, `poison`) in addition to
+  school, bleed, exact CC and existing broad composition, so confirmed exact
+  facts are usable by production spell decisions;
+- broad `spell` / `cc` / `all` facts are queryable if present, but Slice 6
+  does not add any broad candidate or promotion rule;
+- the generalized module exposes an explicit active cutover gate that is
+  independent of storage readiness. When active, the old direct, delayed and
+  text-only permanent SavedVariables write/remove paths cannot compete with the
+  HearthDB learner; HearthDB failure therefore does not silently fall back to a
+  second learned store;
+- `CleveRoids_ImmunityData` is retained only for genuinely separate explicit
+  manual/static and conditional overrides. Data version 7 clears the old
+  indistinguishable name-keyed learned/manual records once; no legacy learned
+  facts are migrated into HearthDB;
+- existing hard-coded/live inputs remain separate and compose with the same
+  production query path, including typed temporary protection/CC auras and the
+  bespoke Banish live state;
+- the existing immunity UI's learned columns and current-target read path now
+  consume confirmed HearthDB facts while still showing manual/static overrides.
+  Slice 7 transition/SCT diagnostics, candidate/vulnerability/dynamic-state
+  presentation and provenance expansion were not started;
+- repeated authoritative success on dimensions already durably known
+  `vulnerable` now takes a fast path before hypothesis loading or SQL writes.
+  Existing known-immune, known-vulnerable and dynamic-candidate hypothesis
+  short-circuits remain intact.
 
-Stop condition: static control flow shows only one active learner/storage model
-can control production immunity decisions. Runtime cutover verification is
-deferred to the final validation slice.
+Static review completed:
+
+- branch state matched supplied handoff
+  `ecabd5c45e9c8d0a79edd30bb1d2763fed06af31` before implementation, whose
+  parent code checkpoint is
+  `9253437f2b32d87f9addef9b6323fa0d8a03ce10`;
+- the code checkpoint changes only `Utility.lua`, `ImmunityKnowledge.lua`,
+  `ImmunityUI.lua` and `Init.lua`;
+- changed-file Lua block/delimiter delta checks balance against the supplied
+  handoff state;
+- the new UI fact query was checked against the existing HearthDB schema and
+  uses `mobs.last_name`; no schema change or migration was introduced;
+- repo-wide Lua scope scanning finds legacy `CleveRoids_ImmunityData` usage
+  only in `Utility.lua`, `Init.lua` and `ImmunityUI.lua`. The remaining
+  automatic compatibility writers are cutover-gated; the ungated mutations are
+  explicit manual/static management/reset paths;
+- production query scans confirm exact CC, school/mechanic, dispel-family and
+  broad reads reach `ImmunityKnowledge`, while the candidate set still contains
+  no `spell` / `cc` / `all` promotion;
+- `Conditionals.lua` remains unchanged and continues to route both `immune`
+  and `noimmune` through `CleveRoids.CheckImmunity`;
+- no Slice 7 learning SCT, candidate-state UI, broad-immunity inference, Slice 8
+  cleanup or runtime test was added.
+
+No runtime testing was performed. Production cutover behavior, persistence and
+cross-core compatibility remain deferred until Slice 8.
+
+Stop condition: Slice 6 complete; proceed to Slice 7 in a fresh development
+chat.
 
 ### Slice 7 — learning SCT / immunity-screen diagnostics
 
@@ -1617,8 +1669,8 @@ core differences isolated to normalized observation adapters.
 
 ## Exact next step
 
-Slices 0, 1, 2, 3, 4 and 5 are complete. Start a fresh development chat for
-**Slice 6 only**: production cutover and query integration.
+Slices 0, 1, 2, 3, 4, 5 and 6 are complete. Start a fresh development chat for
+**Slice 7 only**: learning SCT / immunity-screen diagnostics.
 
 Do not runtime-test between implementation slices. Continue through the bounded
 implementation sequence with static review/document/commit handoffs, then run
