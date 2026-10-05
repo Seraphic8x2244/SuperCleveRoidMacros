@@ -13,6 +13,7 @@ ClassicAPI.lua
 ImmunityObservations.lua
 ImmunityStorage.lua
 Utility.lua
+ImmunityTransient.lua
 ImmunityUI.lua
 Core.lua
 Conditionals.lua
