@@ -1235,24 +1235,50 @@ it is not required between implementation slices.
 Stop condition: static checkpoint complete; proceed to Slice 1 in a fresh
 development chat.
 
-### Slice 1 — HearthDB dependency and schema foundation
+### Slice 1 — HearthDB dependency and schema foundation — COMPLETE
 
 Purpose: establish the clean authoritative datastore without changing combat
 learning.
 
-Scope:
+Implemented at code checkpoint
+`a1a757289ae76db16a25290eb11b2d0d001141bf`:
 
-- hard-require HearthDB alongside the existing extension requirements;
-- open/create one SCRM immunity database under `CustomData/`;
-- add schema/version management and clean reset behavior;
-- create the initial `mobs`, `facts`, `hypotheses`, and
-  `hypothesis_candidates` tables;
-- add a small storage API with escaped/validated SQL construction;
-- add diagnostics for HearthDB missing/open/schema errors;
-- no combat-event learning and no migration of legacy immunity SavedVariables.
+- added `ImmunityStorage.lua` and load it before runtime initialization;
+- HearthDB is feature-detected as a hard dependency for the new immunity
+  knowledge store; there is no SavedVariables fallback;
+- the store opens/creates
+  `CustomData/SuperCleveRoidMacros_Immunity.db`;
+- schema v1 is managed with SQLite `PRAGMA user_version`;
+- a fresh database creates the schema, while an incompatible or structurally
+  invalid schema is cleanly reset rather than migrated;
+- schema v1 creates `mobs`, `facts`, `hypotheses`, and
+  `hypothesis_candidates`, with foreign-key cleanup and a Mob-ID hypothesis
+  index;
+- durable fact rows reserve the designed permanent verdict
+  (`immune`/`vulnerable`), independent dynamic-suspicion flag, and compact
+  proof source/spell/event provenance;
+- the storage API exposes readiness/diagnostics, guarded execute/query calls and
+  escaped/validated text, integer, boolean and enumerated SQL literal helpers;
+- missing HearthDB API, database-open failures and schema failures are surfaced
+  distinctly through the existing requirement diagnostics;
+- the database handle is closed during addon disable/logout.
 
-Stop condition: DB lifecycle/schema and diagnostics are complete and statically
-reviewed. Runtime smoke testing is deferred to the final validation slice.
+Static review completed:
+
+- branch state matched the supplied Slice 0 handoff before implementation;
+- Lua parse/helper checks passed for the new storage module;
+- stubbed lifecycle checks passed for fresh-schema creation and incompatible
+  schema reset;
+- the schema create/reset SQL executed successfully against SQLite with
+  `user_version = 1` and the expected columns;
+- the implementation adds no combat-event learner, no generalized inference
+  path and no migration/read of legacy name-keyed immunity SavedVariables.
+
+No runtime testing was performed. Runtime DB/plugin validation remains deferred
+until Slice 8.
+
+Stop condition: Slice 1 complete; proceed to Slice 2 in a fresh development
+chat.
 
 ### Slice 2 — normalized observation pipeline
 
@@ -1388,8 +1414,8 @@ core differences isolated to normalized observation adapters.
 
 ## Exact next step
 
-Slice 0's static conservative-learner checkpoint is complete. Start a fresh
-development chat for **Slice 1 only**: HearthDB dependency and schema foundation.
+Slices 0 and 1 are complete. Start a fresh development chat for **Slice 2
+only**: the normalized observation pipeline.
 
 Do not runtime-test between implementation slices. Continue through the bounded
 implementation sequence with static review/document/commit handoffs, then run
