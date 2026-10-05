@@ -65,6 +65,42 @@ function API.HasMinimumVersion(reqMajor, reqMinor, reqPatch)
 end
 
 --------------------------------------------------------------------------------
+-- Unit identity
+--------------------------------------------------------------------------------
+
+-- Resolve a combat-event GUID to a currently mapped unit token and only then
+-- read its live creature-template ID. Do not pass the GUID straight to
+-- UnitCreatureID here: ClassicAPI deliberately falls back to GUID-packed entry
+-- bits for out-of-view creatures, which is unsafe for multi-entry spawns.
+-- Returns: mobID, unitToken, status ("live", "not_live", "stale_token",
+-- "not_creature", or "missing_guid").
+function API.ResolveLiveCreatureID(guid)
+    if guid == nil then
+        return nil, nil, "missing_guid"
+    end
+
+    local guidText = tostring(guid)
+    local unit = UnitTokenFromGUID(guidText)
+    if not unit then
+        return nil, nil, "not_live"
+    end
+
+    -- UnitTokenFromGUID is best-effort and mappings can change between frames.
+    -- Re-verify the token immediately before reading identity.
+    local liveGUID = UnitGUID(unit)
+    if not liveGUID or string.lower(tostring(liveGUID)) ~= string.lower(guidText) then
+        return nil, nil, "stale_token"
+    end
+
+    local mobID = UnitCreatureID(unit)
+    if not mobID then
+        return nil, unit, "not_creature"
+    end
+
+    return tonumber(mobID), unit, "live"
+end
+
+--------------------------------------------------------------------------------
 -- C_UnitAuras
 --------------------------------------------------------------------------------
 
@@ -282,6 +318,28 @@ end
 -- older ClassicAPI build without the function degrades gracefully.
 function API.GetSpellEffectMechanics(spellID)
     return C_Spell.GetSpellEffectMechanics(spellID)
+end
+
+-- Spell.dbc school as the native 0-based Vanilla school enum plus its English
+-- school name. ClassicAPI's global GetSpellSchool returns a 1-based ID.
+function API.GetSpellSchoolByID(spellID)
+    if not spellID then return nil, nil end
+    local schoolID, schoolName = GetSpellSchool(spellID)
+    if not schoolID then return nil, nil end
+    return schoolID - 1, schoolName
+end
+
+-- Raw Spell.dbc effect records (three fixed slots). Each entry contains effect,
+-- auraName, magnitude inputs and miscValue; nil for an unknown spell.
+function API.GetSpellEffectInfo(spellID)
+    if not spellID then return nil end
+    return C_Spell.GetSpellEffectInfo(spellID)
+end
+
+-- Raw Spell.dbc Dispel field (0 for no dispel family / unknown).
+function API.GetSpellDispelType(spellID)
+    if not spellID then return nil end
+    return C_Spell.GetSpellDispelType(spellID)
 end
 
 -- Flat spell-damage bonus (spell power) for a magic school, as a number.
