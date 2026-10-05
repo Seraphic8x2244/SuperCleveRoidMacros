@@ -928,6 +928,76 @@ Runtime observation should be lightweight and event-driven:
 - no continuous mob/aura scanning and no new high-frequency polling should be
   introduced.
 
+#### Generalized backend design decisions — IN PROGRESS
+
+Confirmed decisions after the audit:
+
+- target environments remain Vanilla 1.12.1 vMaNGOS and OctoWoW; one
+  normalized evidence/inference pipeline should serve both, with core-specific
+  observation interpretation isolated at the input boundary where required;
+- HearthDB is a hard dependency for the generalized learner. Do not design a
+  SavedVariables fallback knowledge store. Runtime must fail the learner
+  clearly if HearthDB is unavailable rather than silently switching persistence
+  models;
+- the overhaul starts with a clean knowledge database. Do not migrate the old
+  name-keyed immunity records into the new evidence store;
+- authoritative dimension-specific success outranks immunity evidence:
+  observed damage success disproves permanent immunity to that exact school /
+  action dimension; authoritative aura presence disproves permanent immunity to
+  that exact CC/mechanic dimension;
+- vulnerability/susceptibility is persistent knowledge, not merely absence of
+  an immunity. This prevents repeated re-investigation of dimensions already
+  positively disproved;
+- ambiguous IMMUNE observations create linked candidate hypotheses rather than
+  independent flat "suspected" facts. A candidate becomes confirmed immune only
+  when all other valid permanent candidates have been positively disproved and
+  no transient explanation remains;
+- if every candidate in a hypothesis is later positively disproved, the
+  original immune observation is discarded as unresolved/temporary/otherwise
+  non-permanent evidence; it must not manufacture another immunity;
+- if an already confirmed permanent immunity later succeeds authoritatively for
+  the same dimension, success wins immediately and the permanent fact becomes
+  vulnerable/susceptible. Contradiction is useful as a diagnostic transition,
+  not a reason to preserve a false permanent immunity;
+- keep compact conclusion provenance only (for example direct/comparative and a
+  proof spell/event kind), not raw combat history.
+
+Recommended HearthDB shape:
+
+- `mobs`: Mob ID plus lightweight display metadata such as last known name;
+- `facts`: one durable row per Mob-ID + dimension, with verdict
+  `immune` or `vulnerable` plus compact proof/provenance fields;
+- `hypotheses`: unresolved ambiguous observations that still matter;
+- `hypothesis_candidates`: the linked candidate dimensions for each unresolved
+  hypothesis.
+
+Unknown is represented by absence of a fact. "Suspected" is derived from
+membership in an unresolved hypothesis rather than stored as a competing final
+verdict.
+
+Learning SCT belongs in the existing `/cleveroid immunities` UI as a toggle.
+For development/testing it should expose state transitions compactly using
+candidate icons/borders:
+
+```text
+yellow border = immunity candidate / suspect
+green border  = candidate positively disproved (vulnerable)
+red border    = immunity confirmed
+```
+
+Conceptually, one observation can progress:
+
+```text
+Immune  [x] [x] [x]
+Immune  [x] [x] [y]
+Immune  [z] [y] [y]
+```
+
+Do not emit separate vulnerability SCT spam by default; green candidate state in
+the active learning trace is sufficient for testing. Whether the native SCT
+surface can render independently bordered icons or requires a small custom
+combat-text frame is an implementation/API detail to verify later.
+
 #### Pre-implementation deep-evidence audit — COMPLETE
 
 The focused audit needed before choosing the generalized learner policy is now
