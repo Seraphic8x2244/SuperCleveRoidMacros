@@ -5,9 +5,9 @@ _G.CleveRoids = CleveRoids
 -- Normalized immunity evidence input seam.
 --
 -- This module observes and normalizes combat evidence, caches static spell
--- classification and exposes diagnostics/listener hooks. Later bounded slices
--- may consume this seam, but it does not write HearthDB, mutate the legacy
--- immunity learner, infer permanent facts, or drive UI/SCT.
+-- classification and exposes diagnostics/listener hooks. It deliberately does
+-- not write HearthDB, mutate legacy immunity storage, infer permanent facts, or
+-- drive UI/SCT; those responsibilities remain downstream of this input seam.
 local Pipeline = CleveRoids.ImmunityObservations or {}
 CleveRoids.ImmunityObservations = Pipeline
 
@@ -307,19 +307,26 @@ CORE_ADAPTERS.vmangos = {
     end,
 }
 
--- Octo/Turtle raw semantics remain deliberately unclaimed until the Slice 8
--- runtime matrix. The adapter exists now so later verification does not leak
--- core checks into the common pipeline.
+-- Turtle-family server source uses the same relevant Vanilla 1.12 split:
+-- whole-spell immunity is reported as IMMUNE, while a target whose final
+-- effect mask is empty is reported as IMMUNE2. Keep a distinct adapter name so
+-- any future core divergence remains isolated at this boundary.
 CORE_ADAPTERS.octowow = {
     interpretImmune = function(variant)
         if variant == "immune2" then
-            return "raw_immune2_unverified", nil
+            return "effect_mask_zero", "effect_mask_zero"
         end
-        return "raw_immune_unverified", nil
+        return "generic_whole_spell_immune", "whole_spell"
     end,
 }
 
-Pipeline.coreAdapterName = Pipeline.coreAdapterName or "portable"
+-- Slice 8 removes the development-only portable default. Normal production
+-- startup now selects the target-family adapter from the environment already
+-- detected in Init.lua. Preserve a preselected adapter for focused diagnostics
+-- or test harnesses; portable remains available as an explicit conservative
+-- override but is no longer the normal production path.
+local defaultCoreAdapter = CleveRoids.hasTurtle and "octowow" or "vmangos"
+Pipeline.coreAdapterName = Pipeline.coreAdapterName or defaultCoreAdapter
 
 function Pipeline.SetCoreAdapter(name)
     if not CORE_ADAPTERS[name] then
