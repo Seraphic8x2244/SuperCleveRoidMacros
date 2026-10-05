@@ -205,6 +205,10 @@ function Pipeline.GetSpellProfile(spellID)
     local effectMechanics = API.GetSpellEffectMechanics(spellID)
     local rawEffects = API.GetSpellEffectInfo(spellID)
     local dispelType = API.GetSpellDispelType(spellID)
+    local targetCreatureType = nil
+    if type(_G.GetSpellRecField) == "function" then
+        targetCreatureType = tonumber(_G.GetSpellRecField(spellID, "targetCreatureType"))
+    end
 
     if schoolName then
         schoolName = string.lower(tostring(schoolName))
@@ -222,6 +226,7 @@ function Pipeline.GetSpellProfile(spellID)
         spellMechanicDimension = nil,
         dispelType = dispelType or 0,
         dispelDimension = DISPEL_TO_DIMENSION[dispelType],
+        targetCreatureType = targetCreatureType or 0,
         effects = {},
         auraTypes = {},
         mechanicDimensions = {},
