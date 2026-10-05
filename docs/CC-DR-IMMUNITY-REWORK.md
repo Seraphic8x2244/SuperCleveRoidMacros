@@ -1337,24 +1337,79 @@ until Slice 8.
 Stop condition: Slice 2 complete; proceed to Slice 3 in a fresh development
 chat.
 
-### Slice 3 — transient-context and all-caster NPC DR safety
+### Slice 3 — transient-context and all-caster NPC DR safety — COMPLETE
 
 Purpose: make the safety layer sufficient before permanent inference is allowed.
 
-Scope:
+Implemented at code checkpoint
+`93d6a647708b0bd148ef824a82af65772e0f41b3`:
 
-- feed all observable qualifying landed NPC stuns into target-centric DR state;
-- preserve the three Vanilla buckets: `stun_control`, `stun_trigger`,
-  `stun_kidneyshot`;
-- where OTHER-caster controlled-vs-triggered classification is unknowable,
-  retain a transient DR-category-uncertain guard rather than guessing;
-- route TempCC, protection, reflection, death/despawn and related transient
-  explanations through the normalized pipeline;
-- still no permanent comparative inference.
+- added `ImmunityTransient.lua` as an event-driven listener on the normalized
+  observation seam; it owns live-only target-centric transient state and does
+  not write HearthDB, SavedVariables or the existing production learner;
+- qualifying authoritative NPC stun aura-presence observations from any
+  observable caster now advance target-centric DR state. A GUID must either
+  resolve to a live Mob ID on that observation or already belong to transient
+  state whose Mob ID was previously proven live;
+- preserved independent `stun_control`, `stun_trigger`, and
+  `stun_kidneyshot` counters with the existing 20-second reset model;
+- added a generalized-backend stun classifier without changing the conservative
+  learner's existing `GetSpellImmunityDRType()` behavior. Kidney Shot and the
+  existing explicit controlled-stun overrides classify exactly; player-caster
+  evidence may use the existing client-initiated cast evidence;
+- when another caster's controlled-vs-triggered category cannot be proven from
+  the available event data, no bucket is guessed. A target-level
+  `dr_category_uncertain` blocker is retained through the DR reset window;
+- an otherwise-unclassifiable current OTHER-caster stun also remains blocked if
+  either plausible controlled/triggered bucket is already at immune-stage DR;
+- existing curated TempCC and temporary protection/reflection definitions remain
+  authoritative in `Utility.lua`, but are exposed to the transient reducer as
+  normalized aura explanations rather than duplicated into another spell list;
+- direct `REFLECT` miss observations are exposed as reflection explanations,
+  never as immunity;
+- `UNIT_DIED` clears target DR/aura context and retains the existing short
+  recent-death safety window; `PLAYER_ENTERING_WORLD` emits a normalized
+  `world_reset` lifecycle observation that clears stale transient target
+  state;
+- the normalized pipeline now exposes an explicit lifecycle seam for a proven
+  `despawned` observation. Nampower has no separate per-unit despawn event in
+  the currently supported event surface, so no synthetic individual-despawn
+  inference was added;
+- transient explanation queries expose death, temporary CC, temporary
+  protection, reflection, DR/uncertain-DR and unresolved live-identity blockers
+  for the later inference slices;
+- no permanent comparative inference, fact/hypothesis persistence, production
+  query cutover or UI/SCT behavior was added.
 
-Stop condition: transient-context and DR blocking logic is complete and
-statically reviewable. Runtime verification is deferred to the final validation
-slice.
+Static review completed:
+
+- branch state matched handoff
+  `58cc090c289170377ac5bf6108109a9a765f7d2b` before implementation, whose
+  parent is the Slice 2 code checkpoint
+  `cea27a03b2d9d8ab4753f29e563dca3023374d95`;
+- the code checkpoint changes only `ImmunityObservations.lua`,
+  `ImmunityTransient.lua`, `Utility.lua`, and
+  `SuperCleveRoidMacros.toc`;
+- structural Lua block/bracket checks pass for the new transient reducer and the
+  modified observation module;
+- the Utility-wide structural heuristic produces exactly the same two
+  pre-existing false-positive `end` reports at the handoff and code
+  checkpoint, while both inserted Utility methods balance cleanly in isolation;
+- the new Utility helpers are direct `CleveRoids` methods, so Slice 3 adds no
+  chunk-scope locals to the already local-limit-sensitive `Utility.lua`;
+- scope scans confirm the transient reducer has no executable reference to
+  HearthDB/ImmunityStorage, `CleveRoids_ImmunityData`,
+  `RecordImmunity`/`RecordCCImmunity`, UI/SCT or an `OnUpdate` loop;
+- SELF/OTHER miss, damage and aura inputs plus `UNIT_DIED` remain registered,
+  and the transient reducer consumes the existing listener seam rather than
+  adding a second combat-event normalization path;
+- the existing conservative DR classifier/write paths remain intact.
+
+No runtime testing was performed. All-caster and uncertain-DR runtime
+verification remains deferred until Slice 8.
+
+Stop condition: Slice 3 complete; proceed to Slice 4 in a fresh development
+chat.
 
 ### Slice 4 — durable vulnerability and hypothesis engine
 
@@ -1453,8 +1508,8 @@ core differences isolated to normalized observation adapters.
 
 ## Exact next step
 
-Slices 0, 1 and 2 are complete. Start a fresh development chat for **Slice 3
-only**: transient-context and all-caster NPC DR safety.
+Slices 0, 1, 2 and 3 are complete. Start a fresh development chat for **Slice 4
+only**: durable vulnerability and hypothesis engine.
 
 Do not runtime-test between implementation slices. Continue through the bounded
 implementation sequence with static review/document/commit handoffs, then run
