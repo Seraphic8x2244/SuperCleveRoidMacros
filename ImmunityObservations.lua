@@ -4,10 +4,10 @@ _G.CleveRoids = CleveRoids
 
 -- Normalized immunity evidence input seam.
 --
--- Slice 2 deliberately stops here: this module observes and normalizes combat
--- evidence, caches static spell classification and exposes diagnostics/listener
--- hooks. It does not write HearthDB, mutate the legacy immunity learner, infer
--- permanent facts, track DR/transient explanations, or drive UI/SCT.
+-- This module observes and normalizes combat evidence, caches static spell
+-- classification and exposes diagnostics/listener hooks. Later bounded slices
+-- may consume this seam, but it does not write HearthDB, mutate the legacy
+-- immunity learner, infer permanent facts, or drive UI/SCT.
 local Pipeline = CleveRoids.ImmunityObservations or {}
 CleveRoids.ImmunityObservations = Pipeline
 
@@ -541,6 +541,22 @@ local function normalizeDeath(eventName, targetGUID)
     return emit(observation)
 end
 
+-- Explicit lifecycle seam for transient-only state. Current live producers use
+-- UNIT_DIED and PLAYER_ENTERING_WORLD; adapters may also normalize a proven
+-- despawn without bypassing the observation pipeline.
+function Pipeline.EmitLifecycle(outcome, targetGUID, eventName, detail)
+    if not outcome then return nil end
+    local observation = newObservation(eventName or "IMMUNITY_LIFECYCLE", "unit", "lifecycle")
+    observation.outcome = tostring(outcome)
+    observation.evidence = Pipeline.EVIDENCE.LIFECYCLE
+    observation.authoritative = true
+    observation.lifecycleDetail = detail
+    if targetGUID then
+        resolveTarget(observation, targetGUID)
+    end
+    return emit(observation)
+end
+
 -- Public adapter seam. Live registration below is the only current producer.
 -- No persistence or inference happens here.
 function Pipeline.HandleNampowerEvent(eventName, a1, a2, a3, a4, a5, a6, a7, a8)
@@ -570,6 +586,10 @@ function Pipeline.HandleNampowerEvent(eventName, a1, a2, a3, a4, a5, a6, a7, a8)
 
     if eventName == "UNIT_DIED" then
         return normalizeDeath(eventName, a1)
+    end
+
+    if eventName == "PLAYER_ENTERING_WORLD" then
+        return Pipeline.EmitLifecycle("world_reset", nil, eventName)
     end
 
     return nil
@@ -625,6 +645,7 @@ local EVENT_NAMES = {
     "DEBUFF_ADDED_OTHER",
     "DEBUFF_REMOVED_OTHER",
     "UNIT_DIED",
+    "PLAYER_ENTERING_WORLD",
 }
 
 local frame = CreateFrame("Frame", "CleveRoidsImmunityObservationFrame")
