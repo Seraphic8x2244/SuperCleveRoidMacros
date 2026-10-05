@@ -10,6 +10,7 @@ Localization.lua
 Init.lua
 NampowerAPI.lua
 ClassicAPI.lua
+ImmunityStorage.lua
 Utility.lua
 ImmunityUI.lua
 Core.lua
