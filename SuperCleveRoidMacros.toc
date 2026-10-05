@@ -14,6 +14,7 @@ ImmunityObservations.lua
 ImmunityStorage.lua
 Utility.lua
 ImmunityTransient.lua
+ImmunityKnowledge.lua
 ImmunityUI.lua
 Core.lua
 Conditionals.lua
