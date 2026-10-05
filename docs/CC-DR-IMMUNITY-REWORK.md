@@ -1207,13 +1207,45 @@ than allowing two learners to compete.
 Purpose: close the already-pending HoJ/player/temp-protection validation before
 changing the learner architecture.
 
-Scope:
+Static preflight at handoff `f145aed3ba5620d3267cb9be5891b3adab8d1934`:
 
-- run the existing focused validation matrix already documented above;
-- confirm the HoJ direct-learner fix, player-target rejection, `IMMUNE2`
-  rejection, TempCC/protection/reflection/NPC-DR/death/split-CC safeguards;
-- document results only; fix only regressions in the currently landed
-  conservative learner.
+- branch head matches the supplied handoff exactly;
+- the six commits after the HoJ fix `43850cb6b3025c09ce480f994fe573dab33f6577`
+  change only this document, so the learner code under test is unchanged;
+- static review confirms the current direct learner still places player,
+  split-CC, death, TempCC, temporary protection/reflection, NPC-DR,
+  queryable-target and `IMMUNE2` rejection gates before permanent persistence;
+- this preflight is not a substitute for the in-client runtime pass.
+
+Focused runtime validation order:
+
+1. load the addon and confirm no Vanilla-Lua startup/runtime error;
+2. enable `/cleveroid immunitydebug` and clear old diagnostic evidence;
+3. reproduce/cover a player under Blessing of Freedom and Blessing of
+   Protection:
+   - Blessing of Freedom should report live temporary root/snare immunity;
+   - Blessing of Protection should report live temporary physical immunity;
+   - neither case may create or retain any permanent player immunity record;
+   - the direct miss journal should show `player target` rejection when
+     applicable;
+4. verify a generic `IMMUNE` on an NPC spell with no spell-level mechanic, no
+   Dispel family and no target-creature restriction can still write its literal
+   DBC school;
+5. verify Frostbolt does **not** turn a generic result into a permanent snare or
+   Frost write merely from the direct event;
+6. retest Hammer of Justice on Blackwing Spellbinder: resolved effect-level
+   Stun must make the generic `IMMUNE` ambiguous, so neither Holy nor Stun is
+   written;
+7. verify an `IMMUNE2` event produces an `immunitydebug` rejection and no
+   permanent write;
+8. recheck TempCC, temporary protection/reflection, NPC DR, death and split-CC
+   safeguards for regressions.
+
+Record the raw miss code and learner decision/reason for each focused case.
+Document results only; fix only regressions in the currently landed conservative
+learner. If Turtle/Octo testing becomes available, first verify whether its
+`IMMUNE`/`IMMUNE2` split matches the current portability assumption before
+broadening positive learning there.
 
 Stop condition: focused matrix passes or a narrowly scoped regression fix is
 landed and handed back for retest.
