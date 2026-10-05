@@ -1184,8 +1184,11 @@ Hammer of Justice IMMUNE
     -> no Stun write
 ```
 
-This remains a focused correction to the current conservative learner. The
-generalized comparative learner and broad `spell` promotion remain deferred.
+This remains a focused correction to the current conservative learner.
+Generalized comparative implementation remains gated only until Slice 0's
+focused runtime checkpoint passes; after that, proceed through the staged plan
+below. Broad `spell` promotion remains outside the initial slices unless later
+evidence justifies it.
 
 ## Generalized backend development sequence
 
