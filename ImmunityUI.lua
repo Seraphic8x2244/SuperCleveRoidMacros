@@ -37,6 +37,9 @@ local targetModelRotating = false
 local targetCCList
 local targetSpellList
 local targetLiveList
+local learningSCTToggle
+local learningSCTDriver
+local learningSCTEntries = {}
 
 local CC_COLUMNS = {
     { key = "cc", type = "cc", label = "CC", broad = true, iconSpellID = 853 }, -- Hammer of Justice
@@ -70,6 +73,39 @@ local SPELL_COLUMNS = {
     { key = "bleed", type = "bleed", label = "Bleed", iconSpellID = 772 }, -- Rend
 }
 
+local DIMENSION_ICON_SPELL_IDS = {
+    cc = 853,
+    charm = 6358,
+    disorient = 1776,
+    fear = 5782,
+    root = 339,
+    silence = 15487,
+    sleep = 2637,
+    snare = 1715,
+    stun = 853,
+    freeze = 122,
+    knockout = 6770,
+    polymorph = 118,
+    banish = 710,
+    shackle = 9484,
+    horror = 6789,
+    daze = 5116,
+    all = 642,
+    spell = 7121,
+    physical = 1022,
+    holy = 879,
+    fire = 133,
+    nature = 403,
+    frost = 116,
+    shadow = 686,
+    arcane = 5143,
+    bleed = 772,
+    dispel_magic = 527,
+    curse = 475,
+    disease = 528,
+    poison = 8946,
+}
+
 local TYPE_LABELS = {
     cc = "CC",
     charm = "Charm",
@@ -97,6 +133,10 @@ local TYPE_LABELS = {
     shadow = "Shadow",
     arcane = "Arcane",
     bleed = "Bleed",
+    dispel_magic = "Dispel Magic",
+    curse = "Curse",
+    disease = "Disease",
+    poison = "Poison",
     unknown = "Unknown",
 }
 
@@ -220,6 +260,176 @@ local function CreateMessageList(parent)
         end)
     end
     return list
+end
+
+local LEARNING_SCT_LIFETIME = 3.5
+local LEARNING_SCT_FADE_START = 2.7
+local LEARNING_SCT_STATE = {
+    candidate = { label = "Candidate", color = { 1.0, 0.82, 0.0 } },
+    disproved = { label = "Disproved", color = { 0.2, 1.0, 0.3 } },
+    confirmed = { label = "Confirmed permanent", color = { 1.0, 0.2, 0.2 } },
+    conditional = { label = "Temporary/conditional suspected", color = { 1.0, 0.55, 0.0 } },
+}
+
+local function IsLearningSCTEnabled()
+    return CleveRoidMacros and CleveRoidMacros.learningImmunitySCT == 1
+end
+
+local function ClearLearningSCT()
+    local i
+    for i = table.getn(learningSCTEntries), 1, -1 do
+        local entry = learningSCTEntries[i]
+        if entry.frame then entry.frame:Hide() end
+        table.remove(learningSCTEntries, i)
+    end
+    if learningSCTDriver then learningSCTDriver:Hide() end
+end
+
+local function LayoutLearningSCT()
+    local i
+    for i = 1, table.getn(learningSCTEntries) do
+        local row = learningSCTEntries[i].frame
+        row:ClearAllPoints()
+        row:SetPoint("CENTER", UIParent, "CENTER", 0, 92 + ((i - 1) * 42))
+    end
+end
+
+local function EnsureLearningSCTDriver()
+    if learningSCTDriver then return end
+    learningSCTDriver = CreateFrame("Frame", "CleveRoidsImmunityLearningSCTDriver", UIParent)
+    learningSCTDriver:SetScript("OnUpdate", function()
+        local elapsed = arg1 or 0
+        local removed = false
+        local i
+        for i = table.getn(learningSCTEntries), 1, -1 do
+            local entry = learningSCTEntries[i]
+            entry.elapsed = entry.elapsed + elapsed
+            if entry.elapsed >= LEARNING_SCT_LIFETIME then
+                entry.frame:Hide()
+                table.remove(learningSCTEntries, i)
+                removed = true
+            elseif entry.elapsed > LEARNING_SCT_FADE_START then
+                local remaining = LEARNING_SCT_LIFETIME - entry.elapsed
+                local fadeLength = LEARNING_SCT_LIFETIME - LEARNING_SCT_FADE_START
+                entry.frame:SetAlpha(remaining / fadeLength)
+            end
+        end
+        if removed then LayoutLearningSCT() end
+        if table.getn(learningSCTEntries) == 0 then
+            learningSCTDriver:Hide()
+        end
+    end)
+    learningSCTDriver:Hide()
+end
+
+local function CreateLearningSCTIcon(parent, dimension, fallbackSpellID, state)
+    local holder = CreateFrame("Frame", NewWidgetName("SCTIcon"), parent)
+    holder:SetWidth(28)
+    holder:SetHeight(28)
+    holder:SetBackdrop({
+        edgeFile = "Interface\\Buttons\\WHITE8x8",
+        edgeSize = 2,
+    })
+    local color = state.color
+    holder:SetBackdropBorderColor(color[1], color[2], color[3], 1)
+
+    local icon = holder:CreateTexture(nil, "ARTWORK")
+    icon:SetPoint("TOPLEFT", holder, "TOPLEFT", 2, -2)
+    icon:SetPoint("BOTTOMRIGHT", holder, "BOTTOMRIGHT", -2, 2)
+    local representativeSpellID = DIMENSION_ICON_SPELL_IDS[dimension] or fallbackSpellID
+    local texture = representativeSpellID and C_Spell.GetSpellTexture(representativeSpellID)
+    icon:SetTexture(texture or CleveRoids.unknownTexture or "Interface\\Icons\\INV_Misc_QuestionMark")
+    icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
+    return holder
+end
+
+local function ShowLearningTransition(transition)
+    if not IsLearningSCTEnabled() or type(transition) ~= "table" then return end
+    local state = LEARNING_SCT_STATE[transition.state]
+    if not state or table.getn(transition.dimensions or {}) == 0 then return end
+
+    EnsureLearningSCTDriver()
+
+    local row = CreateFrame("Frame", NewWidgetName("SCTRow"), UIParent)
+    row:SetWidth(480)
+    row:SetHeight(38)
+    row:SetFrameStrata("DIALOG")
+    row:SetBackdrop({
+        bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
+        edgeFile = "Interface\\Buttons\\WHITE8x8",
+        tile = true,
+        tileSize = 8,
+        edgeSize = 1,
+        insets = { left = 1, right = 1, top = 1, bottom = 1 },
+    })
+    row:SetBackdropColor(0, 0, 0, 0.72)
+    row:SetBackdropBorderColor(state.color[1], state.color[2], state.color[3], 1)
+
+    local dimensions = transition.dimensions or {}
+    local labels = {}
+    local previous
+    local i
+    for i = 1, table.getn(dimensions) do
+        local dimension = dimensions[i]
+        table.insert(labels, TYPE_LABELS[dimension] or tostring(dimension))
+        if i <= 6 then
+            local icon = CreateLearningSCTIcon(row, dimension, transition.spellID, state)
+            if previous then
+                icon:SetPoint("LEFT", previous, "RIGHT", 3, 0)
+            else
+                icon:SetPoint("LEFT", row, "LEFT", 5, 0)
+            end
+            previous = icon
+        end
+    end
+
+    local text = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    if previous then
+        text:SetPoint("LEFT", previous, "RIGHT", 6, 8)
+    else
+        text:SetPoint("LEFT", row, "LEFT", 8, 8)
+    end
+    text:SetPoint("RIGHT", row, "RIGHT", -6, 8)
+    text:SetJustifyH("LEFT")
+    text:SetTextColor(state.color[1], state.color[2], state.color[3])
+    text:SetText(state.label .. ": " .. table.concat(labels, ", "))
+
+    local target = transition.targetName
+    if not target or target == "" then
+        target = transition.mobID and ("Mob " .. tostring(transition.mobID)) or "Unknown target"
+    end
+    local detail = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    if previous then
+        detail:SetPoint("LEFT", previous, "RIGHT", 6, -8)
+    else
+        detail:SetPoint("LEFT", row, "LEFT", 8, -8)
+    end
+    detail:SetPoint("RIGHT", row, "RIGHT", -6, -8)
+    detail:SetJustifyH("LEFT")
+
+    local detailText = target
+    if transition.mobID then
+        detailText = detailText .. " [Mob ID " .. tostring(transition.mobID) .. "]"
+    end
+    if transition.spellID then
+        local spellName = C_Spell.GetSpellName(transition.spellID)
+        detailText = detailText .. " - " .. (spellName or "Spell") .. " " .. tostring(transition.spellID)
+    end
+    detail:SetText(detailText)
+
+    table.insert(learningSCTEntries, { frame = row, elapsed = 0 })
+    LayoutLearningSCT()
+    row:Show()
+    learningSCTDriver:Show()
+end
+
+local function SetLearningSCTEnabled(enabled)
+    CleveRoidMacros = CleveRoidMacros or {}
+    CleveRoidMacros.learningImmunitySCT = enabled and 1 or 0
+    if not enabled then ClearLearningSCT() end
+    if learningSCTToggle then
+        learningSCTToggle:SetChecked(enabled and 1 or 0)
+    end
 end
 
 local function ClearMessageList(list)
@@ -599,6 +809,91 @@ local function AddLiveTargetEntries(list, heading, entries)
     end
 end
 
+local function FormatLearnerProvenance(source, spellID, proofEvent)
+    local parts = {}
+    if source and source ~= "" then
+        table.insert(parts, "source=" .. tostring(source))
+    end
+    if spellID then
+        local spellName = C_Spell.GetSpellName(spellID)
+        if spellName then
+            table.insert(parts, "spell=" .. spellName .. " (" .. tostring(spellID) .. ")")
+        else
+            table.insert(parts, "spellID=" .. tostring(spellID))
+        end
+    end
+    if proofEvent and proofEvent ~= "" then
+        table.insert(parts, "event=" .. tostring(proofEvent))
+    end
+    if table.getn(parts) == 0 then return "provenance unavailable" end
+    return table.concat(parts, "; ")
+end
+
+local function AddLearnerDiagnostics(list, mobID)
+    local knowledge = CleveRoids.ImmunityKnowledge
+    if not mobID or not knowledge then return false end
+
+    local facts = knowledge.GetFacts and knowledge.GetFacts(mobID) or {}
+    local hypotheses = knowledge.GetHypotheses and knowledge.GetHypotheses(mobID) or {}
+    if table.getn(facts) == 0 and table.getn(hypotheses) == 0 then
+        return false
+    end
+
+    list:AddMessage("|cff66ccffLEARNER STATE [Mob ID " .. tostring(mobID) .. "]|r")
+
+    local i
+    for i = 1, table.getn(facts) do
+        local fact = facts[i]
+        local label = TYPE_LABELS[fact.dimension] or tostring(fact.dimension or "Unknown")
+        local color
+        local stateText
+        if fact.dynamicSuspected then
+            color = "ffff8c00"
+            stateText = "vulnerable; temporary/conditional immunity suspected"
+        elseif fact.verdict == "immune" then
+            color = "ffff3333"
+            stateText = "confirmed permanent immunity"
+        else
+            color = "ff33ff55"
+            stateText = tostring(fact.verdict or "unknown")
+        end
+        list:AddMessage("|c" .. color .. label .. ": " .. stateText .. "|r")
+        list:AddMessage(
+            "|cff999999  " ..
+            FormatLearnerProvenance(fact.proofSource, fact.proofSpellID, fact.proofEvent) ..
+            "|r"
+        )
+    end
+
+    if table.getn(hypotheses) > 0 then
+        list:AddMessage("|cffffcc00UNRESOLVED HYPOTHESES|r")
+        for i = 1, table.getn(hypotheses) do
+            local hypothesis = hypotheses[i]
+            local candidates = {}
+            local j
+            for j = 1, table.getn(hypothesis.candidates or {}) do
+                local dimension = hypothesis.candidates[j]
+                table.insert(candidates, TYPE_LABELS[dimension] or tostring(dimension))
+            end
+            list:AddMessage(
+                "|cffffcc00#" .. tostring(hypothesis.hypothesisID or "?") ..
+                " candidates: " .. table.concat(candidates, ", ") .. "|r"
+            )
+            list:AddMessage(
+                "|cff999999  " ..
+                FormatLearnerProvenance(
+                    hypothesis.proofSource,
+                    hypothesis.proofSpellID,
+                    hypothesis.proofEvent
+                ) ..
+                "|r"
+            )
+        end
+    end
+
+    return true
+end
+
 local function RefreshTargetPanel()
     if not targetNameText then return end
 
@@ -660,6 +955,7 @@ local function RefreshTargetPanel()
         end
     end
 
+    AddLearnerDiagnostics(targetLiveList, snapshot.creatureEntry)
     AddLiveTargetEntries(targetLiveList, "LIVE CC", snapshot.liveCC)
     AddLiveTargetEntries(targetLiveList, "LIVE SPELL", snapshot.liveSpell)
 
@@ -1123,6 +1419,19 @@ local function CreateMainFrame()
     local close = CreateFrame("Button", NewWidgetName("Close"), frame, "UIPanelCloseButton")
     close:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -6, -6)
 
+    learningSCTToggle = CreateFrame("CheckButton", NewWidgetName("LearningSCT"), frame, "UICheckButtonTemplate")
+    learningSCTToggle:SetWidth(22)
+    learningSCTToggle:SetHeight(22)
+    learningSCTToggle:SetPoint("TOPLEFT", frame, "TOPLEFT", 18, -10)
+    learningSCTToggle:SetChecked(IsLearningSCTEnabled() and 1 or 0)
+    learningSCTToggle:SetScript("OnClick", function()
+        SetLearningSCTEnabled(learningSCTToggle:GetChecked() and true or false)
+    end)
+
+    local learningSCTLabel = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    learningSCTLabel:SetPoint("LEFT", learningSCTToggle, "RIGHT", 2, 0)
+    learningSCTLabel:SetText("Learning SCT")
+
     local ccTitle = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     ccTitle:SetPoint("TOPLEFT", frame, "TOPLEFT", 20, -48)
     ccTitle:SetText("CC Immunities")
@@ -1203,6 +1512,9 @@ local function CreateMainFrame()
     end)
 
     frame:SetScript("OnShow", function()
+        if learningSCTToggle then
+            learningSCTToggle:SetChecked(IsLearningSCTEnabled() and 1 or 0)
+        end
         RefreshAll()
     end)
     frame:SetScript("OnHide", function()
@@ -1230,6 +1542,14 @@ function CleveRoids.ToggleImmunityUI()
         mainFrame:Show()
         RefreshAll()
     end
+end
+
+local function HandleKnowledgeTransition(transition)
+    ShowLearningTransition(transition)
+end
+
+if CleveRoids.ImmunityKnowledge and CleveRoids.ImmunityKnowledge.RegisterTransitionListener then
+    CleveRoids.ImmunityKnowledge.RegisterTransitionListener(HandleKnowledgeTransition)
 end
 
 CreateMainFrame()

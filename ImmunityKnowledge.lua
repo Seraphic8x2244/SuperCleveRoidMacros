@@ -2,7 +2,7 @@ local _G = _G or getfenv(0)
 local CleveRoids = _G.CleveRoids or {}
 _G.CleveRoids = CleveRoids
 
--- Slice 6 production knowledge backend.
+-- Slice 7 production knowledge backend with centralized learning diagnostics.
 --
 -- This module consumes normalized observations and persists:
 --   * authoritative per-dimension vulnerability facts;
@@ -103,6 +103,8 @@ local diagnostics = {
     last = nil,
 }
 
+local transitionListeners = {}
+
 local function notifyKnowledgeChanged()
     if CleveRoids.NotifyImmunityDataChanged then
         CleveRoids.NotifyImmunityDataChanged()
@@ -156,6 +158,51 @@ end
 
 local function candidateSignature(list)
     return table.concat(sortedCopy(list), "|")
+end
+
+function Knowledge.RegisterTransitionListener(listener)
+    if type(listener) ~= "function" then return false end
+    local i
+    for i = 1, table.getn(transitionListeners) do
+        if transitionListeners[i] == listener then
+            return true
+        end
+    end
+    table.insert(transitionListeners, listener)
+    return true
+end
+
+function Knowledge.UnregisterTransitionListener(listener)
+    local i
+    for i = table.getn(transitionListeners), 1, -1 do
+        if transitionListeners[i] == listener then
+            table.remove(transitionListeners, i)
+        end
+    end
+end
+
+local function emitTransition(state, observation, dimensions, detail)
+    if table.getn(transitionListeners) == 0 then return end
+
+    local transition = {
+        state = state,
+        sequence = observation and observation.sequence or nil,
+        event = observation and observation.event or nil,
+        mobID = validMobID(observation and observation.targetMobID or nil),
+        targetName = observation and observation.targetName or nil,
+        spellID = validSpellID(observation and observation.spellID or nil),
+        dimensions = sortedCopy(dimensions or {}),
+        reason = detail and detail.reason or nil,
+        hypothesisID = detail and detail.hypothesisID or nil,
+        proofSource = detail and detail.proofSource or nil,
+        proofSpellID = detail and validSpellID(detail.proofSpellID) or nil,
+        proofEvent = detail and detail.proofEvent or nil,
+    }
+
+    local i
+    for i = 1, table.getn(transitionListeners) do
+        pcall(transitionListeners[i], transition)
+    end
 end
 
 local function quoteText(value, allowNil)
@@ -437,6 +484,39 @@ function Knowledge.GetFact(mobID, dimension)
         proofSpellID = tonumber(row.proof_spell_id),
         proofEvent = row.proof_event,
     }
+end
+
+-- Diagnostic read seam for the immunity screen. This exposes compact durable
+-- conclusions only; raw observations remain deliberately unpersisted.
+function Knowledge.GetFacts(mobID)
+    mobID = validMobID(mobID)
+    if not mobID or not storageReady() then return {} end
+
+    local mobSQL = quoteInteger(mobID, 1, false)
+    if not mobSQL then return {} end
+
+    local ok, rows = Storage.Query(
+        "SELECT dimension, verdict, dynamic_suspected, proof_source, " ..
+        "proof_spell_id, proof_event FROM facts WHERE mob_id = " .. mobSQL ..
+        " ORDER BY dimension"
+    )
+    if not ok then return {} end
+
+    local result = {}
+    local i
+    for i = 1, table.getn(rows) do
+        local row = rows[i]
+        table.insert(result, {
+            mobID = mobID,
+            dimension = row.dimension and tostring(row.dimension) or nil,
+            verdict = row.verdict and tostring(row.verdict) or nil,
+            dynamicSuspected = tonumber(row.dynamic_suspected) == 1,
+            proofSource = row.proof_source,
+            proofSpellID = tonumber(row.proof_spell_id),
+            proofEvent = row.proof_event,
+        })
+    end
+    return result
 end
 
 -- Production/UI read seam for confirmed permanent facts. Optional dimension
@@ -876,6 +956,28 @@ local function recordVulnerability(observation)
         end
     end
 
+    local eliminatedDimensions = {}
+    local eliminatedSet = {}
+    local revokedDimensions = {}
+    local hypothesisIndex, candidateIndex
+    for hypothesisIndex = 1, table.getn(hypotheses) do
+        local hypothesis = hypotheses[hypothesisIndex]
+        for candidateIndex = 1, table.getn(hypothesis.candidates or {}) do
+            local candidate = hypothesis.candidates[candidateIndex]
+            if successSet[candidate] and not revokedSet[candidate] then
+                eliminatedSet[candidate] = true
+            end
+        end
+    end
+    for candidate in pairs(eliminatedSet) do
+        table.insert(eliminatedDimensions, candidate)
+    end
+    for dimension in pairs(revokedSet) do
+        table.insert(revokedDimensions, dimension)
+    end
+    table.sort(eliminatedDimensions)
+    table.sort(revokedDimensions)
+
     local confirmations, deleteIDs, dynamicDiscardCount =
         planAfterAuthoritativeSuccess(hypotheses, facts, successSet, revokedSet)
 
@@ -983,6 +1085,30 @@ local function recordVulnerability(observation)
     diagnostics.hypothesesDiscardedDynamic =
         diagnostics.hypothesesDiscardedDynamic + dynamicDiscardCount
 
+    -- Learning SCT consumes only meaningful state transitions. A routine
+    -- vulnerability fact with no active candidate is intentionally silent.
+    if table.getn(eliminatedDimensions) > 0 then
+        emitTransition("disproved", observation, eliminatedDimensions, {
+            reason = "candidate_eliminated",
+        })
+    end
+    for i = 1, table.getn(confirmations) do
+        local confirmation = confirmations[i]
+        local proof = confirmation.hypothesis
+        emitTransition("confirmed", observation, { confirmation.dimension }, {
+            reason = "permanent_confirmed",
+            hypothesisID = proof and proof.hypothesisID or nil,
+            proofSource = proof and proof.proofSource or nil,
+            proofSpellID = proof and proof.proofSpellID or nil,
+            proofEvent = proof and proof.proofEvent or nil,
+        })
+    end
+    if table.getn(revokedDimensions) > 0 then
+        emitTransition("conditional", observation, revokedDimensions, {
+            reason = "confirmed_immunity_revoked",
+        })
+    end
+
     local detail = "vulnerable=" .. table.concat(sortedCopy(dimensions), ",")
     if revocationCount > 0 then
         detail = detail .. ";revoked=" .. tostring(revocationCount)
@@ -1088,6 +1214,12 @@ local function createHypothesis(observation)
         diagnostics.permanentConfirmations =
             diagnostics.permanentConfirmations + 1
         incrementLast("immune_confirmed", observation, remaining[1])
+        emitTransition("confirmed", observation, { remaining[1] }, {
+            reason = "permanent_confirmed",
+            proofSource = "ambiguous_" .. tostring(observation.failurePath or "unknown"),
+            proofSpellID = observation.spellID,
+            proofEvent = observation.event,
+        })
         return
     end
 
@@ -1138,8 +1270,15 @@ local function createHypothesis(observation)
         return
     end
 
+    notifyKnowledgeChanged()
     diagnostics.hypothesesCreated = diagnostics.hypothesesCreated + 1
     incrementLast("hypothesis_created", observation, signature)
+    emitTransition("candidate", observation, remaining, {
+        reason = "hypothesis_created",
+        proofSource = "ambiguous_" .. tostring(observation.failurePath or "unknown"),
+        proofSpellID = observation.spellID,
+        proofEvent = observation.event,
+    })
 end
 
 function Knowledge.ProcessObservation(observation)
