@@ -36,15 +36,16 @@ not a chronological development log.
 - Latest known-good runtime before this correction:
   `aa2b761d1c45d1a28c8354b2f13f216a21403569` — immunitydebug local-scope
   runtime fix; that build started with no Lua errors.
-- Current phase: bounded generalized-backend implementation is underway.
-  Slices 0-6 are complete: conservative static checkpoint, HearthDB/schema
-  foundation, normalized observations, transient/DR safety, durable
-  vulnerability/hypothesis persistence, permanent confirmation/revocation with
-  dynamic suspicion, and production cutover/query integration. Slice 7
-  learning-SCT/immunity-screen diagnostics have not started.
-- Do not runtime-test between implementation slices. The corrected conservative
-  learner plus the assembled generalized backend are validated together in
-  Slice 8.
+- Current phase: bounded generalized-backend implementation is complete through
+  Slice 7. Slices 0-7 now cover the conservative static checkpoint,
+  HearthDB/schema foundation, normalized observations, transient/DR safety,
+  durable vulnerability/hypothesis persistence, permanent
+  confirmation/revocation with dynamic suspicion, production cutover/query
+  integration, and learning-SCT/immunity-screen diagnostics. Slice 8 final
+  cross-core runtime validation/cleanup has not started.
+- No runtime testing was performed between implementation slices. The corrected
+  conservative learner plus the assembled generalized backend are validated
+  together in Slice 8.
 - The old direct `SPELL_MISS_SELF`, delayed bleed/non-bleed/CC/shared-debuff
   and text-only persistence paths remain only as pre-cutover compatibility code.
   When the generalized backend is active their permanent SavedVariables writes
@@ -60,8 +61,8 @@ not a chronological development log.
   valid permanent candidate remains, revokes that exact fact on authoritative
   success, and preserves a disproved confirmed immunity with the independent
   dynamic/conditional-suspicion flag. Production immunity queries now consume
-  those Mob-ID-keyed facts. Broad-immunity promotion and Slice 7 UI/SCT
-  diagnostics remain deferred.
+  those Mob-ID-keyed facts. Slice 7 exposes those learner transitions and their
+  compact provenance for validation. Broad-immunity promotion remains deferred.
 
 ## Branch-specific immunity model
 
@@ -1627,24 +1628,75 @@ cross-core compatibility remain deferred until Slice 8.
 Stop condition: Slice 6 complete; proceed to Slice 7 in a fresh development
 chat.
 
-### Slice 7 — learning SCT / immunity-screen diagnostics
+### Slice 7 — learning SCT / immunity-screen diagnostics — COMPLETE
 
 Purpose: expose the learner's state transitions for runtime validation.
 
-Scope:
+Implemented at code checkpoint
+`4d12a0eafa4932df4afb5967a2ac81ca5fc4c277`:
 
-- add the learning-SCT toggle to `/cleveroid immunities`;
-- show relevant spell/mechanic icons with border states:
-  yellow candidate, green disproved/vulnerable, red confirmed permanent,
-  orange temporary/conditional suspected;
-- do not render the design shorthand letters x/y/z;
-- avoid routine standalone vulnerability spam;
-- expose enough Mob-ID/fact/hypothesis provenance in the immunity screen to
-  diagnose incorrect transitions.
+- `ImmunityKnowledge` now owns a centralized transition-listener seam. UI/SCT
+  presentation consumes committed learner state changes instead of re-deriving
+  inference independently;
+- a new `/cleveroid immunities` **Learning SCT** toggle persists through
+  `CleveRoidMacros.learningImmunitySCT` and is disabled by default when no
+  setting exists;
+- the compact custom learning-SCT surface uses relevant dimension
+  spell/mechanic icons with the designed states: yellow unresolved candidate,
+  green positively disproved candidate, red confirmed permanent immunity, and
+  orange temporary/conditional suspicion after a confirmed immunity is
+  authoritatively revoked;
+- yellow is emitted only when a durable unresolved hypothesis is created.
+  Green is emitted only when authoritative success removes a dimension that was
+  actually present in an unresolved hypothesis. Routine standalone
+  vulnerability recording and the already-known-vulnerable fast path do not
+  emit green SCT;
+- red is emitted only after the permanent fact transaction succeeds, both for a
+  directly unique remaining candidate and for comparative confirmation after
+  later candidate elimination;
+- orange is emitted only when authoritative success revokes a previously
+  confirmed permanent immunity and therefore establishes the independent
+  dynamic/temporary/conditional-suspicion state;
+- the design-only x/y/z shorthand is not present in runtime output;
+- the current-target immunity screen now exposes the Mob ID, every durable fact
+  verdict, dynamic-suspicion state, proof source/spell/event provenance, and
+  every unresolved hypothesis ID/candidate set with its proof
+  source/spell/event. These are read-only diagnostic views over HearthDB;
+- creating a new durable hypothesis now triggers the existing event-driven
+  immunity-screen refresh so an open screen reflects candidate state
+  immediately;
+- no schema change, raw combat-history persistence, broad-immunity promotion or
+  second inference path was introduced.
 
-Stop condition: the learning-SCT/immunity-screen surfaces are wired to
-centralized learner state transitions and statically reviewable. Visual/runtime
-validation is deferred to the final validation slice.
+Static review completed:
+
+- branch state matched supplied handoff
+  `8f72ed5045ed2abf31ecbdc38397aaf82ad15d0c` before implementation, whose
+  parent code checkpoint is
+  `419a31b58de9ee4e60c7b2ac95bcf79f49687351`;
+- the Slice 7 code checkpoint changes only `ImmunityKnowledge.lua` and
+  `ImmunityUI.lua`;
+- comment/string-stripped Lua block deltas plus parenthesis/brace deltas balance
+  against the supplied handoff state for both changed files;
+- post-commit scans confirm all four transition states are wired from the
+  centralized reducer, broad `spell` / `cc` / `all` remain absent from
+  `CANDIDATE_DIMENSIONS`, the known-vulnerable fast path emits no learning
+  SCT, and no x/y/z shorthand is present in runtime code;
+- transition emission is downstream of successful durable mutations: failed
+  storage operations do not create UI/SCT state that the database did not
+  commit;
+- the repository provides no lint/test workflow beyond release packaging, so
+  no automated repository test suite was available for this slice;
+- `dev_rulebook.md` and `DEV_PROGRESS.md` are absent from both this branch
+  and `main`; the existing rework document therefore remains the available
+  branch-specific handoff source for this work.
+
+No runtime testing was performed. Visual SCT layout, live transition behavior,
+persistence/reload behavior and cross-core compatibility remain deferred to
+Slice 8.
+
+Stop condition: Slice 7 complete; proceed to Slice 8 in a fresh development
+chat.
 
 ### Slice 8 — cross-core runtime matrix and cleanup
 
@@ -1669,12 +1721,12 @@ core differences isolated to normalized observation adapters.
 
 ## Exact next step
 
-Slices 0, 1, 2, 3, 4, 5 and 6 are complete. Start a fresh development chat for
-**Slice 7 only**: learning SCT / immunity-screen diagnostics.
+Slices 0, 1, 2, 3, 4, 5, 6 and 7 are complete. Start a fresh development chat
+for **Slice 8 only**: cross-core runtime matrix and cleanup.
 
-Do not runtime-test between implementation slices. Continue through the bounded
-implementation sequence with static review/document/commit handoffs, then run
-the combined conservative + generalized runtime validation in Slice 8.
+Run the deferred conservative + generalized runtime validation now that all
+bounded implementation slices are assembled. Keep broad-immunity promotion and
+unrelated feature work outside Slice 8.
 
 The generalized learner's permanent-inference invariant remains:
 
