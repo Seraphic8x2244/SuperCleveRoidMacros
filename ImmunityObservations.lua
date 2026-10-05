@@ -296,8 +296,8 @@ CORE_ADAPTERS.portable = {
     end,
 }
 
--- vMaNGOS-specific descriptions belong here, not in the evidence reducer.
--- They are diagnostic semantics only in Slice 2.
+-- Core-specific miss semantics belong here, not in the common evidence reducer.
+-- Slice 4 consumes only the normalized failurePath and never branches on core name.
 CORE_ADAPTERS.vmangos = {
     interpretImmune = function(variant)
         if variant == "immune2" then
