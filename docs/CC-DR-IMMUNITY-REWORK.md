@@ -37,10 +37,10 @@ not a chronological development log.
   `aa2b761d1c45d1a28c8354b2f13f216a21403569` — immunitydebug local-scope
   runtime fix; that build started with no Lua errors.
 - Current phase: bounded generalized-backend implementation is underway.
-  Slices 0-4 are complete: conservative static checkpoint, HearthDB/schema
-  foundation, normalized observations, transient/DR safety, and durable
-  vulnerability/hypothesis persistence. Permanent immunity confirmation,
-  revocation and dynamic-suspicion handling have not started.
+  Slices 0-5 are complete: conservative static checkpoint, HearthDB/schema
+  foundation, normalized observations, transient/DR safety, durable
+  vulnerability/hypothesis persistence, and permanent confirmation/revocation
+  with dynamic suspicion. Production cutover/query integration has not started.
 - Do not runtime-test between implementation slices. The corrected conservative
   learner plus the assembled generalized backend are validated together in
   Slice 8.
@@ -55,9 +55,12 @@ not a chronological development log.
   vMaNGOS semantics are proven below. Turtle/Octo `IMMUNE`/`IMMUNE2`
   semantics remain an explicit compatibility assumption to verify; the
   vMaNGOS-specific positive inference is kept local to the direct miss learner.
-- Generalized durable learning now records authoritative vulnerability facts and
-  unresolved hypotheses in HearthDB. It does not yet confirm or revoke permanent
-  immunity facts; those state transitions remain Slice 5.
+- Generalized durable learning now records vulnerability facts and unresolved
+  hypotheses in HearthDB, confirms an exact permanent immunity only after one
+  valid permanent candidate remains, revokes that exact fact on authoritative
+  success, and preserves a disproved confirmed immunity with the independent
+  dynamic/conditional-suspicion flag. Broad-immunity promotion and production
+  query cutover remain deferred.
 
 ## Branch-specific immunity model
 
@@ -1493,25 +1496,67 @@ cross-core behavior remain deferred until Slice 8.
 Stop condition: Slice 4 complete; proceed to Slice 5 in a fresh development
 chat.
 
-### Slice 5 — permanent confirmation, revocation and dynamic suspicion
+### Slice 5 — permanent confirmation, revocation and dynamic suspicion — COMPLETE
 
 Purpose: complete the evidence reducer.
 
-Scope:
+Implemented at code checkpoint
+`9253437f2b32d87f9addef9b6323fa0d8a03ce10`:
 
-- confirm a permanent immunity only when one valid permanent candidate remains
-  and transient explanations are excluded;
-- authoritative success immediately revokes permanent immunity for that exact
-  dimension and records vulnerability;
-- if the revoked immunity had previously been credibly confirmed, also set the
-  independent temporary/conditional-immunity-suspected flag;
-- ambiguous candidates that are merely eliminated do not create the orange
-  dynamic flag;
-- persist compact conclusion provenance, not raw combat history.
+- an ambiguous immunity observation now writes a permanent `immune` fact only
+  when transient/live explanations have been excluded and exactly one valid
+  permanent candidate remains after known vulnerability is removed;
+- hypotheses persisted by Slice 4 are trusted only because persistence already
+  required transient explanations to be absent. When later authoritative
+  success eliminates candidates, a hypothesis that reaches one remaining valid
+  permanent dimension is confirmed in the same deterministic transition;
+- authoritative success always wins for its exact proven dimension. It records
+  `vulnerable`; if the previous durable verdict was `immune`, the same
+  transaction revokes it and sets `dynamic_suspected = 1`;
+- ordinary candidate elimination never sets the dynamic flag. A newly inserted
+  or already-vulnerable fact remains `dynamic_suspected = 0` unless a
+  credibly confirmed `immune` fact was actually revoked;
+- dynamic suspicion is itself treated as a credible conditional/non-permanent
+  explanation for later ambiguous immunity. New hypotheses involving that
+  dimension are blocked, and an existing hypothesis containing a dimension
+  that has just been revoked to dynamic vulnerability is discarded whole
+  rather than narrowed into a false permanent confirmation;
+- a candidate that is already confirmed immune resolves a later ambiguous
+  observation without creating another hypothesis about its other dimensions;
+- when confirmation proves a dimension, unresolved hypotheses already explained
+  by that confirmed dimension are removed. If more than one ready hypothesis
+  proves the same dimension, the earliest persisted hypothesis supplies the
+  compact proof source/spell/event provenance;
+- conclusion storage remains one fact row plus compact proof provenance and the
+  unresolved linked hypotheses that still matter. No raw combat history is
+  added;
+- no broad-immunity promotion, production query/macro cutover, legacy
+  SavedVariables write, UI/SCT behavior or runtime test was added.
 
-Stop condition: red/green/orange transition logic and persistence are complete
-and statically deterministic. Runtime reload/persistence verification is
-deferred to the final validation slice.
+Static review completed:
+
+- branch state matched supplied handoff
+  `49ce7a7fa581a724e1050c4dbc9a7e30b4e6ad1e` before implementation;
+- the code checkpoint changes only `ImmunityKnowledge.lua`;
+- delimiter and Lua block-balance checks pass for the modified reducer;
+- the transition matrix was checked for ordinary candidate elimination to one
+  confirmed candidate, exact confirmed-immunity revocation, dynamic-suspicion
+  blocking/discard behavior, known-immune resolution, and multiple independent
+  hypotheses narrowed by one authoritative success;
+- SQL transition checks cover absent, ordinary-vulnerable,
+  dynamic-vulnerable and confirmed-immune starting facts. Only a prior
+  `immune` verdict causes authoritative success to set the dynamic flag, while
+  an existing dynamic flag is preserved across later successes;
+- scope scans confirm no `OnUpdate` polling, no legacy
+  `CleveRoids_ImmunityData` / `RecordImmunity` writes, no UI/SCT execution,
+  and no `spell`/`cc`/`all` candidate promotion;
+- branch HEAD at static-review completion is the code checkpoint above.
+
+No runtime testing was performed. Reload/persistence and cross-core behavior
+remain deferred until Slice 8.
+
+Stop condition: Slice 5 complete; proceed to Slice 6 in a fresh development
+chat.
 
 ### Slice 6 — production cutover and query integration
 
@@ -1572,8 +1617,8 @@ core differences isolated to normalized observation adapters.
 
 ## Exact next step
 
-Slices 0, 1, 2, 3 and 4 are complete. Start a fresh development chat for
-**Slice 5 only**: permanent confirmation, revocation and dynamic suspicion.
+Slices 0, 1, 2, 3, 4 and 5 are complete. Start a fresh development chat for
+**Slice 6 only**: production cutover and query integration.
 
 Do not runtime-test between implementation slices. Continue through the bounded
 implementation sequence with static review/document/commit handoffs, then run
