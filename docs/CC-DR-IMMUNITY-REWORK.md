@@ -37,15 +37,16 @@ not a chronological development log.
   `aa2b761d1c45d1a28c8354b2f13f216a21403569` — immunitydebug local-scope
   runtime fix; that build started with no Lua errors.
 - Current phase: bounded generalized-backend implementation is complete through
-  Slice 7. Slices 0-7 now cover the conservative static checkpoint,
-  HearthDB/schema foundation, normalized observations, transient/DR safety,
-  durable vulnerability/hypothesis persistence, permanent
-  confirmation/revocation with dynamic suspicion, production cutover/query
-  integration, and learning-SCT/immunity-screen diagnostics. Slice 8 final
-  cross-core runtime validation/cleanup has not started.
-- No runtime testing was performed between implementation slices. The corrected
-  conservative learner plus the assembled generalized backend are validated
-  together in Slice 8.
+  Slice 7. Slice 8 source/static cross-core validation plus the production
+  adapter activation cleanup is complete at
+  `e8634814e321a9bff23529875c2504e1fc2ac80e`. The required live runtime
+  matrix has not been executed because this development environment does not
+  expose a WoW 1.12.1 client/server runtime, so Slice 8 remains runtime-pending
+  rather than being claimed complete.
+- No runtime testing was performed between implementation slices. Slice 8 has
+  now completed repository/source-level validation, but live vMaNGOS and
+  Turtle/Octo combat-event replay, visual SCT behavior, and real HearthDB
+  reload/persistence still require an actual game runtime.
 - The old direct `SPELL_MISS_SELF`, delayed bleed/non-bleed/CC/shared-debuff
   and text-only persistence paths remain only as pre-cutover compatibility code.
   When the generalized backend is active their permanent SavedVariables writes
@@ -53,9 +54,13 @@ not a chronological development log.
 - Blessing of Protection remains typed temporary `physical` immunity.
   Blessing of Freedom is now typed temporary `root` + `snare` immunity.
 - Portability target remains one learner for **vMaNGOS and Turtle/Octo**.
-  vMaNGOS semantics are proven below. Turtle/Octo `IMMUNE`/`IMMUNE2`
-  semantics remain an explicit compatibility assumption to verify; the
-  vMaNGOS-specific positive inference is kept local to the direct miss learner.
+  vMaNGOS and the inspected public Turtle-family server source agree on the
+  relevant Vanilla 1.12 split: whole-spell immunity is `IMMUNE`, while a
+  target whose final effect mask is empty becomes `IMMUNE2`. Slice 8 now
+  selects the normalized `vmangos` or `octowow` adapter at production
+  startup instead of leaving the generalized learner on the non-inferential
+  `portable` development default. Live Turtle/Octo packet/runtime replay is
+  still required before cross-core runtime compatibility can be marked PASS.
 - Generalized durable learning now records vulnerability facts and unresolved
   hypotheses in HearthDB, confirms an exact permanent immunity only after one
   valid permanent candidate remains, revokes that exact fact on authoritative
@@ -1698,35 +1703,95 @@ Slice 8.
 Stop condition: Slice 7 complete; proceed to Slice 8 in a fresh development
 chat.
 
-### Slice 8 — cross-core runtime matrix and cleanup
+### Slice 8 — cross-core runtime matrix and cleanup — RUNTIME PENDING
 
 Purpose: validate the completed pipeline on the intended ecosystems after all
-implementation slices are assembled.
+implementation slices are assembled, then remove only cleanup justified by that
+validation.
 
-Scope:
+Source/static validation completed from handoff
+`e599ae47bd7cd7968f7ed66aa3b9b7bb26ce50ea`:
 
-- first run the deferred conservative-learner regression matrix covering HoJ,
-  player-target rejection, `IMMUNE2`, TempCC, temporary protection/reflection,
-  NPC DR, death and split-CC safeguards;
-- then run the vMaNGOS 1.12.1 full comparative runtime matrix;
-- OctoWoW/Turtle-family verification of raw `IMMUNE`/`IMMUNE2` semantics and
-  normalized adapters;
-- stress repeated encounters/reloads and DB persistence;
-- validate other-caster evidence and uncertain-DR behavior;
-- remove temporary development gates/diagnostics that are no longer needed;
-- finalize documentation and release handoff.
+- the supplied handoff was exactly the branch tip before Slice 8 work; its parent
+  code checkpoint remains Slice 7
+  `4d12a0eafa4932df4afb5967a2ac81ca5fc4c277`;
+- `dev_rulebook.md` and `DEV_PROGRESS.md` remain absent from both this branch
+  and `main`; no replacement contents were invented;
+- the conservative safeguards remain present for player-target rejection,
+  `IMMUNE2`, TempCC, temporary protection/reflection, NPC DR, recent death,
+  queryable-target identity and split-CC handling, while generalized cutover
+  continues to suppress legacy learned-SavedVariables writes;
+- SELF/OTHER miss and damage plus SELF/OTHER authoritative aura-presence events
+  still enter the one normalized observation pipeline. Other-caster stun
+  evidence that cannot prove controlled-vs-triggered DR still creates a
+  target-level `dr_category_uncertain` blocker for the 20-second reset window
+  instead of guessing a DR bucket;
+- a valid HearthDB v1 schema is reopened and validated without reset, durable
+  facts/hypotheses are read from the same database, and
+  `PLAYER_ENTERING_WORLD` clears only live transient context. This statically
+  preserves the intended durable-vs-transient reload boundary;
+- current vMaNGOS server source confirms the adapter model already documented:
+  per-effect immunity removes effect-mask bits, whole-spell immunity reports
+  `IMMUNE`, and a final empty effect mask reports `IMMUNE2`;
+- inspected public Turtle-family server source has the same relevant
+  `IMMUNE`/`IMMUNE2` split. Nampower's documented
+  `SPELL_MISS_SELF`/`SPELL_MISS_OTHER` interface forwards the raw numeric
+  miss variants, so no second inference engine is required for the two target
+  families;
+- validation exposed one activation defect: the assembled generalized backend
+  still defaulted to the deliberately non-inferential `portable` adapter and
+  nothing selected a production adapter. That meant durable ambiguous-IMMUNE
+  inference could never start on a normal load even on verified vMaNGOS;
+- cleanup commit `e8634814e321a9bff23529875c2504e1fc2ac80e` fixes only that
+  defect. Normal startup now selects `octowow` when the existing Turtle-family
+  environment flag is present and `vmangos` otherwise; both adapters feed the
+  same reducer. `portable` remains available only as an explicit conservative
+  diagnostic/test override;
+- post-change scans confirm the portable development default and
+  `raw_immune*_unverified` Octo paths are gone from production startup, while
+  broad `spell`, `cc` and `all` remain absent from
+  `CANDIDATE_DIMENSIONS`. No broad-immunity promotion or unrelated feature
+  work was introduced.
 
-Stop condition: both target environments use the same inference engine with any
-core differences isolated to normalized observation adapters.
+The required **live runtime matrix was not executable in this development
+environment**. There is no attached WoW 1.12.1 client/server process, no live
+vMaNGOS/Turtle/Octo combat stream, and no live HearthDB plugin instance here.
+Source inspection and static control-flow review are not substitutes for those
+runtime observations, so the following items are deliberately **not marked
+PASS**:
+
+- vMaNGOS 1.12.1 conservative replay: Blackwing Spellbinder HoJ, player targets
+  under Blessing of Freedom/Protection, direct `IMMUNE2`, Sartura TempCC,
+  temporary protection/reflection, NPC DR, recent death and split-CC cases;
+- generalized vMaNGOS comparative inference: candidate creation/elimination,
+  permanent confirmation, authoritative revocation/dynamic suspicion, known-fact
+  fast paths and Learning SCT/UI transitions;
+- other-caster live miss/damage/aura evidence plus the uncertain-DR reset case;
+- repeated encounters and `/reload` proving facts/hypotheses persist while
+  transient DR/death/aura state resets and no legacy learned write reappears;
+- Turtle/Octo live raw `IMMUNE`/`IMMUNE2` replay confirming that the selected
+  adapter receives the same semantics observed in the inspected family source.
+
+No additional cleanup is justified before those live results. In particular,
+Learning SCT/provenance diagnostics remain useful for the pending matrix, and
+broad-immunity promotion remains explicitly out of scope.
+
+Stop condition is therefore **not yet satisfied**: source-level compatibility
+and a single shared inference engine are established, but both target
+environments still need the documented live runtime matrix before Slice 8 can be
+closed.
 
 ## Exact next step
 
-Slices 0, 1, 2, 3, 4, 5, 6 and 7 are complete. Start a fresh development chat
-for **Slice 8 only**: cross-core runtime matrix and cleanup.
+Resume **Slice 8 runtime validation only** from code checkpoint
+`e8634814e321a9bff23529875c2504e1fc2ac80e` in an environment with the actual
+Vanilla clients/servers and HearthDB available.
 
-Run the deferred conservative + generalized runtime validation now that all
-bounded implementation slices are assembled. Keep broad-immunity promotion and
-unrelated feature work outside Slice 8.
+Run the pending live matrix above first. If a runtime case fails, make only the
+smallest cleanup/correction justified by that failure and rerun the affected
+case. If the matrix passes, update this document to mark Slice 8 complete and
+make the final docs-only handoff commit. Do not start broad-immunity promotion
+or unrelated work.
 
 The generalized learner's permanent-inference invariant remains:
 
