@@ -307,6 +307,21 @@ local function hypothesisCandidates(observation)
             return result
         end
 
+        -- An unrecognized spell-level mechanic or Dispel family is still a real
+        -- whole-spell alternative even though Slice 4 has no durable dimension
+        -- for it. Abstain instead of silently dropping that cause.
+        if profile.spellMechanic and profile.spellMechanic > 0
+            and not profile.spellMechanicDimension then
+            return result
+        end
+        if profile.dispelType and profile.dispelType > 0
+            and not profile.dispelDimension then
+            return result
+        end
+        if not profile.school or not CANDIDATE_DIMENSIONS[profile.school] then
+            return result
+        end
+
         -- vMaNGOS generic IMMUNE: only whole-spell causes belong here. Per-effect
         -- mechanics are intentionally excluded because those failures are silent.
         addDimension(result, seen, profile.school)
