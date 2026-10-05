@@ -74,6 +74,7 @@ local MECHANIC_TO_DIMENSION = {
     [12] = "stun",
     [13] = "freeze",
     [14] = "knockout",
+    [15] = "bleed",
     [17] = "polymorph",
     [18] = "banish",
     [20] = "shackle",
@@ -94,6 +95,16 @@ local AURA_NAME_TO_DIMENSION = {
     [27] = "silence",
     [31] = "charm",
     [33] = "snare",
+}
+
+-- Dispel-family immunity is independent from spell school. "dispel_magic" is
+-- an internal learning dimension; it is intentionally not the broad "spell"
+-- immunity dimension used by production queries.
+local DISPEL_TO_DIMENSION = {
+    [1] = "dispel_magic",
+    [2] = "curse",
+    [3] = "disease",
+    [4] = "poison",
 }
 
 local spellCache = {}
@@ -208,7 +219,9 @@ function Pipeline.GetSpellProfile(spellID)
         school = schoolName,
         spellMechanic = spellMechanic or 0,
         spellMechanicName = spellMechanicName,
+        spellMechanicDimension = nil,
         dispelType = dispelType or 0,
+        dispelDimension = DISPEL_TO_DIMENSION[dispelType],
         effects = {},
         auraTypes = {},
         mechanicDimensions = {},
@@ -220,6 +233,7 @@ function Pipeline.GetSpellProfile(spellID)
     local explicitMechanicDimension = false
 
     local spellDimension = spellMechanic and MECHANIC_TO_DIMENSION[spellMechanic] or nil
+    profile.spellMechanicDimension = spellDimension
     if spellDimension then
         addUnique(profile.mechanicDimensions, dimensionSeen, spellDimension)
         explicitMechanicDimension = true
@@ -238,19 +252,24 @@ function Pipeline.GetSpellProfile(spellID)
         end
 
         local dimension = effectMechanic and MECHANIC_TO_DIMENSION[effectMechanic] or nil
+        if effect then
+            effect.mechanicDimension = dimension
+        end
         if dimension then
             addUnique(profile.mechanicDimensions, dimensionSeen, dimension)
             explicitMechanicDimension = true
         end
     end
 
-    if not explicitMechanicDimension then
-        for i = 1, 3 do
-            local effect = profile.effects[i]
-            local dimension = effect and AURA_NAME_TO_DIMENSION[effect.auraName] or nil
-            if dimension then
-                addUnique(profile.mechanicDimensions, dimensionSeen, dimension)
-            end
+    -- Preserve the existing combined-profile fallback rule while also exposing
+    -- a per-effect dimension for the Slice 4 failure-path reducer.
+    for i = 1, 3 do
+        local effect = profile.effects[i]
+        if effect and not effect.mechanicDimension then
+            effect.mechanicDimension = AURA_NAME_TO_DIMENSION[effect.auraName]
+        end
+        if not explicitMechanicDimension and effect and effect.mechanicDimension then
+            addUnique(profile.mechanicDimensions, dimensionSeen, effect.mechanicDimension)
         end
     end
 
@@ -266,9 +285,9 @@ local CORE_ADAPTERS = {}
 CORE_ADAPTERS.portable = {
     interpretImmune = function(variant)
         if variant == "immune2" then
-            return "raw_immune2"
+            return "raw_immune2", nil
         end
-        return "raw_immune"
+        return "raw_immune", nil
     end,
 }
 
@@ -277,9 +296,9 @@ CORE_ADAPTERS.portable = {
 CORE_ADAPTERS.vmangos = {
     interpretImmune = function(variant)
         if variant == "immune2" then
-            return "effect_mask_zero"
+            return "effect_mask_zero", "effect_mask_zero"
         end
-        return "generic_whole_spell_immune"
+        return "generic_whole_spell_immune", "whole_spell"
     end,
 }
 
@@ -289,9 +308,9 @@ CORE_ADAPTERS.vmangos = {
 CORE_ADAPTERS.octowow = {
     interpretImmune = function(variant)
         if variant == "immune2" then
-            return "raw_immune2_unverified"
+            return "raw_immune2_unverified", nil
         end
-        return "raw_immune_unverified"
+        return "raw_immune_unverified", nil
     end,
 }
 
@@ -316,6 +335,7 @@ local function interpretMiss(missInfo)
         authoritative = false,
         immuneVariant = nil,
         coreMeaning = nil,
+        failurePath = nil,
     }
 
     if missInfo == MISS_INFO.IMMUNE or missInfo == MISS_INFO.IMMUNE2 then
@@ -324,7 +344,7 @@ local function interpretMiss(missInfo)
         result.outcome = "immune"
         result.evidence = Pipeline.EVIDENCE.AMBIGUOUS_IMMUNE
         result.immuneVariant = variant
-        result.coreMeaning = adapter.interpretImmune(variant)
+        result.coreMeaning, result.failurePath = adapter.interpretImmune(variant)
     end
 
     return result
@@ -446,6 +466,7 @@ local function normalizeMiss(eventName, casterGUID, targetGUID, spellID, missInf
     observation.authoritative = interpretation.authoritative
     observation.immuneVariant = interpretation.immuneVariant
     observation.coreMeaning = interpretation.coreMeaning
+    observation.failurePath = interpretation.failurePath
     resolveTarget(observation, targetGUID)
     return emit(observation)
 end
