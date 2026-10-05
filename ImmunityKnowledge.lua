@@ -2,14 +2,16 @@ local _G = _G or getfenv(0)
 local CleveRoids = _G.CleveRoids or {}
 _G.CleveRoids = CleveRoids
 
--- Slice 4 durable knowledge reducer.
+-- Slice 5 durable knowledge reducer.
 --
--- This module consumes normalized observations and persists only:
---   * authoritative per-dimension vulnerability facts; and
---   * unresolved ambiguous immunity hypotheses with linked candidates.
+-- This module consumes normalized observations and persists:
+--   * authoritative per-dimension vulnerability facts;
+--   * unresolved ambiguous immunity hypotheses with linked candidates;
+--   * confirmed permanent immunity when exactly one valid permanent cause remains;
+--   * revocation of a confirmed permanent fact on authoritative success; and
+--   * an independent dynamic/conditional-immunity suspicion flag after revocation.
 --
--- Permanent immunity confirmation/revocation, dynamic suspicion, production
--- query cutover and UI/SCT are deliberately deferred to later slices.
+-- Broad-immunity promotion, production query cutover and UI/SCT remain deferred.
 local Pipeline = CleveRoids.ImmunityObservations
 local Storage = CleveRoids.ImmunityStorage
 local Transient = CleveRoids.ImmunityTransient
@@ -81,7 +83,12 @@ local diagnostics = {
     missingIdentity = 0,
     storageUnavailable = 0,
     storageErrors = 0,
-    deferredImmuneContradictions = 0,
+    permanentConfirmations = 0,
+    permanentRevocations = 0,
+    dynamicSuspicionsSet = 0,
+    hypothesesBlockedDynamic = 0,
+    hypothesesResolvedKnownImmune = 0,
+    hypothesesDiscardedDynamic = 0,
     last = nil,
 }
 
@@ -490,6 +497,233 @@ function Knowledge.GetDimensionState(mobID, dimension)
     return "unknown"
 end
 
+
+local function factVerdict(fact)
+    if not fact or fact.verdict == nil then return nil end
+    return tostring(fact.verdict)
+end
+
+local function factDynamicSuspected(fact)
+    return fact and tonumber(fact.dynamic_suspected) == 1
+end
+
+local function listSet(list)
+    local result = {}
+    local i
+    for i = 1, table.getn(list or {}) do
+        result[list[i]] = true
+    end
+    return result
+end
+
+local function sortedIntegerList(set)
+    local result = {}
+    for value, present in pairs(set or {}) do
+        local number = tonumber(value)
+        if present and number and number > 0 and number == math.floor(number) then
+            table.insert(result, number)
+        end
+    end
+    table.sort(result)
+    return result
+end
+
+local function sqlIntegerList(values)
+    local result = {}
+    local i
+    for i = 1, table.getn(values or {}) do
+        local value = quoteInteger(values[i], 1, false)
+        if value then table.insert(result, value) end
+    end
+    if table.getn(result) == 0 then return nil end
+    return table.concat(result, ",")
+end
+
+local function firstDynamicCandidate(facts, candidates)
+    local i
+    for i = 1, table.getn(candidates or {}) do
+        local dimension = candidates[i]
+        if factDynamicSuspected(facts[dimension]) then
+            return dimension
+        end
+    end
+    return nil
+end
+
+local function firstImmuneCandidate(facts, candidates)
+    local i
+    for i = 1, table.getn(candidates or {}) do
+        local dimension = candidates[i]
+        if factVerdict(facts[dimension]) == "immune" then
+            return dimension
+        end
+    end
+    return nil
+end
+
+local function hypothesisIDsContaining(hypotheses, dimension)
+    local ids = {}
+    local i, j
+    for i = 1, table.getn(hypotheses or {}) do
+        local hypothesis = hypotheses[i]
+        for j = 1, table.getn(hypothesis.candidates or {}) do
+            if hypothesis.candidates[j] == dimension then
+                ids[hypothesis.hypothesisID] = true
+                break
+            end
+        end
+    end
+    return sortedIntegerList(ids)
+end
+
+local function appendHypothesisDeletes(statements, ids)
+    local idSQL = sqlIntegerList(ids)
+    if not idSQL then return end
+    table.insert(statements,
+        "DELETE FROM hypothesis_candidates WHERE hypothesis_id IN (" ..
+        idSQL .. ");")
+    table.insert(statements,
+        "DELETE FROM hypotheses WHERE hypothesis_id IN (" .. idSQL .. ");")
+end
+
+local function hypothesisProofSQL(hypothesis)
+    local sourceSQL = quoteText(hypothesis and hypothesis.proofSource or nil, true)
+    local spellSQL = quoteInteger(
+        validSpellID(hypothesis and hypothesis.proofSpellID or nil),
+        1,
+        true
+    )
+    local eventSQL = quoteText(hypothesis and hypothesis.proofEvent or nil, true)
+    return sourceSQL, spellSQL, eventSQL
+end
+
+local function appendImmuneFact(statements, mobSQL, dimension, hypothesis)
+    local dimensionSQL = quoteText(dimension, false)
+    local sourceSQL, spellSQL, eventSQL = hypothesisProofSQL(hypothesis)
+    if not dimensionSQL or not sourceSQL or not spellSQL or not eventSQL then
+        return false
+    end
+
+    table.insert(statements,
+        "INSERT OR IGNORE INTO facts " ..
+        "(mob_id, dimension, verdict, dynamic_suspected, proof_source, proof_spell_id, proof_event) " ..
+        "VALUES (" .. mobSQL .. ", " .. dimensionSQL ..
+        ", 'immune', 0, " .. sourceSQL .. ", " .. spellSQL .. ", " ..
+        eventSQL .. ");")
+    return true
+end
+
+local function planAfterAuthoritativeSuccess(hypotheses, facts, successSet, revokedSet)
+    local survivors = {}
+    local deleteIDs = {}
+    local confirmations = {}
+    local confirmationByDimension = {}
+    local dynamicDiscardCount = 0
+    local i, j
+
+    for i = 1, table.getn(hypotheses or {}) do
+        local hypothesis = hypotheses[i]
+        local remaining = {}
+        local blockedDynamic = false
+        local explainedKnownImmune = false
+
+        for j = 1, table.getn(hypothesis.candidates or {}) do
+            local dimension = hypothesis.candidates[j]
+            local fact = facts[dimension]
+
+            if revokedSet[dimension] or factDynamicSuspected(fact) then
+                blockedDynamic = true
+            elseif factVerdict(fact) == "immune" and not successSet[dimension] then
+                explainedKnownImmune = true
+            elseif not successSet[dimension] and factVerdict(fact) ~= "vulnerable" then
+                table.insert(remaining, dimension)
+            end
+        end
+
+        if blockedDynamic then
+            if not deleteIDs[hypothesis.hypothesisID] then
+                dynamicDiscardCount = dynamicDiscardCount + 1
+            end
+            deleteIDs[hypothesis.hypothesisID] = true
+        elseif explainedKnownImmune or table.getn(remaining) == 0 then
+            deleteIDs[hypothesis.hypothesisID] = true
+        else
+            survivors[hypothesis.hypothesisID] = {
+                hypothesis = hypothesis,
+                remaining = remaining,
+            }
+        end
+    end
+
+    for i = 1, table.getn(hypotheses or {}) do
+        local hypothesis = hypotheses[i]
+        local survivor = survivors[hypothesis.hypothesisID]
+        if survivor and table.getn(survivor.remaining) == 1 then
+            local dimension = survivor.remaining[1]
+            if not confirmationByDimension[dimension] then
+                confirmationByDimension[dimension] = hypothesis
+                table.insert(confirmations, {
+                    dimension = dimension,
+                    hypothesis = hypothesis,
+                })
+            end
+        end
+    end
+
+    for id, survivor in pairs(survivors) do
+        for j = 1, table.getn(survivor.remaining) do
+            if confirmationByDimension[survivor.remaining[j]] then
+                deleteIDs[id] = true
+                break
+            end
+        end
+    end
+
+    table.sort(confirmations, function(a, b)
+        return a.dimension < b.dimension
+    end)
+
+    return confirmations, sortedIntegerList(deleteIDs), dynamicDiscardCount
+end
+
+local function confirmSingleCandidate(observation, mobID, dimension, existing)
+    local statements = mobStatements(mobID, observation.targetName)
+    if not statements then
+        return false, "invalid_mob_metadata"
+    end
+
+    local mobSQL = quoteInteger(mobID, 1, false)
+    local sourceSQL = quoteText(
+        "ambiguous_" .. tostring(observation.failurePath or "unknown"),
+        false
+    )
+    local spellSQL = quoteInteger(validSpellID(observation.spellID), 1, true)
+    local proofEvent = tostring(observation.event or "immune")
+    if observation.immuneVariant then
+        proofEvent = proofEvent .. ":" .. tostring(observation.immuneVariant)
+    end
+    local eventSQL = quoteText(proofEvent, false)
+    local dimensionSQL = quoteText(dimension, false)
+    if not mobSQL or not sourceSQL or not spellSQL or not eventSQL or not dimensionSQL then
+        return false, "invalid_confirmation_provenance"
+    end
+
+    table.insert(statements,
+        "INSERT OR IGNORE INTO facts " ..
+        "(mob_id, dimension, verdict, dynamic_suspected, proof_source, proof_spell_id, proof_event) " ..
+        "VALUES (" .. mobSQL .. ", " .. dimensionSQL ..
+        ", 'immune', 0, " .. sourceSQL .. ", " .. spellSQL .. ", " ..
+        eventSQL .. ");")
+
+    appendHypothesisDeletes(statements, hypothesisIDsContaining(existing, dimension))
+    table.insert(statements,
+        "DELETE FROM hypotheses WHERE mob_id = " .. mobSQL ..
+        " AND NOT EXISTS (SELECT 1 FROM hypothesis_candidates c " ..
+        "WHERE c.hypothesis_id = hypotheses.hypothesis_id);")
+
+    return executeTransaction(statements)
+end
+
 function Knowledge.GetSuspectedDimensions(mobID)
     mobID = validMobID(mobID)
     if not mobID or not storageReady() then return {} end
@@ -539,27 +773,29 @@ local function recordVulnerability(observation)
         return
     end
 
-    local writable = {}
+    local hypotheses = Knowledge.GetHypotheses(mobID)
+    local successSet = listSet(dimensions)
+    local revokedSet = {}
+    local revocationCount = 0
+    local dynamicSetCount = 0
     local i
+
     for i = 1, table.getn(dimensions) do
         local dimension = dimensions[i]
         local fact = facts[dimension]
-        if fact and tostring(fact.verdict) == "immune" then
-            -- Revocation/dynamic-suspicion semantics are Slice 5. Preserve the
-            -- contradiction for that reducer rather than mutating it here.
-            diagnostics.deferredImmuneContradictions =
-                diagnostics.deferredImmuneContradictions + 1
-        else
-            table.insert(writable, dimension)
+        if factVerdict(fact) == "immune" then
+            revokedSet[dimension] = true
+            revocationCount = revocationCount + 1
+            if not factDynamicSuspected(fact) then
+                dynamicSetCount = dynamicSetCount + 1
+            end
         end
     end
 
-    if table.getn(writable) == 0 then
-        incrementLast("success_deferred", observation, "immune_fact_contradiction")
-        return
-    end
+    local confirmations, deleteIDs, dynamicDiscardCount =
+        planAfterAuthoritativeSuccess(hypotheses, facts, successSet, revokedSet)
 
-    local eliminated = queryCandidateCount(mobID, writable)
+    local eliminated = queryCandidateCount(mobID, dimensions)
     local statements = mobStatements(mobID, observation.targetName)
     if not statements then
         diagnostics.storageErrors = diagnostics.storageErrors + 1
@@ -569,29 +805,73 @@ local function recordVulnerability(observation)
 
     local mobSQL = quoteInteger(mobID, 1, false)
     local spellSQL = quoteInteger(validSpellID(observation.spellID), 1, true)
-    local sourceSQL = quoteText("authoritative_" .. tostring(observation.successKind or "success"), false)
-    local eventSQL = quoteText(tostring(observation.event or observation.outcome or "success"), false)
+    local sourceSQL = quoteText(
+        "authoritative_" .. tostring(observation.successKind or "success"),
+        false
+    )
+    local eventSQL = quoteText(
+        tostring(observation.event or observation.outcome or "success"),
+        false
+    )
+    if not mobSQL or not spellSQL or not sourceSQL or not eventSQL then
+        diagnostics.storageErrors = diagnostics.storageErrors + 1
+        incrementLast("storage_error", observation, "invalid_success_provenance")
+        return
+    end
 
-    for i = 1, table.getn(writable) do
-        local dimensionSQL = quoteText(writable[i], false)
+    for i = 1, table.getn(dimensions) do
+        local dimensionSQL = quoteText(dimensions[i], false)
+        if not dimensionSQL then
+            diagnostics.storageErrors = diagnostics.storageErrors + 1
+            incrementLast("storage_error", observation, "invalid_success_dimension")
+            return
+        end
+
         table.insert(statements,
             "INSERT OR IGNORE INTO facts " ..
             "(mob_id, dimension, verdict, dynamic_suspected, proof_source, proof_spell_id, proof_event) " ..
             "VALUES (" .. mobSQL .. ", " .. dimensionSQL ..
-            ", 'vulnerable', 0, " .. sourceSQL .. ", " .. spellSQL .. ", " .. eventSQL .. ");")
+            ", 'vulnerable', 0, " .. sourceSQL .. ", " .. spellSQL .. ", " ..
+            eventSQL .. ");")
         table.insert(statements,
-            "UPDATE facts SET proof_source = " .. sourceSQL ..
+            "UPDATE facts SET " ..
+            "dynamic_suspected = CASE WHEN verdict = 'immune' THEN 1 " ..
+            "ELSE dynamic_suspected END, " ..
+            "verdict = 'vulnerable', proof_source = " .. sourceSQL ..
             ", proof_spell_id = " .. spellSQL ..
             ", proof_event = " .. eventSQL ..
             " WHERE mob_id = " .. mobSQL ..
-            " AND dimension = " .. dimensionSQL ..
-            " AND verdict = 'vulnerable';")
+            " AND dimension = " .. dimensionSQL .. ";")
         table.insert(statements,
             "DELETE FROM hypothesis_candidates WHERE dimension = " .. dimensionSQL ..
             " AND hypothesis_id IN (SELECT hypothesis_id FROM hypotheses WHERE mob_id = " ..
             mobSQL .. ");")
     end
 
+    -- Clean up any pre-existing ordinary vulnerable candidates before applying
+    -- the same deterministic confirmation plan. Dynamic vulnerability is not a
+    -- permanent candidate, but it remains a credible conditional explanation;
+    -- hypotheses containing it are discarded whole below rather than narrowed.
+    table.insert(statements,
+        "DELETE FROM hypothesis_candidates WHERE hypothesis_id IN " ..
+        "(SELECT hypothesis_id FROM hypotheses WHERE mob_id = " .. mobSQL .. ") " ..
+        "AND dimension IN (SELECT dimension FROM facts WHERE mob_id = " .. mobSQL ..
+        " AND verdict = 'vulnerable' AND dynamic_suspected = 0);")
+
+    for i = 1, table.getn(confirmations) do
+        if not appendImmuneFact(
+            statements,
+            mobSQL,
+            confirmations[i].dimension,
+            confirmations[i].hypothesis
+        ) then
+            diagnostics.storageErrors = diagnostics.storageErrors + 1
+            incrementLast("storage_error", observation, "invalid_confirmation_provenance")
+            return
+        end
+    end
+
+    appendHypothesisDeletes(statements, deleteIDs)
     table.insert(statements,
         "DELETE FROM hypotheses WHERE mob_id = " .. mobSQL ..
         " AND NOT EXISTS (SELECT 1 FROM hypothesis_candidates c " ..
@@ -605,10 +885,30 @@ local function recordVulnerability(observation)
     end
 
     diagnostics.vulnerabilitiesRecorded =
-        diagnostics.vulnerabilitiesRecorded + table.getn(writable)
+        diagnostics.vulnerabilitiesRecorded + table.getn(dimensions)
     diagnostics.vulnerableCandidatesEliminated =
         diagnostics.vulnerableCandidatesEliminated + eliminated
-    incrementLast("vulnerable", observation, table.concat(sortedCopy(writable), ","))
+    diagnostics.permanentRevocations =
+        diagnostics.permanentRevocations + revocationCount
+    diagnostics.dynamicSuspicionsSet =
+        diagnostics.dynamicSuspicionsSet + dynamicSetCount
+    diagnostics.permanentConfirmations =
+        diagnostics.permanentConfirmations + table.getn(confirmations)
+    diagnostics.hypothesesDiscardedDynamic =
+        diagnostics.hypothesesDiscardedDynamic + dynamicDiscardCount
+
+    local detail = "vulnerable=" .. table.concat(sortedCopy(dimensions), ",")
+    if revocationCount > 0 then
+        detail = detail .. ";revoked=" .. tostring(revocationCount)
+    end
+    if table.getn(confirmations) > 0 then
+        local confirmed = {}
+        for i = 1, table.getn(confirmations) do
+            table.insert(confirmed, confirmations[i].dimension)
+        end
+        detail = detail .. ";confirmed=" .. table.concat(sortedCopy(confirmed), ",")
+    end
+    incrementLast("vulnerable", observation, detail)
 end
 
 local function createHypothesis(observation)
@@ -645,12 +945,34 @@ local function createHypothesis(observation)
         return
     end
 
+    -- A previously confirmed immunity that was later disproved is no longer a
+    -- valid permanent candidate, but its dynamic flag is positive evidence that
+    -- this dimension can still explain an IMMUNE conditionally. Do not use that
+    -- event to over-confirm a different permanent dimension.
+    local dynamicDimension = firstDynamicCandidate(facts, candidates)
+    if dynamicDimension then
+        diagnostics.hypothesesBlockedDynamic =
+            diagnostics.hypothesesBlockedDynamic + 1
+        incrementLast("hypothesis_blocked", observation, "dynamic:" .. dynamicDimension)
+        return
+    end
+
+    -- If a permanent candidate is already confirmed immune, the observation is
+    -- already explained. It contributes no new ambiguity about the other
+    -- dimensions.
+    local immuneDimension = firstImmuneCandidate(facts, candidates)
+    if immuneDimension then
+        diagnostics.hypothesesResolvedKnownImmune =
+            diagnostics.hypothesesResolvedKnownImmune + 1
+        incrementLast("hypothesis_resolved", observation, "known_immune:" .. immuneDimension)
+        return
+    end
+
     local remaining = {}
     local i
     for i = 1, table.getn(candidates) do
         local dimension = candidates[i]
-        local fact = facts[dimension]
-        if not fact or tostring(fact.verdict) ~= "vulnerable" then
+        if factVerdict(facts[dimension]) ~= "vulnerable" then
             table.insert(remaining, dimension)
         end
     end
@@ -662,8 +984,28 @@ local function createHypothesis(observation)
         return
     end
 
-    local signature = candidateSignature(remaining)
     local existing = Knowledge.GetHypotheses(mobID)
+
+    if table.getn(remaining) == 1 then
+        local ok, err = confirmSingleCandidate(
+            observation,
+            mobID,
+            remaining[1],
+            existing
+        )
+        if not ok then
+            diagnostics.storageErrors = diagnostics.storageErrors + 1
+            incrementLast("storage_error", observation, err)
+            return
+        end
+
+        diagnostics.permanentConfirmations =
+            diagnostics.permanentConfirmations + 1
+        incrementLast("immune_confirmed", observation, remaining[1])
+        return
+    end
+
+    local signature = candidateSignature(remaining)
     for i = 1, table.getn(existing) do
         if candidateSignature(existing[i].candidates) == signature then
             diagnostics.hypothesesDeduped = diagnostics.hypothesesDeduped + 1
@@ -749,7 +1091,12 @@ function Knowledge.GetDiagnostics()
         missingIdentity = diagnostics.missingIdentity,
         storageUnavailable = diagnostics.storageUnavailable,
         storageErrors = diagnostics.storageErrors,
-        deferredImmuneContradictions = diagnostics.deferredImmuneContradictions,
+        permanentConfirmations = diagnostics.permanentConfirmations,
+        permanentRevocations = diagnostics.permanentRevocations,
+        dynamicSuspicionsSet = diagnostics.dynamicSuspicionsSet,
+        hypothesesBlockedDynamic = diagnostics.hypothesesBlockedDynamic,
+        hypothesesResolvedKnownImmune = diagnostics.hypothesesResolvedKnownImmune,
+        hypothesesDiscardedDynamic = diagnostics.hypothesesDiscardedDynamic,
         last = diagnostics.last,
     }
 end
