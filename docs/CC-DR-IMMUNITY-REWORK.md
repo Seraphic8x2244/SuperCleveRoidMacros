@@ -928,7 +928,7 @@ Runtime observation should be lightweight and event-driven:
 - no continuous mob/aura scanning and no new high-frequency polling should be
   introduced.
 
-#### Generalized backend design decisions — IN PROGRESS
+#### Generalized backend design decisions — COMPLETE
 
 Confirmed decisions after the audit:
 
@@ -993,20 +993,18 @@ candidate icons/borders:
 ```text
 yellow border = immunity candidate / suspect
 green border  = candidate positively disproved (vulnerable)
-red border    = immunity confirmed
+red border    = confirmed permanent immunity
+orange border = temporary/conditional immunity suspected
 
-The x/y/z letters used during design discussion are shorthand only and must
-never appear in the SCT output. A separate visual treatment for
-temporary/conditional immunity suspicion will be chosen later.
+The x/y/z letters used during design discussion were shorthand only and must
+never appear in SCT output.
 ```
 
-Conceptually, one observation can progress:
-
-```text
-Immune  [x] [x] [x]
-Immune  [x] [x] [y]
-Immune  [z] [y] [y]
-```
+Conceptually, one observation can progress from several yellow candidate icons,
+through green elimination of disproved candidates, to one red confirmed
+permanent-immunity icon. If a previously credible immunity is later
+authoritatively disproved as permanent, preserve that history with the orange
+temporary/conditional-suspicion treatment.
 
 Do not emit separate vulnerability SCT spam by default; green candidate state in
 the active learning trace is sufficient for testing. Whether the native SCT
@@ -1189,77 +1187,188 @@ Hammer of Justice IMMUNE
 This remains a focused correction to the current conservative learner. The
 generalized comparative learner and broad `spell` promotion remain deferred.
 
-## Deferred
+## Generalized backend development sequence
 
-Do not begin during the current validation phase:
+The design phase is complete enough to implement. Keep each slice small enough
+to finish, statically review, document and commit in one development chat.
+Do not begin the next slice in the same chat unless the current slice is
+trivially small.
 
-```text
-generalized comparative immunity learner
-candidate/disproved/confirmed evidence model
-successful-hit elimination inference
-broad-immunity promotion thresholds
-learner evidence persistence
-inferred broad-immunity persistence
-Mob-ID migration of real immunity storage
-automatic removal of inferred immunity
-new public immunity grammar
-```
+The runtime rule during development is **one active learner**. New backend code
+may be built behind an explicit development gate, but when the generalized
+learner is enabled it must suppress the old permanent-learning write path rather
+than allowing two learners to compete.
 
-These require a separate design decision after the existing learner has been
-validated against real immunity cases.
+### Slice 0 — focused legacy validation checkpoint
 
-Before generalized comparative inference starts, fix the existing NPC DR
-correctness gap described above: all observable qualifying landed stuns must feed
-the three separate target-centric DR buckets. Do not let the future learner use
-absence of player-only DR evidence to eliminate DR as a possible cause.
+Purpose: close the already-pending HoJ/player/temp-protection validation before
+changing the learner architecture.
+
+Scope:
+
+- run the existing focused validation matrix already documented above;
+- confirm the HoJ direct-learner fix, player-target rejection, `IMMUNE2`
+  rejection, TempCC/protection/reflection/NPC-DR/death/split-CC safeguards;
+- document results only; fix only regressions in the currently landed
+  conservative learner.
+
+Stop condition: focused matrix passes or a narrowly scoped regression fix is
+landed and handed back for retest.
+
+### Slice 1 — HearthDB dependency and schema foundation
+
+Purpose: establish the clean authoritative datastore without changing combat
+learning.
+
+Scope:
+
+- hard-require HearthDB alongside the existing extension requirements;
+- open/create one SCRM immunity database under `CustomData/`;
+- add schema/version management and clean reset behavior;
+- create the initial `mobs`, `facts`, `hypotheses`, and
+  `hypothesis_candidates` tables;
+- add a small storage API with escaped/validated SQL construction;
+- add diagnostics for HearthDB missing/open/schema errors;
+- no combat-event learning and no migration of legacy immunity SavedVariables.
+
+Stop condition: DB lifecycle/schema can be statically reviewed and runtime
+smoke-tested independently.
+
+### Slice 2 — normalized observation pipeline
+
+Purpose: create the single evidence input seam before inference exists.
+
+Scope:
+
+- normalize SELF/OTHER Nampower miss, damage, aura/debuff and death observations;
+- resolve live target identity to Mob ID using ClassicAPI;
+- cache spell decomposition/classification;
+- represent authoritative positive success separately from ambiguous immune
+  observations;
+- retain core-specific interpretation at the adapter boundary;
+- diagnostics only: no durable facts/hypotheses yet.
+
+Stop condition: raw events produce correct normalized debug observations for
+player and other casters without changing learner output.
+
+### Slice 3 — transient-context and all-caster NPC DR safety
+
+Purpose: make the safety layer sufficient before permanent inference is allowed.
+
+Scope:
+
+- feed all observable qualifying landed NPC stuns into target-centric DR state;
+- preserve the three Vanilla buckets: `stun_control`, `stun_trigger`,
+  `stun_kidneyshot`;
+- where OTHER-caster controlled-vs-triggered classification is unknowable,
+  retain a transient DR-category-uncertain guard rather than guessing;
+- route TempCC, protection, reflection, death/despawn and related transient
+  explanations through the normalized pipeline;
+- still no permanent comparative inference.
+
+Stop condition: the backend can reliably say when permanent inference is
+blocked by transient context.
+
+### Slice 4 — durable vulnerability and hypothesis engine
+
+Purpose: add persistent learning without yet broadening public immunity behavior.
+
+Scope:
+
+- persist authoritative per-dimension vulnerability/susceptibility facts;
+- persist unresolved ambiguous immunity hypotheses and linked candidates;
+- use already-known vulnerable facts to eliminate candidates immediately;
+- unknown remains absence of a fact;
+- suspected remains derived from unresolved hypothesis membership;
+- no broad-immunity promotion and no public macro/query cutover yet.
+
+Stop condition: a candidate set can progress from all-yellow suspicion through
+green eliminations across encounters/reloads, without confirming immunity unless
+the formal rule is met.
+
+### Slice 5 — permanent confirmation, revocation and dynamic suspicion
+
+Purpose: complete the evidence reducer.
+
+Scope:
+
+- confirm a permanent immunity only when one valid permanent candidate remains
+  and transient explanations are excluded;
+- authoritative success immediately revokes permanent immunity for that exact
+  dimension and records vulnerability;
+- if the revoked immunity had previously been credibly confirmed, also set the
+  independent temporary/conditional-immunity-suspected flag;
+- ambiguous candidates that are merely eliminated do not create the orange
+  dynamic flag;
+- persist compact conclusion provenance, not raw combat history.
+
+Stop condition: red/green/orange transitions are deterministic and survive
+reloads.
+
+### Slice 6 — production cutover and query integration
+
+Purpose: make the generalized backend the sole active immunity knowledge source.
+
+Scope:
+
+- route existing immunity queries/macros/UI reads through HearthDB-backed facts;
+- when generalized learner is active, disable/remove old permanent learner writes;
+- remove dependence on legacy name-keyed immunity data for learned facts;
+- preserve hand-coded/static immunity mechanisms only where they are genuinely
+  separate inputs, normalized through the same query model where practical;
+- verify known-fact fast paths avoid needless re-investigation.
+
+Stop condition: only one active learner/storage model controls production
+immunity decisions.
+
+### Slice 7 — learning SCT / immunity-screen diagnostics
+
+Purpose: expose the learner's state transitions for runtime validation.
+
+Scope:
+
+- add the learning-SCT toggle to `/cleveroid immunities`;
+- show relevant spell/mechanic icons with border states:
+  yellow candidate, green disproved/vulnerable, red confirmed permanent,
+  orange temporary/conditional suspected;
+- do not render the design shorthand letters x/y/z;
+- avoid routine standalone vulnerability spam;
+- expose enough Mob-ID/fact/hypothesis provenance in the immunity screen to
+  diagnose incorrect transitions.
+
+Stop condition: the user can watch a hypothesis converge during ordinary combat.
+
+### Slice 8 — cross-core runtime matrix and cleanup
+
+Purpose: validate the completed pipeline on the intended ecosystems.
+
+Scope:
+
+- vMaNGOS 1.12.1 full focused + comparative runtime matrix;
+- OctoWoW/Turtle-family verification of raw `IMMUNE`/`IMMUNE2` semantics and
+  normalized adapters;
+- stress repeated encounters/reloads and DB persistence;
+- validate other-caster evidence and uncertain-DR behavior;
+- remove temporary development gates/diagnostics that are no longer needed;
+- finalize documentation and release handoff.
+
+Stop condition: both target environments use the same inference engine with any
+core differences isolated to normalized observation adapters.
 
 ## Exact next step
 
-The player-exemption micro-fix, persistence-path audit and deep-evidence pre-implementation audit have landed. Design choices for the generalized backend may now be finalized, but generalized inference implementation still waits for the focused runtime validation pass below. Resume
-the focused learner validation now; do **not** begin generalized comparative
-inference before this pass succeeds.
+Start with **Slice 0 only**: complete the already-pending focused runtime
+validation of the current conservative learner. Once that checkpoint passes,
+start a fresh development chat for Slice 1 (HearthDB dependency and schema
+foundation).
 
-Validation order:
-
-1. load the addon and confirm no Vanilla-Lua startup/runtime error;
-2. enable `/cleveroid immunitydebug` and clear old diagnostic evidence;
-3. first reproduce/cover a player under Blessing of Freedom and Blessing of
-   Protection:
-   - Blessing of Freedom should report live temporary root/snare immunity;
-   - Blessing of Protection should report live temporary physical immunity;
-   - neither case may create or retain any permanent player immunity record;
-   - the direct miss journal should show `player target` rejection when
-     applicable;
-4. verify a generic `IMMUNE` on an NPC spell with no spell-level mechanic, no
-   Dispel family and no target-creature restriction can still write its literal
-   DBC school;
-5. verify Frostbolt does **not** turn a generic result into a permanent snare or
-   Frost write merely from the direct event;
-6. replay the fixed Hammer of Justice case on Blackwing Spellbinder:
-   resolved effect-level Stun must make the generic `IMMUNE` ambiguous, with
-   neither Holy nor Stun written; record the `immunitydebug` ambiguity detail;
-7. verify an `IMMUNE2` event produces an immunitydebug rejection and no
-   permanent write;
-8. recheck TempCC, temporary protection/reflection, NPC DR, death and split-CC
-   safeguards for regressions.
-
-Record the raw miss code and learner decision/reason for each focused case.
-If Turtle/Octo testing becomes available, first verify whether their
-`IMMUNE`/`IMMUNE2` split matches the assumptions above before broadening
-positive learning there.
-
-Still do **not** implement:
-
-- generalized cross-event comparative inference;
-- loose time-window correlation;
-- speculative effect-level learning from aura absence;
-- new persistence categories;
-- broad-immunity promotion.
-
-The intended invariant remains:
+The generalized learner's permanent-inference invariant remains:
 
 ```text
-one remaining valid cause -> learn
-multiple remaining valid causes -> ambiguous; learn nothing
+one remaining valid permanent cause + no transient explanation -> confirm
+multiple remaining valid causes -> keep hypothesis unresolved
+authoritative dimension-specific success -> permanent immunity disproved
+credible confirmed immunity later disproved -> vulnerable + dynamic suspicion
 ```
+
 
