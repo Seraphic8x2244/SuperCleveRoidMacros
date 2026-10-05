@@ -207,7 +207,20 @@ requirementCheckFrame:SetScript("OnEvent", function()
     -- failure and why the floor moved rather than the conditional being gated.
     local hasClassicAPI1158 = hasClassicAPI and CleveRoids.ClassicAPI.HasMinimumVersion(1, 15, 8)
 
-    if not hasNampower30 or not hasUnitXP or not hasClassicAPI or not hasClassicAPI1158 then
+    local hasHearthDB = false
+    local missingHearthDBFunction = nil
+    if CleveRoids.ImmunityStorage and CleveRoids.ImmunityStorage.IsHearthDBAvailable then
+        hasHearthDB, missingHearthDBFunction = CleveRoids.ImmunityStorage.IsHearthDBAvailable()
+    end
+
+    local immunityStorageReady = false
+    local immunityStorageError = nil
+    if hasHearthDB then
+        immunityStorageReady, immunityStorageError = CleveRoids.ImmunityStorage.Initialize()
+    end
+
+    if not hasNampower30 or not hasUnitXP or not hasClassicAPI or not hasClassicAPI1158
+        or not hasHearthDB or not immunityStorageReady then
         -- Show warnings (don't disable — tearing down a partially-initialized addon causes hangs)
         if not hasNampower then
             CleveRoids.Print("|cFFFF9900WARNING:|r |cFF00FFFFAvitasia's Nampower v3.0.0+|r is required:")
@@ -232,6 +245,21 @@ requirementCheckFrame:SetScript("OnEvent", function()
             CleveRoids.Print(format("|cFFFF9900WARNING:|r |cFF00FFFFClassicAPI v1.15.8+|r is required (you have v%d.%d.%d):", major, minor, patch))
             CleveRoids.Print("https://github.com/brues-code/ClassicAPI")
             CleveRoids.Print("The addon cannot finish loading on this version -- update ClassicAPI.")
+        end
+        if not hasHearthDB then
+            CleveRoids.Print("|cFFFF9900WARNING:|r |cFF00FFFFHearthDB|r is required for the immunity knowledge store:")
+            CleveRoids.Print("https://github.com/The-Kludge-Bureau/HearthDB")
+            if missingHearthDBFunction then
+                CleveRoids.Print("Missing HearthDB API function: " .. tostring(missingHearthDBFunction))
+            end
+            CleveRoids.Print("The generalized immunity learner cannot start without HearthDB.")
+        elseif not immunityStorageReady then
+            local diagnostics = CleveRoids.ImmunityStorage.GetDiagnostics()
+            local code = diagnostics.lastErrorCode or "unknown"
+            local detail = immunityStorageError or diagnostics.lastError or "unknown database error"
+            CleveRoids.Print("|cFFFF0000ERROR:|r HearthDB immunity database initialization failed (" .. tostring(code) .. "):")
+            CleveRoids.Print(tostring(detail))
+            CleveRoids.Print("The generalized immunity learner will remain unavailable.")
         end
     end
 
@@ -542,6 +570,10 @@ function CleveRoids.DisableAddon(reason)
     -- quiet, or every claimed macro would keep the last value we published.
     if CleveRoids.ReleaseDisplays then
         CleveRoids.ReleaseDisplays()
+    end
+
+    if CleveRoids.ImmunityStorage and CleveRoids.ImmunityStorage.Close then
+        CleveRoids.ImmunityStorage.Close()
     end
 
     -- Stop main frame activity
@@ -4541,6 +4573,9 @@ end
 -- Handle shutdown to prevent SuperWoW API crashes during logout
 function CleveRoids.Frame:PLAYER_LOGOUT()
     CleveRoids.isShuttingDown = true
+    if CleveRoids.ImmunityStorage and CleveRoids.ImmunityStorage.Close then
+        CleveRoids.ImmunityStorage.Close()
+    end
     this:UnregisterAllEvents()
     this:SetScript("OnUpdate", nil)
     this:SetScript("OnEvent", nil)
