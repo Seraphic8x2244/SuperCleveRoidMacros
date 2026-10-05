@@ -2620,7 +2620,7 @@ CleveRoids.IsTemporarilyCCImmune = IsTemporarilyCCImmune
 
 -- Slice 3 normalized-transient bridge. Keep the curated numeric definitions
 -- authoritative here so the generalized backend does not duplicate them.
-local function GetTransientImmunityAuraEffects(spellID, mobID)
+function CleveRoids.GetTransientImmunityAuraEffects(spellID, mobID)
     spellID = tonumber(spellID)
     mobID = tonumber(mobID)
     if not spellID then return {} end
@@ -2663,7 +2663,6 @@ local function GetTransientImmunityAuraEffects(spellID, mobID)
     return effects
 end
 
-CleveRoids.GetTransientImmunityAuraEffects = GetTransientImmunityAuraEffects
 CleveRoids.HasImmunityGuardAura = HasImmunityGuardAura
 
 -- PERFORMANCE: Throttling - run at 20Hz max instead of every frame (60+Hz)
@@ -7428,7 +7427,7 @@ CleveRoids.GetSpellImmunityDRType = GetSpellImmunityDRType
 -- guesses every non-client-initiated stun is triggered. For the player's own
 -- casts the existing runtime cast evidence is usable. For another caster it is
 -- only safe to classify spell IDs whose Vanilla bucket is explicit.
-local function ClassifyNPCStunDR(spellID, casterGUID)
+function CleveRoids.ClassifyNPCStunDR(spellID, casterGUID)
     spellID = tonumber(spellID)
     if not spellID or GetSpellCCType(spellID) ~= "stun" then
         return nil, false, "not_stun"
@@ -7458,8 +7457,6 @@ local function ClassifyNPCStunDR(spellID, casterGUID)
 
     return nil, false, "controlled_vs_triggered_unknown"
 end
-
-CleveRoids.ClassifyNPCStunDR = ClassifyNPCStunDR
 
 -- Record a CC immunity (permanent or buff-based)
 -- Parameters:
