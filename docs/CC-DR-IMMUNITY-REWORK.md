@@ -37,9 +37,10 @@ not a chronological development log.
   `aa2b761d1c45d1a28c8354b2f13f216a21403569` — immunitydebug local-scope
   runtime fix; that build started with no Lua errors.
 - Current phase: bounded generalized-backend implementation is underway.
-  Slices 0-2 are complete: conservative static checkpoint, HearthDB/schema
-  foundation, and the normalized observation pipeline. Permanent comparative
-  inference has not started.
+  Slices 0-4 are complete: conservative static checkpoint, HearthDB/schema
+  foundation, normalized observations, transient/DR safety, and durable
+  vulnerability/hypothesis persistence. Permanent immunity confirmation,
+  revocation and dynamic-suspicion handling have not started.
 - Do not runtime-test between implementation slices. The corrected conservative
   learner plus the assembled generalized backend are validated together in
   Slice 8.
@@ -54,9 +55,9 @@ not a chronological development log.
   vMaNGOS semantics are proven below. Turtle/Octo `IMMUNE`/`IMMUNE2`
   semantics remain an explicit compatibility assumption to verify; the
   vMaNGOS-specific positive inference is kept local to the direct miss learner.
-- Generalized permanent inference has not started. The new code currently stops at
-  storage/schema plus normalized diagnostic observations; no HearthDB facts or
-  hypotheses are produced from combat yet.
+- Generalized durable learning now records authoritative vulnerability facts and
+  unresolved hypotheses in HearthDB. It does not yet confirm or revoke permanent
+  immunity facts; those state transitions remain Slice 5.
 
 ## Branch-specific immunity model
 
@@ -1411,23 +1412,82 @@ verification remains deferred until Slice 8.
 Stop condition: Slice 3 complete; proceed to Slice 4 in a fresh development
 chat.
 
-### Slice 4 — durable vulnerability and hypothesis engine
+### Slice 4 — durable vulnerability and hypothesis engine — COMPLETE
 
 Purpose: add persistent learning without yet broadening public immunity behavior.
 
-Scope:
+Implemented at code checkpoint
+`029a59e9fda1ef13d25778087b6082409d25780f`:
 
-- persist authoritative per-dimension vulnerability/susceptibility facts;
-- persist unresolved ambiguous immunity hypotheses and linked candidates;
-- use already-known vulnerable facts to eliminate candidates immediately;
-- unknown remains absence of a fact;
-- suspected remains derived from unresolved hypothesis membership;
-- no broad-immunity promotion and no public macro/query cutover yet.
+- added `ImmunityKnowledge.lua` as a listener after the normalized transient
+  reducer. It writes only the HearthDB knowledge store and does not mutate the
+  legacy SavedVariables learner;
+- authoritative landed damage persists vulnerability for the proven runtime
+  school/action dimension. Authoritative hostile aura presence may additionally
+  prove the action school, Dispel family, and an exact spell/effect mechanic
+  when that mapping is unambiguous;
+- expanded normalized spell metadata with exact spell-level and per-effect
+  mechanic dimensions, mechanic 15 `bleed`, Dispel-family dimensions and the
+  existing `targetCreatureType` restriction. The internal
+  `dispel_magic` learning dimension remains separate from broad `spell`;
+  Poison, Curse and Disease likewise remain distinct from spell school;
+- core-specific miss interpretation remains at the observation adapter boundary.
+  When the verified vMaNGOS adapter supplies `whole_spell`, generic
+  `IMMUNE` can create one linked unresolved hypothesis from only the
+  whole-spell permanent candidates: school/action, spell-level mechanic and
+  Dispel family;
+- vMaNGOS `IMMUNE2` / `effect_mask_zero` is deliberately not persisted yet:
+  aura-state, effect-type and other unmodelled effect-mask causes mean a partial
+  candidate set could later over-confirm. Portable and Octo/Turtle raw
+  `IMMUNE` semantics also remain non-durable until their adapter semantics are
+  verified;
+- a spell with a static target-creature restriction likewise abstains from
+  durable whole-spell hypothesis creation because that is a known non-permanent
+  alternative explanation;
+- transient explanations from Slice 3 are checked before hypothesis persistence:
+  reflection, death, DR/uncertain DR, unresolved live identity, broad temporary
+  protection and applicable exact temporary immunity block the observation;
+- already-known `vulnerable` facts are removed from a new candidate set
+  immediately. A new authoritative vulnerability removes that same dimension
+  from every existing hypothesis for the Mob ID and deletes hypotheses whose
+  candidate set becomes empty;
+- exact duplicate unresolved candidate sets are deduplicated per Mob ID, keeping
+  compact conclusion provenance rather than raw combat history;
+- `unknown` remains absence of a fact. `suspected` is derived at read time
+  from membership in an unresolved hypothesis; it is not stored as another fact
+  verdict;
+- a hypothesis narrowed to one candidate remains unresolved and is only exposed
+  as ready for later confirmation. Slice 4 never writes an `immune` fact;
+- if authoritative success contradicts an already-existing `immune` fact,
+  Slice 4 deliberately leaves it untouched and records only a diagnostic
+  deferral. Revocation and dynamic-suspicion semantics belong to Slice 5;
+- no broad-immunity promotion, production query/macro cutover, UI/SCT behavior
+  or runtime test was added.
 
-Stop condition: candidate/hypothesis state transitions and persistence paths are
-implemented and statically reviewable, without confirming immunity unless the
-formal rule is met. Runtime progression across encounters/reloads is deferred to
-the final validation slice.
+Static review completed:
+
+- branch state matched supplied handoff
+  `2264460bdf50ff56e326104904dfa29dc23391d9` before implementation;
+- the code checkpoint changes only `ImmunityKnowledge.lua`,
+  `ImmunityObservations.lua`, and `SuperCleveRoidMacros.toc`;
+- structural bracket and Lua block-balance checks pass for both changed Lua
+  modules;
+- static SQL transition checks pass for creation of a linked two-candidate
+  hypothesis, authoritative elimination to one candidate, and elimination of
+  the final candidate with empty-hypothesis cleanup;
+- scope scans confirm no `OnUpdate` polling, legacy immunity writes, UI/SCT
+  execution, broad candidate creation, permanent `immune` fact mutation, or
+  common-reducer branch on core name;
+- TOC order is transient reducer -> durable knowledge reducer -> immunity UI,
+  so hypothesis persistence can consume the complete transient safety context;
+- the incomplete `IMMUNE2` and target-creature restriction abstention paths
+  are present at the code checkpoint.
+
+No runtime testing was performed. Cross-encounter/reload persistence and
+cross-core behavior remain deferred until Slice 8.
+
+Stop condition: Slice 4 complete; proceed to Slice 5 in a fresh development
+chat.
 
 ### Slice 5 — permanent confirmation, revocation and dynamic suspicion
 
@@ -1508,8 +1568,8 @@ core differences isolated to normalized observation adapters.
 
 ## Exact next step
 
-Slices 0, 1, 2 and 3 are complete. Start a fresh development chat for **Slice 4
-only**: durable vulnerability and hypothesis engine.
+Slices 0, 1, 2, 3 and 4 are complete. Start a fresh development chat for
+**Slice 5 only**: permanent confirmation, revocation and dynamic suspicion.
 
 Do not runtime-test between implementation slices. Continue through the bounded
 implementation sequence with static review/document/commit handoffs, then run
