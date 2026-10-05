@@ -338,7 +338,10 @@ end
 -- v4: Fixed false immunity recording when target dies with spells in-flight (dead = IMMUNE)
 -- v5: Fixed false physical immunity from unknown spell schools (now uses DBC lookup; unknown defaults to nil not "physical")
 -- v6: Reset stale immunity data that may contain false positives
-CleveRoids.IMMUNITY_DATA_VERSION = 6
+-- v7: Production immunity learning moved to Mob-ID-keyed HearthDB facts.
+--     Clear the old indistinguishable name-keyed learned/manual records once;
+--     subsequent SavedVariables entries are explicit manual/static overrides only.
+CleveRoids.IMMUNITY_DATA_VERSION = 7
 
 -- Call on next frame to ensure everything is loaded
 local initFrame = CreateFrame("Frame")
@@ -361,7 +364,7 @@ initFrame:SetScript("OnEvent", function()
 
         if hadData then
             -- Show message if we actually cleared existing data
-            CleveRoids.Print("|cffff9900Immunity data reset|r - addon updated to data version " .. CleveRoids.IMMUNITY_DATA_VERSION)
+            CleveRoids.Print("|cffff9900Legacy immunity overrides reset|r - HearthDB is now the learned immunity store (data version " .. CleveRoids.IMMUNITY_DATA_VERSION .. ")")
         end
     end
 

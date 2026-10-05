@@ -2665,6 +2665,14 @@ end
 
 CleveRoids.HasImmunityGuardAura = HasImmunityGuardAura
 
+-- Slice 6 cutover gate. Do not key this on database readiness: HearthDB is a
+-- hard dependency, so storage failure must not silently reactivate the old
+-- name-keyed learner.
+local function GeneralizedImmunityLearnerActive()
+    local knowledge = CleveRoids.ImmunityKnowledge
+    return knowledge and knowledge.IsActive and knowledge.IsActive() or false
+end
+
 -- PERFORMANCE: Throttling - run at 20Hz max instead of every frame (60+Hz)
 -- Minimum delay is 0.2s, so 20Hz (50ms) gives us 4 checks per minimum delay
 local _lastDelayedTrackingUpdate = 0
@@ -2917,8 +2925,19 @@ delayedTrackingFrame:SetScript("OnUpdate", function()
                         pending.targetName or "Unknown")
                     )
                   end
+                elseif GeneralizedImmunityLearnerActive() then
+                  -- Production learning is owned by the normalized HearthDB
+                  -- backend. Missing-aura heuristics must never write a second
+                  -- name-keyed permanent fact.
+                  if debug then
+                    DEFAULT_CHAT_FRAME:AddMessage(
+                      _string_format("|cffaaaaaa[Bleed Cutover]|r %s missing on %s - generalized learner owns persistence",
+                        C_Spell.GetSpellName(pending.spellID) or "Bleed",
+                        pending.targetName or "Unknown")
+                    )
+                  end
                 elseif totalDebuffs < DEBUFF_CAP_THRESHOLD then
-                  -- Legacy fallback only: few debuffs may indicate bleed immunity.
+                  -- Pre-cutover compatibility fallback only.
                   if pending.targetName and pending.targetName ~= "" then
                     -- Record as BLEED immunity directly (bypass split damage override in RecordImmunity)
                     -- RecordImmunity would record Rake/Pounce as "physical" (initial school),
@@ -3075,8 +3094,16 @@ delayedTrackingFrame:SetScript("OnUpdate", function()
                         pending.targetName or "Unknown")
                     )
                   end
+                elseif GeneralizedImmunityLearnerActive() then
+                  if debug then
+                    DEFAULT_CHAT_FRAME:AddMessage(
+                      _string_format("|cffaaaaaa[NonBleed Cutover]|r %s missing on %s - generalized learner owns persistence",
+                        C_Spell.GetSpellName(pending.spellID) or "Debuff",
+                        pending.targetName or "Unknown")
+                    )
+                  end
                 elseif totalDebuffs < DEBUFF_CAP_THRESHOLD then
-                  -- Legacy fallback only: few debuffs may indicate school immunity.
+                  -- Pre-cutover compatibility fallback only.
                   -- Use RecordImmunity for proper DBC school lookup (with bleed override)
                   if pending.targetName and pending.targetName ~= "" then
                     CleveRoids.RecordImmunity(pending.targetName, nil, nil, pending.spellID)
@@ -3598,8 +3625,16 @@ delayedTrackingFrame:SetScript("OnUpdate", function()
                   spellNameDebug, pending.targetName or "Unknown")
               )
             end
+          elseif GeneralizedImmunityLearnerActive() then
+            if debug then
+              local spellNameDebug = C_Spell.GetSpellName(pending.spellID) or "Unknown"
+              DEFAULT_CHAT_FRAME:AddMessage(
+                _string_format("|cffaaaaaa[Shared Cutover]|r %s missing on %s - generalized learner owns persistence",
+                  spellNameDebug, pending.targetName or "Unknown")
+              )
+            end
           elseif totalDebuffs < DEBUFF_CAP_THRESHOLD then
-            -- Legacy fallback only: few debuffs may indicate immunity.
+            -- Pre-cutover compatibility fallback only.
             local recordSchool = pending.school
             if pending.spellID and _GetSpellRecField then
               local dbcSchool = _GetSpellRecField(pending.spellID, "school")
@@ -6252,7 +6287,8 @@ CleveRoids.setbonusModifiers[9749] = { setId = HARUSPEX_SET_ID, items = haruspex
 CleveRoids.setbonusModifiers[9907] = { setId = HARUSPEX_SET_ID, items = haruspexItems, threshold = 3, modifier = haruspexFaerieFireModifier }   -- Faerie Fire Rank 4
 
 -- IMMUNITY TRACKING SYSTEM
--- Initialize SavedVariables for immunity tracking
+-- SavedVariables are now explicit manual/static overrides only. Learned
+-- permanent knowledge is Mob-ID-keyed in HearthDB via ImmunityKnowledge.
 CleveRoids_ImmunityData = CleveRoids_ImmunityData or {}
 
 -- Event-driven bridge for the optional testing/management UI.  Runtime immunity
@@ -6297,8 +6333,24 @@ local CC_IMMUNITY_TYPES = {
     snare = true,      -- Hamstring, Wing Clip
 }
 
--- Broad immunity dimensions. These are framework types only at this stage;
--- existing query/learning behaviour does not consume them yet.
+-- Durable dispel-family dimensions are independent from spell school and from
+-- the broad "spell" dimension.
+local DISPEL_IMMUNITY_TYPES = {
+    dispel_magic = true,
+    curse = true,
+    disease = true,
+    poison = true,
+}
+
+local DISPEL_ID_TO_IMMUNITY_TYPE = {
+    [1] = "dispel_magic",
+    [2] = "curse",
+    [3] = "disease",
+    [4] = "poison",
+}
+
+-- Broad immunity dimensions remain queryable production dimensions, but the
+-- Slice 6 learner does not promote new broad spell/cc/all facts.
 local BROAD_IMMUNITY_TYPES = {
     spell = true,
     cc = true,
@@ -6308,8 +6360,9 @@ local BROAD_IMMUNITY_TYPES = {
 -- Why an immunity query succeeded, or why a future IMMUNE observation may be
 -- inconclusive. Boolean callers ignore these optional return values.
 local IMMUNITY_SOURCE = {
-    recorded = "recorded",           -- SavedVariables fact; manual vs learned is not distinguishable
-    conditional = "conditional",     -- SavedVariables fact active only with its recorded buff
+    knowledge = "knowledge",         -- confirmed Mob-ID-keyed HearthDB fact
+    static = "static",               -- explicit SavedVariables manual/static override
+    conditional = "conditional",     -- manual/static override active only with its recorded buff
     temporary_aura = "temporary_aura",
     temporary_cc = "temporary_cc",
     special = "special",             -- bespoke live state such as Banish
@@ -6329,6 +6382,9 @@ for school in pairs(IMMUNITY_SCHOOLS) do
 end
 for ccType in pairs(CC_IMMUNITY_TYPES) do
     IMMUNITY_TYPES[ccType] = true
+end
+for dispelType in pairs(DISPEL_IMMUNITY_TYPES) do
+    IMMUNITY_TYPES[dispelType] = true
 end
 for broadType in pairs(BROAD_IMMUNITY_TYPES) do
     IMMUNITY_TYPES[broadType] = true
@@ -6356,6 +6412,65 @@ end
 
 local function NormalizeCCImmunityType(ccType)
     return NormalizeImmunityType(ccType)
+end
+
+local function GetKnowledgeFact(unitId, immunityType)
+    if not unitId or not immunityType or UnitIsPlayer(unitId) then
+        return nil
+    end
+
+    local knowledge = CleveRoids.ImmunityKnowledge
+    if not knowledge or not knowledge.GetFact then
+        return nil
+    end
+
+    local mobID = GetCreatureEntry(unitId)
+    if not mobID then return nil end
+    return knowledge.GetFact(mobID, immunityType)
+end
+
+local function ResolveImmunityTargetName(unitId)
+    local targetName = UnitName(unitId)
+    if not targetName or targetName == "" or targetName == "Unknown" then
+        local normalizedGuid = CleveRoids.NormalizeGUID(unitId)
+        if normalizedGuid and lib and lib.guidToName then
+            targetName = lib.guidToName[normalizedGuid]
+        end
+    end
+    if not targetName or targetName == "" or targetName == "Unknown" then
+        return nil
+    end
+    return targetName
+end
+
+-- CleveRoids_ImmunityData is retained only for explicit manual/static overrides
+-- after data-version 7 clears the old indistinguishable learned records.
+local function CheckStaticImmunityData(unitId, storageKey, targetName, checkSpellName)
+    local bucket = storageKey and CleveRoids_ImmunityData[storageKey]
+    local data = bucket and targetName and bucket[targetName]
+    if not data then return false end
+
+    if data == true then
+        return true, IMMUNITY_SOURCE.static
+    end
+    if type(data) ~= "table" then return false end
+
+    if storageKey == "unknown" and data.spell and checkSpellName
+       and data.spell ~= checkSpellName then
+        return false
+    end
+
+    if data.buff then
+        if CleveRoids.ClassicAPI.GetAuraDataBySpellName(unitId, data.buff, "HELPFUL") then
+            return true, IMMUNITY_SOURCE.conditional, data.buff
+        end
+        return false
+    end
+
+    if data.spell then
+        return true, IMMUNITY_SOURCE.static, data.spell
+    end
+    return false
 end
 
 -- Maps DBC mechanic IDs back to CC type names for immunity recording
@@ -7013,7 +7128,7 @@ end
 -- deterministic narrow-to-broad ordering for query/debug use.
 --
 -- Examples:
---   Hammer of Justice -> holy, spell, stun, cc, all
+--   Hammer of Justice -> holy, spell, dispel_magic, stun, cc, all
 --   Cheap Shot        -> physical, stun, cc, all
 --   Charge Stun       -> physical, stun, cc, all
 --   Fireball          -> fire, spell, all
@@ -7059,6 +7174,14 @@ local function GetSpellImmunityDimensions(spellID)
         AddSpellImmunityDimension(dimensions, ordered, "bleed")
     end
 
+    local dispelID = CleveRoids.ClassicAPI
+        and CleveRoids.ClassicAPI.GetSpellDispelType
+        and CleveRoids.ClassicAPI.GetSpellDispelType(spellID)
+    local dispelDimension = dispelID and DISPEL_ID_TO_IMMUNITY_TYPE[tonumber(dispelID)]
+    if dispelDimension then
+        AddSpellImmunityDimension(dimensions, ordered, dispelDimension)
+    end
+
     local ccType = GetSpellImmunityType(spellID)
     if ccType and CC_IMMUNITY_TYPES[ccType] then
         AddSpellImmunityDimension(dimensions, ordered, ccType)
@@ -7074,9 +7197,9 @@ CleveRoids.GetSpellImmunityDimensions = GetSpellImmunityDimensions
 
 local IMMUNITY_DEBUG_CODE = {}
 do
-    -- immunitydebug is instrumentation over the real learner only. It owns no
-    -- immunity hypotheses or evidence model; CleveRoids_ImmunityData remains the
-    -- sole authoritative learned-immunity state.
+    -- immunitydebug is legacy instrumentation over the old direct path only.
+    -- HearthDB-backed ImmunityKnowledge is now the sole learned-immunity state;
+    -- this journal remains read-only diagnostic compatibility until Slice 7.
     local IMMUNITY_DEBUG_SCHEMA_VERSION = 1
     local IMMUNITY_DEBUG_EVENT_DECISION = 1
     local IMMUNITY_DEBUG_EVENT_WRITE = 2
@@ -7468,6 +7591,9 @@ local function RecordCCImmunity(npcName, ccType, conditionalBuff, spellName)
     if not npcName or not ccType or npcName == "" then
         return
     end
+    if GeneralizedImmunityLearnerActive() then
+        return
+    end
 
     ccType = NormalizeCCImmunityType(ccType)
 
@@ -7533,6 +7659,9 @@ local function RemoveCCImmunity(npcName, ccType)
     if not npcName or not ccType or npcName == "" then
         return
     end
+    if GeneralizedImmunityLearnerActive() then
+        return
+    end
 
     ccType = NormalizeCCImmunityType(ccType)
 
@@ -7571,46 +7700,19 @@ local function CheckCCImmunity(unitId, ccType)
         return true, IMMUNITY_SOURCE.temporary_cc, tempAuraID
     end
 
-    -- Permanent/recorded CC immunity is NPC-only.
+    -- Durable learned facts and manual/static overrides are NPC-only.
     if UnitIsPlayer(unitId) then
         return false
     end
 
-    local targetName = UnitName(unitId)
-    -- Fallback to GUID->name cache if UnitName fails
-    -- This happens when multiscan passes a GUID that isn't the current target
-    if not targetName or targetName == "" or targetName == "Unknown" then
-        local normalizedGuid = CleveRoids.NormalizeGUID(unitId)
-        if normalizedGuid and lib and lib.guidToName then
-            targetName = lib.guidToName[normalizedGuid]
-        end
-    end
-    if not targetName or targetName == "" then
-        return false
+    local fact = GetKnowledgeFact(unitId, ccType)
+    if fact and fact.verdict == "immune" then
+        return true, IMMUNITY_SOURCE.knowledge, fact.proofSource
     end
 
-    -- Look up CC immunity with "cc_" prefix
-    local key = "cc_" .. ccType
-    local immunityData = CleveRoids_ImmunityData[key] and CleveRoids_ImmunityData[key][targetName]
-
-    if not immunityData then
-        return false
-    end
-
-    if immunityData == true then
-        -- Permanent recorded immunity. Existing storage cannot distinguish
-        -- automatic learning from a manual/user-created record.
-        return true, IMMUNITY_SOURCE.recorded
-    elseif type(immunityData) == "table" and immunityData.buff then
-        -- Buff-based recorded immunity: check if the buff is currently active.
-        local buffs = GetUnitBuffs(unitId)
-        if buffs[immunityData.buff] == true then
-            return true, IMMUNITY_SOURCE.conditional, immunityData.buff
-        end
-        return false
-    end
-
-    return false
+    local targetName = ResolveImmunityTargetName(unitId)
+    if not targetName then return false end
+    return CheckStaticImmunityData(unitId, "cc_" .. ccType, targetName)
 end
 
 -- Expose publicly
@@ -7628,6 +7730,9 @@ CleveRoids.CheckCCImmunity = CheckCCImmunity
 --                   whole-spell IMMUNE has been narrowed to school/action.
 local function RecordImmunity(npcName, spellName, conditionalBuff, spellID, forceDbcSchool)
     if not npcName or (not spellName and not spellID) or npcName == "" then
+        return
+    end
+    if GeneralizedImmunityLearnerActive() then
         return
     end
 
@@ -7753,6 +7858,9 @@ CleveRoids.RecordImmunity = RecordImmunity
 --   school: Damage school (e.g., "fire", "bleed") or spell name for unknown schools
 local function RemoveSpellImmunity(npcName, school)
     if not npcName or not school or npcName == "" then
+        return
+    end
+    if GeneralizedImmunityLearnerActive() then
         return
     end
 
@@ -8149,7 +8257,15 @@ local function ParseImmunityCombatLog()
             return
         end
 
-        -- Record immunity by school
+        -- The generalized backend receives the normalized miss event and owns
+        -- permanent persistence. Keep this text-only branch read-only after
+        -- cutover; no SavedVariables fallback is permitted.
+        if GeneralizedImmunityLearnerActive() then
+            CancelPendingVerification(targetName, nil)
+            return
+        end
+
+        -- Pre-cutover compatibility fallback only.
         if not CleveRoids_ImmunityData[school] then
             CleveRoids_ImmunityData[school] = {}
         end
@@ -8377,25 +8493,14 @@ local function ParseAfflictedCombatLog()
     end
 end
 
--- True if the recorded immunity data makes `targetName` immune to `school` right
--- now: outright when the entry is permanent, or only while it holds the buff the
--- entry names. The buff test is one by-name lookup across the unit's auras via
--- C_UnitAuras -- no slot scan, and it finds the aura wherever it sits.
-local function SchoolImmune(unitId, school, targetName)
-    local schoolData = school and CleveRoids_ImmunityData[school]
-    local data = schoolData and schoolData[targetName]
-    if not data then return false end
-    if data == true then
-        return true, IMMUNITY_SOURCE.recorded
+-- Resolve one durable exact dimension from the Mob-ID knowledge store plus
+-- explicit manual/static overrides. Live/transient sources are handled above.
+local function DurableDimensionImmune(unitId, immunityType, targetName)
+    local fact = GetKnowledgeFact(unitId, immunityType)
+    if fact and fact.verdict == "immune" then
+        return true, IMMUNITY_SOURCE.knowledge, fact.proofSource
     end
-    if type(data) ~= "table" then return false end
-    if not data.buff then
-        return true, IMMUNITY_SOURCE.recorded
-    end
-    if CleveRoids.ClassicAPI.GetAuraDataBySpellName(unitId, data.buff, "HELPFUL") then
-        return true, IMMUNITY_SOURCE.conditional, data.buff
-    end
-    return false
+    return CheckStaticImmunityData(unitId, immunityType, targetName)
 end
 
 -- Banish is an existing bespoke live state: while active, the target is
@@ -8430,40 +8535,45 @@ local function CheckExactImmunityType(unitId, normalized)
         end
     end
 
-    -- Broad types with no direct source yet remain false. In particular, "cc"
-    -- is a framework dimension but has no typed live/persistent source yet.
+    -- Broad dimensions are queryable even though Slice 6 does not promote
+    -- new broad facts. This preserves existing/static inputs and future-proofs
+    -- production reads without changing the bounded inference rules.
     if BROAD_IMMUNITY_TYPES[normalized] then
-        return false
+        if UnitIsPlayer(unitId) then return false end
+
+        local fact = GetKnowledgeFact(unitId, normalized)
+        if fact and fact.verdict == "immune" then
+            return true, IMMUNITY_SOURCE.knowledge, fact.proofSource
+        end
+
+        local targetName = ResolveImmunityTargetName(unitId)
+        if not targetName then return false end
+        return CheckStaticImmunityData(unitId, normalized, targetName)
     end
 
-    if not IMMUNITY_SCHOOLS[normalized] or normalized == "unknown" then
+    if (not IMMUNITY_SCHOOLS[normalized] and not DISPEL_IMMUNITY_TYPES[normalized])
+       or normalized == "unknown" then
         return false
     end
 
     -- Existing special live states are sources, not stored immunity facts.
-    -- Banish currently applies to all tracked damage-school dimensions.
-    local banishAuraID = GetBanishAuraID(unitId)
-    if banishAuraID then
-        return true, IMMUNITY_SOURCE.special, banishAuraID
+    -- Banish currently applies only to tracked damage-school dimensions.
+    if IMMUNITY_SCHOOLS[normalized] then
+        local banishAuraID = GetBanishAuraID(unitId)
+        if banishAuraID then
+            return true, IMMUNITY_SOURCE.special, banishAuraID
+        end
     end
 
-    -- Recorded school immunity is NPC-specific.
+    -- Durable learned/manual exact immunity is NPC-specific.
     if UnitIsPlayer(unitId) then
         return false
     end
 
-    local targetName = UnitName(unitId)
-    if not targetName or targetName == "" or targetName == "Unknown" then
-        local normalizedGuid = CleveRoids.NormalizeGUID(unitId)
-        if normalizedGuid and lib and lib.guidToName then
-            targetName = lib.guidToName[normalizedGuid]
-        end
-    end
-    if not targetName or targetName == "" then
-        return false
-    end
+    local targetName = ResolveImmunityTargetName(unitId)
+    if not targetName then return false end
 
-    return SchoolImmune(unitId, normalized, targetName)
+    return DurableDimensionImmune(unitId, normalized, targetName)
 end
 
 -- Resolve one canonical immunity dimension with explicit composition.
@@ -8537,10 +8647,13 @@ function CleveRoids.CheckImmunity(unitId, spellOrSchool)
         return false
     end
 
-    -- Check if input is a CC type (stun, fear, root, etc.)
+    -- Exact mechanic/dispel/broad tokens use the canonical typed query path.
     local inputLower = string.lower(spellOrSchool)
     local normalizedInput = NormalizeImmunityType(inputLower)
-    if normalizedInput and CC_IMMUNITY_TYPES[normalizedInput] then
+    if normalizedInput and
+       (CC_IMMUNITY_TYPES[normalizedInput]
+        or DISPEL_IMMUNITY_TYPES[normalizedInput]
+        or BROAD_IMMUNITY_TYPES[normalizedInput]) then
         local immune, source, detail = CheckImmunityType(unitId, normalizedInput)
         if immune then
             return true, normalizedInput, source, detail
@@ -8662,48 +8775,13 @@ function CleveRoids.CheckImmunity(unitId, spellOrSchool)
         end
     end
 
-    -- Check immunity data for this school
-    if not CleveRoids_ImmunityData[school] then
-        return false
+    -- "unknown" is not a learnable/queryable HearthDB dimension. Keep only
+    -- the explicit manual/static spell-specific compatibility override.
+    local staticImmune, staticSource, staticDetail =
+        CheckStaticImmunityData(unitId, school, targetName, checkSpellName)
+    if staticImmune then
+        return true, school, staticSource, staticDetail
     end
-
-    local immunityData = CleveRoids_ImmunityData[school][targetName]
-
-    -- No immunity data for this NPC
-    if not immunityData then
-        return false
-    end
-
-    -- Permanent immunity
-    if immunityData == true then
-        return true, school, IMMUNITY_SOURCE.recorded
-    end
-
-    -- Table-based immunity data (buff-based or unknown school with spell name)
-    if type(immunityData) == "table" then
-        -- For unknown school, check if spell name matches
-        if school == "unknown" and immunityData.spell and checkSpellName then
-            if immunityData.spell ~= checkSpellName then
-                return false  -- NPC is immune to a different spell, not this one
-            end
-        end
-
-        -- Check buff-based immunity (if NPC has the required buff). One by-name
-        -- lookup across the unit's buffs via C_UnitAuras -- no 32-slot scan.
-        if immunityData.buff then
-            if CleveRoids.ClassicAPI.GetAuraDataBySpellName(unitId, immunityData.buff, "HELPFUL") then
-                return true, school, IMMUNITY_SOURCE.conditional, immunityData.buff
-            end
-            -- Buff not found, not currently immune
-            return false
-        end
-
-        -- Unknown school permanent immunity (has spell name, no buff requirement)
-        if immunityData.spell and not immunityData.buff then
-            return true, "unknown", IMMUNITY_SOURCE.recorded, immunityData.spell
-        end
-    end
-
     return false
 end
 
@@ -8745,7 +8823,24 @@ local IMMUNITY_DEBUG_SPELL_TYPES = {
     "all", "spell", "physical", "holy", "fire", "nature", "frost", "shadow", "arcane", "bleed"
 }
 
-local function AddRecordedImmunityDebugEntry(list, immunityType, mechanicID, storageKey, targetName, unitId)
+local function AddKnowledgeImmunityDebugEntry(list, mobID, immunityType, mechanicID)
+    if not mobID then return end
+    local knowledge = CleveRoids.ImmunityKnowledge
+    if not knowledge or not knowledge.GetFact then return end
+
+    local fact = knowledge.GetFact(mobID, immunityType)
+    if not fact or fact.verdict ~= "immune" then return end
+
+    table.insert(list, {
+        immunityType = immunityType,
+        mechanicID = mechanicID,
+        source = IMMUNITY_SOURCE.knowledge,
+        active = true,
+        detail = fact.proofSource,
+    })
+end
+
+local function AddStaticImmunityDebugEntry(list, immunityType, mechanicID, storageKey, targetName, unitId)
     local bucket = CleveRoids_ImmunityData and CleveRoids_ImmunityData[storageKey]
     local data = bucket and bucket[targetName]
     if not data then return end
@@ -8753,7 +8848,7 @@ local function AddRecordedImmunityDebugEntry(list, immunityType, mechanicID, sto
     local entry = {
         immunityType = immunityType,
         mechanicID = mechanicID,
-        source = IMMUNITY_SOURCE.recorded,
+        source = IMMUNITY_SOURCE.static,
         active = true,
     }
 
@@ -8792,11 +8887,13 @@ function CleveRoids.GetImmunityDebugSnapshot(unitId)
     if not snapshot.isPlayer and snapshot.name and snapshot.name ~= "" then
         for _, info in ipairs(IMMUNITY_DEBUG_CC_TYPES) do
             local storageKey = info.type == "cc" and "cc" or ("cc_" .. info.type)
-            AddRecordedImmunityDebugEntry(snapshot.recordedCC, info.type, info.mechanicID, storageKey, snapshot.name, unitId)
+            AddKnowledgeImmunityDebugEntry(snapshot.recordedCC, snapshot.creatureEntry, info.type, info.mechanicID)
+            AddStaticImmunityDebugEntry(snapshot.recordedCC, info.type, info.mechanicID, storageKey, snapshot.name, unitId)
         end
 
         for _, immunityType in ipairs(IMMUNITY_DEBUG_SPELL_TYPES) do
-            AddRecordedImmunityDebugEntry(snapshot.recordedSpell, immunityType, nil, immunityType, snapshot.name, unitId)
+            AddKnowledgeImmunityDebugEntry(snapshot.recordedSpell, snapshot.creatureEntry, immunityType, nil)
+            AddStaticImmunityDebugEntry(snapshot.recordedSpell, immunityType, nil, immunityType, snapshot.name, unitId)
         end
 
         local unknownBucket = CleveRoids_ImmunityData and CleveRoids_ImmunityData.unknown
@@ -8804,7 +8901,7 @@ function CleveRoids.GetImmunityDebugSnapshot(unitId)
         if unknownData then
             table.insert(snapshot.legacy, {
                 immunityType = "unknown",
-                source = IMMUNITY_SOURCE.recorded,
+                source = IMMUNITY_SOURCE.static,
                 buff = type(unknownData) == "table" and unknownData.buff or nil,
                 spell = type(unknownData) == "table" and unknownData.spell or nil,
             })
@@ -8813,7 +8910,9 @@ function CleveRoids.GetImmunityDebugSnapshot(unitId)
 
     for _, info in ipairs(IMMUNITY_DEBUG_CC_TYPES) do
         local immune, source, detail = CheckExactImmunityType(unitId, info.type)
-        if immune and source ~= IMMUNITY_SOURCE.recorded and source ~= IMMUNITY_SOURCE.conditional then
+        if immune and source ~= IMMUNITY_SOURCE.knowledge
+           and source ~= IMMUNITY_SOURCE.static
+           and source ~= IMMUNITY_SOURCE.conditional then
             table.insert(snapshot.liveCC, {
                 immunityType = info.type,
                 mechanicID = info.mechanicID,
@@ -8825,7 +8924,9 @@ function CleveRoids.GetImmunityDebugSnapshot(unitId)
 
     for _, immunityType in ipairs(IMMUNITY_DEBUG_SPELL_TYPES) do
         local immune, source, detail = CheckExactImmunityType(unitId, immunityType)
-        if immune and source ~= IMMUNITY_SOURCE.recorded and source ~= IMMUNITY_SOURCE.conditional then
+        if immune and source ~= IMMUNITY_SOURCE.knowledge
+           and source ~= IMMUNITY_SOURCE.static
+           and source ~= IMMUNITY_SOURCE.conditional then
             table.insert(snapshot.liveSpell, {
                 immunityType = immunityType,
                 source = source,
@@ -9729,7 +9830,13 @@ local function ProcessSpellMissSelf(spellId, targetGuid, missInfo)
                     -- routes are school/damage immunity. Both map to the same SCRM
                     -- school/action dimension, so this is the narrow direct case
                     -- where permanent learning is safe.
-                    RecordImmunity(targetName, spellName, nil, spellId, true)
+                    -- The normalized observation pipeline receives this same
+                    -- miss event and is the sole production learner. Retain the
+                    -- old classifier decision for diagnostics, but suppress its
+                    -- SavedVariables write after cutover.
+                    if not GeneralizedImmunityLearnerActive() then
+                        RecordImmunity(targetName, spellName, nil, spellId, true)
+                    end
                     CleveRoids.ImmunityDebugDecision(
                         targetGuid, targetName, spellId, missInfo, queryUnit,
                         IMMUNITY_DEBUG_CODE.DECISION_ACCEPT_SCHOOL, IMMUNITY_DEBUG_CODE.REASON_NONE,

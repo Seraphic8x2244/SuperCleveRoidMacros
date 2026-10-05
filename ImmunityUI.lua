@@ -1,6 +1,8 @@
 --[[
     Immunity testing/management UI
-    Framework-stage inspection surface only.  No immunity inference lives here.
+    Production immunity inspection/management surface. No inference lives here.
+    Learned permanent facts are read from ImmunityKnowledge/HearthDB; the
+    SavedVariables table is retained only for explicit manual/static overrides.
 ]]
 local _G = _G or getfenv(0)
 local CleveRoids = _G.CleveRoids or {}
@@ -304,6 +306,69 @@ local function AddLines(list, lines)
     end
 end
 
+local function StorageKeyForDimension(dimension)
+    for _, column in ipairs(CC_COLUMNS) do
+        if column.type == dimension then
+            return column.key
+        end
+    end
+    for _, column in ipairs(SPELL_COLUMNS) do
+        if column.type == dimension then
+            return column.key
+        end
+    end
+    return nil
+end
+
+-- Build the existing UI columns from the same production inputs used by macro
+-- queries: confirmed HearthDB facts plus explicit manual/static overrides.
+local function BuildProductionDisplayData()
+    local data = {}
+
+    local function addLine(key, line)
+        if not key or not line then return end
+        data[key] = data[key] or {}
+        table.insert(data[key], line)
+    end
+
+    local knowledge = CleveRoids.ImmunityKnowledge
+    if knowledge and knowledge.GetConfirmedImmunities then
+        local facts = knowledge.GetConfirmedImmunities()
+        for _, fact in ipairs(facts) do
+            local key = StorageKeyForDimension(fact.dimension)
+            if key then
+                local label = fact.name
+                if not label or label == "" then
+                    label = "Mob " .. tostring(fact.mobID or "?")
+                end
+                if fact.mobID then
+                    label = label .. " [Mob ID " .. tostring(fact.mobID) .. "]"
+                end
+                addLine(key, label)
+            end
+        end
+    end
+
+    -- Data-version 7 guarantees these name-keyed entries are user-created
+    -- manual/static overrides, not learned facts.
+    local staticData = CleveRoids_ImmunityData or {}
+    local function addStaticColumns(columns)
+        for _, column in ipairs(columns) do
+            local lines = SortedBucketLines(staticData[column.key])
+            for _, line in ipairs(lines) do
+                addLine(column.key, line .. " [manual]")
+            end
+        end
+    end
+    addStaticColumns(CC_COLUMNS)
+    addStaticColumns(SPELL_COLUMNS)
+
+    for _, lines in pairs(data) do
+        table.sort(lines)
+    end
+    return data
+end
+
 local function ColumnHeader(column, count)
     if column.mechanicID then
         return tostring(column.mechanicID) .. " " .. column.label .. " (" .. tostring(count) .. ")"
@@ -419,14 +484,14 @@ local function CreateHorizontalSection(parent, topOffset, height, columns, nameP
     return section
 end
 
-local function RefreshHorizontalSection(section)
+local function RefreshHorizontalSection(section, data)
     local x = 0
     local visibleCount = 0
-    local data = CleveRoids_ImmunityData or {}
+    data = data or {}
 
     for _, column in ipairs(section.columns) do
-        local bucket = data[column.key]
-        local count = TableCount(bucket)
+        local lines = data[column.key] or {}
+        local count = table.getn(lines)
         local visible = true
         if column.broad and count == 0 then
             visible = false
@@ -437,7 +502,7 @@ local function RefreshHorizontalSection(section)
             column.frame:SetPoint("TOPLEFT", section.child, "TOPLEFT", x, 0)
             column.frame:Show()
             column.header:SetText(ColumnHeader(column, count))
-            AddLines(column.list, SortedBucketLines(bucket))
+            AddLines(column.list, lines)
             x = x + COLUMN_WIDTH + COLUMN_GAP
             visibleCount = visibleCount + 1
         else
@@ -480,7 +545,7 @@ end
 local function RefreshLegacyUnknown()
     local bucket = CleveRoids_ImmunityData and CleveRoids_ImmunityData.unknown
     local count = TableCount(bucket)
-    legacyTitle:SetText("Legacy / diagnostic unknown (" .. tostring(count) .. ")")
+    legacyTitle:SetText("Manual/static unknown (" .. tostring(count) .. ")")
     AddLines(legacyList, SortedBucketLines(bucket))
 end
 
@@ -628,8 +693,9 @@ end
 
 local function RefreshAll()
     if not mainFrame then return end
-    RefreshHorizontalSection(ccSection)
-    RefreshHorizontalSection(spellSection)
+    local productionData = BuildProductionDisplayData()
+    RefreshHorizontalSection(ccSection, productionData)
+    RefreshHorizontalSection(spellSection, productionData)
     RefreshLegacyUnknown()
     RefreshTargetPanel()
 end
@@ -664,7 +730,7 @@ local function BackupCurrent(reason)
         data = DeepCopy(CleveRoids_ImmunityData or {}),
     })
 
-    CleveRoids.Print("Immunity backup created: " .. label)
+    CleveRoids.Print("Manual/static override backup created: " .. label)
     if historyDialog and historyDialog:IsShown() then
         historyDialog.index = table.getn(backups)
         historyDialog.Refresh()
@@ -711,7 +777,7 @@ end
 
 local function ClearAllStorage()
     CleveRoids_ImmunityData = {}
-    CleveRoids.Print("Cleared all learned immunity data")
+    CleveRoids.Print("Cleared all manual/static immunity overrides")
     NotifyDataChanged()
 end
 
@@ -719,7 +785,7 @@ local function BuildClearOptions(mode)
     local options = {}
 
     if mode == "cc" then
-        table.insert(options, { key = "*", label = "All CC immunity data" })
+        table.insert(options, { key = "*", label = "All manual CC overrides" })
         if TableCount(CleveRoids_ImmunityData and CleveRoids_ImmunityData.cc) > 0 then
             table.insert(options, { key = "cc", label = "Broad CC" })
         end
@@ -732,15 +798,15 @@ local function BuildClearOptions(mode)
             end
         end
     elseif mode == "spell" then
-        table.insert(options, { key = "*", label = "All spell/school immunity data" })
+        table.insert(options, { key = "*", label = "All manual spell/school overrides" })
         for _, column in ipairs(SPELL_COLUMNS) do
             table.insert(options, { key = column.key, label = column.label })
         end
         if TableCount(CleveRoids_ImmunityData and CleveRoids_ImmunityData.unknown) > 0 then
-            table.insert(options, { key = "unknown", label = "Legacy unknown" })
+            table.insert(options, { key = "unknown", label = "Manual/static unknown" })
         end
     else
-        table.insert(options, { key = "*", label = "ALL learned immunity data" })
+        table.insert(options, { key = "*", label = "ALL manual/static overrides" })
     end
 
     return options
@@ -1071,7 +1137,7 @@ local function CreateMainFrame()
 
     legacyTitle = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     legacyTitle:SetPoint("TOPLEFT", frame, "TOPLEFT", 20, -574)
-    legacyTitle:SetText("Legacy / diagnostic unknown (0)")
+    legacyTitle:SetText("Manual/static unknown (0)")
 
     legacyList = CreateMessageList(frame)
     legacyList:SetPoint("TOPLEFT", frame, "TOPLEFT", 20, -593)

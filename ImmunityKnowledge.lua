@@ -2,7 +2,7 @@ local _G = _G or getfenv(0)
 local CleveRoids = _G.CleveRoids or {}
 _G.CleveRoids = CleveRoids
 
--- Slice 5 durable knowledge reducer.
+-- Slice 6 production knowledge backend.
 --
 -- This module consumes normalized observations and persists:
 --   * authoritative per-dimension vulnerability facts;
@@ -11,13 +11,23 @@ _G.CleveRoids = CleveRoids
 --   * revocation of a confirmed permanent fact on authoritative success; and
 --   * an independent dynamic/conditional-immunity suspicion flag after revocation.
 --
--- Broad-immunity promotion, production query cutover and UI/SCT remain deferred.
+-- Production queries now consume these facts. Broad-immunity promotion and
+-- Slice 7 UI/SCT diagnostics remain deferred.
 local Pipeline = CleveRoids.ImmunityObservations
 local Storage = CleveRoids.ImmunityStorage
 local Transient = CleveRoids.ImmunityTransient
 
 local Knowledge = CleveRoids.ImmunityKnowledge or {}
 CleveRoids.ImmunityKnowledge = Knowledge
+
+-- Presence of this module is the production cutover gate. It deliberately does
+-- not depend on storage readiness: HearthDB is required, and an unavailable
+-- database must not silently reactivate the legacy SavedVariables learner.
+Knowledge.ACTIVE = true
+
+function Knowledge.IsActive()
+    return Knowledge.ACTIVE == true
+end
 
 local CANDIDATE_DIMENSIONS = {
     physical = true,
@@ -51,8 +61,8 @@ local CANDIDATE_DIMENSIONS = {
     poison = true,
 }
 
--- Broad facts are reserved by the schema and later slices, but Slice 4 never
--- manufactures broad-immunity candidates or promotes them.
+-- Broad facts are reserved/queryable by the production model, but the bounded
+-- Slice 6 learner still never manufactures broad-immunity candidates or promotes them.
 local FACT_DIMENSIONS = {}
 for dimension in pairs(CANDIDATE_DIMENSIONS) do
     FACT_DIMENSIONS[dimension] = true
@@ -89,8 +99,15 @@ local diagnostics = {
     hypothesesBlockedDynamic = 0,
     hypothesesResolvedKnownImmune = 0,
     hypothesesDiscardedDynamic = 0,
+    knownVulnerableFastPaths = 0,
     last = nil,
 }
+
+local function notifyKnowledgeChanged()
+    if CleveRoids.NotifyImmunityDataChanged then
+        CleveRoids.NotifyImmunityDataChanged()
+    end
+end
 
 local function incrementLast(kind, observation, detail)
     diagnostics.last = {
@@ -422,6 +439,46 @@ function Knowledge.GetFact(mobID, dimension)
     }
 end
 
+-- Production/UI read seam for confirmed permanent facts. Optional dimension
+-- narrows the result without changing the inference model.
+function Knowledge.GetConfirmedImmunities(dimension)
+    if not storageReady() then return {} end
+    if dimension ~= nil and not FACT_DIMENSIONS[dimension] then return {} end
+
+    local where = " WHERE f.verdict = 'immune'"
+    if dimension ~= nil then
+        local dimensionSQL = quoteText(dimension, false)
+        if not dimensionSQL then return {} end
+        where = where .. " AND f.dimension = " .. dimensionSQL
+    end
+
+    local ok, rows = Storage.Query(
+        "SELECT f.mob_id, m.last_name AS name, f.dimension, f.dynamic_suspected, " ..
+        "f.proof_source, f.proof_spell_id, f.proof_event " ..
+        "FROM facts f LEFT JOIN mobs m ON m.mob_id = f.mob_id" ..
+        where ..
+        " ORDER BY f.dimension, m.last_name, f.mob_id"
+    )
+    if not ok then return {} end
+
+    local result = {}
+    local i
+    for i = 1, table.getn(rows) do
+        local row = rows[i]
+        table.insert(result, {
+            mobID = tonumber(row.mob_id),
+            name = row.name and tostring(row.name) or nil,
+            dimension = row.dimension and tostring(row.dimension) or nil,
+            verdict = "immune",
+            dynamicSuspected = tonumber(row.dynamic_suspected) == 1,
+            proofSource = row.proof_source,
+            proofSpellID = tonumber(row.proof_spell_id),
+            proofEvent = row.proof_event,
+        })
+    end
+    return result
+end
+
 function Knowledge.GetHypotheses(mobID)
     mobID = validMobID(mobID)
     if not mobID or not storageReady() then return {} end
@@ -721,7 +778,11 @@ local function confirmSingleCandidate(observation, mobID, dimension, existing)
         " AND NOT EXISTS (SELECT 1 FROM hypothesis_candidates c " ..
         "WHERE c.hypothesis_id = hypotheses.hypothesis_id);")
 
-    return executeTransaction(statements)
+    local ok, err = executeTransaction(statements)
+    if ok then
+        notifyKnowledgeChanged()
+    end
+    return ok, err
 end
 
 function Knowledge.GetSuspectedDimensions(mobID)
@@ -770,6 +831,29 @@ local function recordVulnerability(observation)
     if not factsOK then
         diagnostics.storageErrors = diagnostics.storageErrors + 1
         incrementLast("storage_error", observation, facts)
+        return
+    end
+
+    -- A repeated authoritative success for dimensions already known
+    -- vulnerable cannot change any durable conclusion. The first success that
+    -- established vulnerability already removed those candidates from every
+    -- hypothesis, so skip the hypothesis query and write transaction entirely.
+    local allKnownVulnerable = true
+    local fastIndex
+    for fastIndex = 1, table.getn(dimensions) do
+        if factVerdict(facts[dimensions[fastIndex]]) ~= "vulnerable" then
+            allKnownVulnerable = false
+            break
+        end
+    end
+    if allKnownVulnerable then
+        diagnostics.knownVulnerableFastPaths =
+            diagnostics.knownVulnerableFastPaths + 1
+        incrementLast(
+            "success_known_vulnerable",
+            observation,
+            table.concat(sortedCopy(dimensions), ",")
+        )
         return
     end
 
@@ -883,6 +967,8 @@ local function recordVulnerability(observation)
         incrementLast("storage_error", observation, err)
         return
     end
+
+    notifyKnowledgeChanged()
 
     diagnostics.vulnerabilitiesRecorded =
         diagnostics.vulnerabilitiesRecorded + table.getn(dimensions)
@@ -1097,6 +1183,7 @@ function Knowledge.GetDiagnostics()
         hypothesesBlockedDynamic = diagnostics.hypothesesBlockedDynamic,
         hypothesesResolvedKnownImmune = diagnostics.hypothesesResolvedKnownImmune,
         hypothesesDiscardedDynamic = diagnostics.hypothesesDiscardedDynamic,
+        knownVulnerableFastPaths = diagnostics.knownVulnerableFastPaths,
         last = diagnostics.last,
     }
 end
