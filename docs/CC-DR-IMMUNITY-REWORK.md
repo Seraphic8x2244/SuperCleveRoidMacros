@@ -941,13 +941,20 @@ Confirmed decisions after the audit:
   models;
 - the overhaul starts with a clean knowledge database. Do not migrate the old
   name-keyed immunity records into the new evidence store;
-- authoritative dimension-specific success outranks immunity evidence:
-  observed damage success disproves permanent immunity to that exact school /
-  action dimension; authoritative aura presence disproves permanent immunity to
-  that exact CC/mechanic dimension;
+- authoritative dimension-specific success outranks permanent-immunity
+  evidence: observed damage success disproves permanent immunity to that exact
+  school/action dimension; authoritative aura presence disproves permanent
+  immunity to that exact CC/mechanic dimension;
 - vulnerability/susceptibility is persistent knowledge, not merely absence of
   an immunity. This prevents repeated re-investigation of dimensions already
   positively disproved;
+- permanent disposition and dynamic-immunity suspicion are separate axes. A
+  dimension can be positively known to succeed (therefore not permanently
+  immune) while also carrying a persistent "temporary/conditional immunity
+  suspected" flag when credible immunity evidence has been observed in another
+  context. This covers uncatalogued temporary auras, boss-script phases and
+  spawn/encounter-specific random immunity profiles without erasing either
+  observation;
 - ambiguous IMMUNE observations create linked candidate hypotheses rather than
   independent flat "suspected" facts. A candidate becomes confirmed immune only
   when all other valid permanent candidates have been positively disproved and
@@ -956,17 +963,21 @@ Confirmed decisions after the audit:
   original immune observation is discarded as unresolved/temporary/otherwise
   non-permanent evidence; it must not manufacture another immunity;
 - if an already confirmed permanent immunity later succeeds authoritatively for
-  the same dimension, success wins immediately and the permanent fact becomes
-  vulnerable/susceptible. Contradiction is useful as a diagnostic transition,
-  not a reason to preserve a false permanent immunity;
+  the same dimension, success wins immediately for the permanent disposition:
+  the permanent immunity is revoked and the dimension becomes
+  vulnerable/susceptible. Because the earlier immunity evidence was credible,
+  also set "temporary/conditional immunity suspected" rather than discarding
+  that observation. A merely ambiguous candidate that is later disproved does
+  not set this dynamic flag; it is simply eliminated from its hypothesis;
 - keep compact conclusion provenance only (for example direct/comparative and a
   proof spell/event kind), not raw combat history.
 
 Recommended HearthDB shape:
 
 - `mobs`: Mob ID plus lightweight display metadata such as last known name;
-- `facts`: one durable row per Mob-ID + dimension, with verdict
-  `immune` or `vulnerable` plus compact proof/provenance fields;
+- `facts`: one durable row per Mob-ID + dimension, with permanent verdict
+  `immune` or `vulnerable`, an independent dynamic-immunity suspicion flag,
+  and compact proof/provenance fields;
 - `hypotheses`: unresolved ambiguous observations that still matter;
 - `hypothesis_candidates`: the linked candidate dimensions for each unresolved
   hypothesis.
@@ -983,6 +994,10 @@ candidate icons/borders:
 yellow border = immunity candidate / suspect
 green border  = candidate positively disproved (vulnerable)
 red border    = immunity confirmed
+
+The x/y/z letters used during design discussion are shorthand only and must
+never appear in the SCT output. A separate visual treatment for
+temporary/conditional immunity suspicion will be chosen later.
 ```
 
 Conceptually, one observation can progress:
