@@ -137,9 +137,16 @@ local function classifyAuraEffects(observation)
     if not CleveRoids.GetTransientImmunityAuraEffects then
         return {}
     end
+
+    local mobID = observation.targetMobID
+    if not mobID and observation.targetGUID then
+        local state = getTargetState(observation.targetGUID, nil, false)
+        mobID = state and state.mobID or nil
+    end
+
     return CleveRoids.GetTransientImmunityAuraEffects(
         observation.spellID,
-        observation.targetMobID
+        mobID
     )
 end
 
