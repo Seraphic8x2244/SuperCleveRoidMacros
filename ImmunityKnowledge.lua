@@ -300,6 +300,13 @@ local function hypothesisCandidates(observation)
     if not observation or not profile then return result end
 
     if observation.failurePath == "whole_spell" then
+        -- A static target-creature restriction is an alternate non-permanent
+        -- vMaNGOS IMMUNE path. Because it is not a durable immunity dimension,
+        -- do not create a hypothesis that Slice 5 could later over-confirm.
+        if profile.targetCreatureType and profile.targetCreatureType > 0 then
+            return result
+        end
+
         -- vMaNGOS generic IMMUNE: only whole-spell causes belong here. Per-effect
         -- mechanics are intentionally excluded because those failures are silent.
         addDimension(result, seen, profile.school)
@@ -309,16 +316,10 @@ local function hypothesisCandidates(observation)
     end
 
     if observation.failurePath == "effect_mask_zero" then
-        -- vMaNGOS IMMUNE2: school/dispel immunity does not identify this outcome.
-        -- Retain only recognized per-effect dimensions; unknown effect causes are
-        -- not invented as durable facts.
-        local i
-        for i = 1, 3 do
-            local effect = profile.effects and profile.effects[i] or nil
-            if effect then
-                addDimension(result, seen, effect.mechanicDimension)
-            end
-        end
+        -- vMaNGOS IMMUNE2 can represent per-effect mechanic, aura-state,
+        -- effect-type, or other effect-mask elimination. Slice 4 does not model
+        -- every one of those as a durable dimension, so storing only the known
+        -- subset would make a later single-candidate confirmation unsafe.
         return result
     end
 
