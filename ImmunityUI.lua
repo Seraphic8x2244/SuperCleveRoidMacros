@@ -262,21 +262,39 @@ local function CreateMessageList(parent)
     return list
 end
 
-local LEARNING_SCT_LIFETIME = 3.5
-local LEARNING_SCT_FADE_START = 2.7
+-- Learning alerts are presentation-only consumers of committed learner transitions.
 local LEARNING_SCT_STATE = {
-    candidate = { label = "Candidate", color = { 1.0, 0.82, 0.0 } },
-    disproved = { label = "Disproved", color = { 0.2, 1.0, 0.3 } },
-    confirmed = { label = "Confirmed permanent", color = { 1.0, 0.2, 0.2 } },
-    conditional = { label = "Temporary/conditional suspected", color = { 1.0, 0.55, 0.0 } },
+    candidate = { label = "Immunity Detected!", color = { 1.0, 0.82, 0.0 } },
+    disproved = { label = "Immunity Resolved!", color = { 0.2, 1.0, 0.3 } },
+    confirmed = { label = "Immunity Resolved!", color = { 1.0, 0.2, 0.2 } },
+    conditional = { label = "Immunity Resolved!", color = { 1.0, 0.55, 0.0 } },
 }
+local learningAlertTemplate
+local learningAlertDurationSlider
+local learningAlertDurationValue
+local learningAlertLockButton
+local LEARNING_ALERT_ICON = 34
+local LEARNING_ALERT_PAIR_GAP = 9
+
+local function GetLearningAlertDuration()
+    local value = CleveRoidMacros and tonumber(CleveRoidMacros.learningImmunityAlertDuration)
+    if value == nil then
+        -- Migrate the old boolean without silently enabling previously disabled alerts.
+        value = CleveRoidMacros and CleveRoidMacros.learningImmunitySCT == 1 and 4 or 0
+    end
+    return math.max(0, math.min(10, math.floor(value + 0.5)))
+end
 
 local function IsLearningSCTEnabled()
-    return CleveRoidMacros and CleveRoidMacros.learningImmunitySCT == 1
+    return GetLearningAlertDuration() > 0
+end
+
+local function GetLearningAlertPosition()
+    local settings = CleveRoidMacros or {}
+    return tonumber(settings.learningImmunityAlertX) or 0, tonumber(settings.learningImmunityAlertY) or 92
 end
 
 local function ClearLearningSCT()
-    local i
     for i = table.getn(learningSCTEntries), 1, -1 do
         local entry = learningSCTEntries[i]
         if entry.frame then entry.frame:Hide() end
@@ -286,149 +304,173 @@ local function ClearLearningSCT()
 end
 
 local function LayoutLearningSCT()
-    local i
+    local x, y = GetLearningAlertPosition()
     for i = 1, table.getn(learningSCTEntries) do
         local row = learningSCTEntries[i].frame
         row:ClearAllPoints()
-        row:SetPoint("CENTER", UIParent, "CENTER", 0, 92 + ((i - 1) * 42))
+        row:SetPoint("CENTER", UIParent, "CENTER", x, y + ((i - 1) * (row:GetHeight() + 5)))
     end
 end
 
 local function EnsureLearningSCTDriver()
     if learningSCTDriver then return end
-    learningSCTDriver = CreateFrame("Frame", "CleveRoidsImmunityLearningSCTDriver", UIParent)
+    learningSCTDriver = CreateFrame("Frame", "CleveRoidsImmunityLearningAlertDriver", UIParent)
     learningSCTDriver:SetScript("OnUpdate", function()
         local elapsed = arg1 or 0
+        local duration = GetLearningAlertDuration()
         local removed = false
-        local i
         for i = table.getn(learningSCTEntries), 1, -1 do
             local entry = learningSCTEntries[i]
             entry.elapsed = entry.elapsed + elapsed
-            if entry.elapsed >= LEARNING_SCT_LIFETIME then
+            if duration == 0 or entry.elapsed >= duration then
                 entry.frame:Hide()
                 table.remove(learningSCTEntries, i)
                 removed = true
-            elseif entry.elapsed > LEARNING_SCT_FADE_START then
-                local remaining = LEARNING_SCT_LIFETIME - entry.elapsed
-                local fadeLength = LEARNING_SCT_LIFETIME - LEARNING_SCT_FADE_START
-                entry.frame:SetAlpha(remaining / fadeLength)
+            else
+                local fadeStart = duration * (2.7 / 3.5)
+                local alpha = 1
+                if entry.elapsed > fadeStart then
+                    alpha = (duration - entry.elapsed) / (duration - fadeStart)
+                end
+                entry.frame:SetAlpha(alpha)
             end
         end
         if removed then LayoutLearningSCT() end
-        if table.getn(learningSCTEntries) == 0 then
-            learningSCTDriver:Hide()
-        end
+        if table.getn(learningSCTEntries) == 0 then learningSCTDriver:Hide() end
     end)
     learningSCTDriver:Hide()
 end
 
-local function CreateLearningSCTIcon(parent, dimension, fallbackSpellID, state)
-    local holder = CreateFrame("Frame", NewWidgetName("SCTIcon"), parent)
-    holder:SetWidth(28)
-    holder:SetHeight(28)
-    holder:SetBackdrop({
-        edgeFile = "Interface\\Buttons\\WHITE8x8",
-        edgeSize = 2,
-    })
-    local color = state.color
-    holder:SetBackdropBorderColor(color[1], color[2], color[3], 1)
-
+local function CreateLearningSCTIcon(parent, spellID, dimension, state)
+    local holder = CreateFrame("Frame", NewWidgetName("AlertIcon"), parent)
+    holder:SetWidth(LEARNING_ALERT_ICON)
+    holder:SetHeight(LEARNING_ALERT_ICON)
+    holder:SetBackdrop({ edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 2 })
+    local c = state.color
+    holder:SetBackdropBorderColor(c[1], c[2], c[3], 1)
     local icon = holder:CreateTexture(nil, "ARTWORK")
     icon:SetPoint("TOPLEFT", holder, "TOPLEFT", 2, -2)
     icon:SetPoint("BOTTOMRIGHT", holder, "BOTTOMRIGHT", -2, 2)
-    local representativeSpellID = DIMENSION_ICON_SPELL_IDS[dimension] or fallbackSpellID
-    local texture = representativeSpellID and C_Spell.GetSpellTexture(representativeSpellID)
+    local textureID = dimension and DIMENSION_ICON_SPELL_IDS[dimension] or spellID
+    local texture = textureID and C_Spell.GetSpellTexture(textureID)
     icon:SetTexture(texture or CleveRoids.unknownTexture or "Interface\\Icons\\INV_Misc_QuestionMark")
     icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
     return holder
 end
 
-local function ShowLearningTransition(transition)
-    if not IsLearningSCTEnabled() or type(transition) ~= "table" then return end
-    local state = LEARNING_SCT_STATE[transition.state]
-    if not state or table.getn(transition.dimensions or {}) == 0 then return end
-
-    EnsureLearningSCTDriver()
-
-    local row = CreateFrame("Frame", NewWidgetName("SCTRow"), UIParent)
-    row:SetWidth(480)
-    row:SetHeight(38)
+local function CreateAlertSurface()
+    local row = CreateFrame("Frame", NewWidgetName("AlertRow"), UIParent)
+    row:SetHeight(46)
     row:SetFrameStrata("DIALOG")
     row:SetBackdrop({
         bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
         edgeFile = "Interface\\Buttons\\WHITE8x8",
-        tile = true,
-        tileSize = 8,
-        edgeSize = 1,
+        tile = true, tileSize = 8, edgeSize = 1,
         insets = { left = 1, right = 1, top = 1, bottom = 1 },
     })
     row:SetBackdropColor(0, 0, 0, 0.72)
-    row:SetBackdropBorderColor(state.color[1], state.color[2], state.color[3], 1)
+    return row
+end
 
+local function ShowLearningTransition(transition)
+    if not IsLearningSCTEnabled() or type(transition) ~= "table" then return end
+    local state = LEARNING_SCT_STATE[transition.state]
     local dimensions = transition.dimensions or {}
-    local labels = {}
-    local previous
-    local i
+    if not state or table.getn(dimensions) == 0 then return end
+    EnsureLearningSCTDriver()
+
+    local row = CreateAlertSurface()
+    row:SetBackdropBorderColor(state.color[1], state.color[2], state.color[3], 1)
+    local title = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    title:SetPoint("TOPLEFT", row, "TOPLEFT", 7, -7)
+    title:SetText(state.label)
+    title:SetTextColor(state.color[1], state.color[2], state.color[3])
+    local mob = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    mob:SetPoint("TOPLEFT", row, "TOPLEFT", 7, -26)
+    mob:SetText(transition.targetName and transition.targetName ~= "" and transition.targetName or "Unknown target")
+
+    local textWidth = math.max(title:GetStringWidth(), mob:GetStringWidth()) + 16
+    local x = textWidth + 3
+    local maxWidth = math.min(750, UIParent:GetWidth() - 60)
+    local y = -6
+    local pairWidth = LEARNING_ALERT_ICON * 2 + 2
+    -- Each evidence unit is placed atomically: never split spell and dimension.
     for i = 1, table.getn(dimensions) do
-        local dimension = dimensions[i]
-        table.insert(labels, TYPE_LABELS[dimension] or tostring(dimension))
-        if i <= 6 then
-            local icon = CreateLearningSCTIcon(row, dimension, transition.spellID, state)
-            if previous then
-                icon:SetPoint("LEFT", previous, "RIGHT", 3, 0)
-            else
-                icon:SetPoint("LEFT", row, "LEFT", 5, 0)
-            end
-            previous = icon
+        if x + pairWidth + 7 > maxWidth and x > textWidth + 3 then
+            x = textWidth + 3
+            y = y - (LEARNING_ALERT_ICON + 5)
         end
+        local dimension = dimensions[i]
+        -- A confirmation may originate in an earlier ambiguous observation.
+        -- Use its persisted provenance spell where provided, never invent history.
+        local spellID = transition.state == "confirmed"
+            and (transition.proofSpellID or transition.spellID) or transition.spellID
+        local spell = CreateLearningSCTIcon(row, spellID, nil, state)
+        spell:SetPoint("TOPLEFT", row, "TOPLEFT", x, y)
+        local dim = CreateLearningSCTIcon(row, nil, dimension, state)
+        dim:SetPoint("LEFT", spell, "RIGHT", 2, 0)
+        x = x + pairWidth + LEARNING_ALERT_PAIR_GAP
     end
-
-    local text = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    if previous then
-        text:SetPoint("LEFT", previous, "RIGHT", 6, 8)
-    else
-        text:SetPoint("LEFT", row, "LEFT", 8, 8)
-    end
-    text:SetPoint("RIGHT", row, "RIGHT", -6, 8)
-    text:SetJustifyH("LEFT")
-    text:SetTextColor(state.color[1], state.color[2], state.color[3])
-    text:SetText(state.label .. ": " .. table.concat(labels, ", "))
-
-    local target = transition.targetName
-    if not target or target == "" then
-        target = transition.mobID and ("Mob " .. tostring(transition.mobID)) or "Unknown target"
-    end
-    local detail = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    if previous then
-        detail:SetPoint("LEFT", previous, "RIGHT", 6, -8)
-    else
-        detail:SetPoint("LEFT", row, "LEFT", 8, -8)
-    end
-    detail:SetPoint("RIGHT", row, "RIGHT", -6, -8)
-    detail:SetJustifyH("LEFT")
-
-    local detailText = target
-    if transition.mobID then
-        detailText = detailText .. " [Mob ID " .. tostring(transition.mobID) .. "]"
-    end
-    if transition.spellID then
-        local spellName = C_Spell.GetSpellName(transition.spellID)
-        detailText = detailText .. " - " .. (spellName or "Spell") .. " " .. tostring(transition.spellID)
-    end
-    detail:SetText(detailText)
-
+    row:SetWidth(math.max(textWidth + 8, x + 4))
+    row:SetHeight(math.max(46, -y + LEARNING_ALERT_ICON + 6))
     table.insert(learningSCTEntries, { frame = row, elapsed = 0 })
     LayoutLearningSCT()
     row:Show()
     learningSCTDriver:Show()
 end
 
-local function SetLearningSCTEnabled(enabled)
+local function EnsureLearningAlertTemplate()
+    if learningAlertTemplate then return end
+    local frame = CreateAlertSurface()
+    frame:SetWidth(270)
+    frame:SetHeight(46)
+    frame:SetMovable(true)
+    frame:EnableMouse(true)
+    frame:RegisterForDrag("LeftButton")
+    frame:SetClampedToScreen(true)
+    frame:SetScript("OnDragStart", function() frame:StartMoving() end)
+    frame:SetScript("OnDragStop", function()
+        frame:StopMovingOrSizing()
+        local x, y = frame:GetCenter()
+        local px, py = UIParent:GetCenter()
+        CleveRoidMacros = CleveRoidMacros or {}
+        CleveRoidMacros.learningImmunityAlertX = x - px
+        CleveRoidMacros.learningImmunityAlertY = y - py
+        LayoutLearningSCT()
+    end)
+    local heading = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    heading:SetPoint("TOPLEFT", frame, "TOPLEFT", 7, -7)
+    heading:SetText("Immunity Detected!")
+    local name = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    name:SetPoint("TOPLEFT", frame, "TOPLEFT", 7, -26)
+    name:SetText("Mob Name (drag to position)")
+    learningAlertTemplate = frame
+    frame:Hide()
+end
+
+local function SetLearningAlertUnlocked(unlocked)
     CleveRoidMacros = CleveRoidMacros or {}
-    CleveRoidMacros.learningImmunitySCT = enabled and 1 or 0
-    if not enabled then ClearLearningSCT() end
-    if learningSCTToggle then
-        learningSCTToggle:SetChecked(enabled and 1 or 0)
+    EnsureLearningAlertTemplate()
+    if unlocked then
+        local x, y = GetLearningAlertPosition()
+        learningAlertTemplate:ClearAllPoints()
+        learningAlertTemplate:SetPoint("CENTER", UIParent, "CENTER", x, y)
+        learningAlertTemplate:Show()
+    else
+        learningAlertTemplate:Hide()
+    end
+    if learningAlertLockButton then
+        learningAlertLockButton:SetText(unlocked and "Lock" or "Unlock")
+    end
+end
+
+local function SetLearningAlertDuration(value)
+    value = math.max(0, math.min(10, math.floor((tonumber(value) or 0) + 0.5)))
+    CleveRoidMacros = CleveRoidMacros or {}
+    CleveRoidMacros.learningImmunityAlertDuration = value
+    if value == 0 then ClearLearningSCT() end
+    if learningAlertDurationValue then
+        learningAlertDurationValue:SetText(tostring(value) .. "s")
     end
 end
 
@@ -1419,18 +1461,33 @@ local function CreateMainFrame()
     local close = CreateFrame("Button", NewWidgetName("Close"), frame, "UIPanelCloseButton")
     close:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -6, -6)
 
-    learningSCTToggle = CreateFrame("CheckButton", NewWidgetName("LearningSCT"), frame, "UICheckButtonTemplate")
-    learningSCTToggle:SetWidth(22)
-    learningSCTToggle:SetHeight(22)
-    learningSCTToggle:SetPoint("TOPLEFT", frame, "TOPLEFT", 18, -10)
-    learningSCTToggle:SetChecked(IsLearningSCTEnabled() and 1 or 0)
-    learningSCTToggle:SetScript("OnClick", function()
-        SetLearningSCTEnabled(learningSCTToggle:GetChecked() and true or false)
+    local alertLabel = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    alertLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", 16, -15)
+    alertLabel:SetText("Immunity Learning Alerts")
+    local durationLabel = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    durationLabel:SetPoint("LEFT", alertLabel, "RIGHT", 12, 0)
+    durationLabel:SetText("Duration")
+    learningAlertDurationSlider = CreateFrame("Slider", NewWidgetName("AlertDuration"), frame, "OptionsSliderTemplate")
+    learningAlertDurationSlider:SetWidth(135)
+    learningAlertDurationSlider:SetHeight(16)
+    learningAlertDurationSlider:SetPoint("LEFT", durationLabel, "RIGHT", 16, 0)
+    learningAlertDurationSlider:SetMinMaxValues(0, 10)
+    learningAlertDurationSlider:SetValueStep(1)
+    learningAlertDurationSlider:SetValue(GetLearningAlertDuration())
+    learningAlertDurationSlider:SetScript("OnValueChanged", function()
+        SetLearningAlertDuration(learningAlertDurationSlider:GetValue())
     end)
-
-    local learningSCTLabel = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    learningSCTLabel:SetPoint("LEFT", learningSCTToggle, "RIGHT", 2, 0)
-    learningSCTLabel:SetText("Learning SCT")
+    learningAlertDurationValue = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    learningAlertDurationValue:SetPoint("LEFT", learningAlertDurationSlider, "RIGHT", 9, 0)
+    learningAlertDurationValue:SetText(tostring(GetLearningAlertDuration()) .. "s")
+    learningAlertLockButton = CreateFrame("Button", NewWidgetName("AlertLock"), frame, "UIPanelButtonTemplate")
+    learningAlertLockButton:SetWidth(64)
+    learningAlertLockButton:SetHeight(22)
+    learningAlertLockButton:SetPoint("LEFT", learningAlertDurationValue, "RIGHT", 12, 0)
+    learningAlertLockButton:SetText("Unlock")
+    learningAlertLockButton:SetScript("OnClick", function()
+        SetLearningAlertUnlocked(not (learningAlertTemplate and learningAlertTemplate:IsShown()))
+    end)
 
     local ccTitle = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     ccTitle:SetPoint("TOPLEFT", frame, "TOPLEFT", 20, -48)
@@ -1512,9 +1569,7 @@ local function CreateMainFrame()
     end)
 
     frame:SetScript("OnShow", function()
-        if learningSCTToggle then
-            learningSCTToggle:SetChecked(IsLearningSCTEnabled() and 1 or 0)
-        end
+        if learningAlertDurationSlider then learningAlertDurationSlider:SetValue(GetLearningAlertDuration()) end
         RefreshAll()
     end)
     frame:SetScript("OnHide", function()
