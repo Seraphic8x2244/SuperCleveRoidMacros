@@ -1700,7 +1700,17 @@ No runtime testing was performed. Visual alert layout, live transition behavior,
 persistence/reload behavior and cross-core compatibility remain deferred to
 Slice 8.
 
-#### Runtime-driven immunity-learning alert revision — AGREED, NOT IMPLEMENTED
+#### Runtime-driven immunity-learning alert revision — UI IMPLEMENTED; COMPLETE PROOF-TRAIL PENDING
+
+Implementation checkpoint (9 October 2026): `a16fc9a89caaaf3a1a53aab4a3e4eecc4c9ed4da`.
+
+- `ImmunityUI.lua` now shows the **Immunity Learning Alerts** duration slider (0–10 seconds; 0 disabled), proportional fading, draggable Unlock/Lock template, and saved popup offsets in the addon SavedVariables table.
+- The alert uses a compact two-row header/mob-name surface, content-sized width, and grouped evidence icons. Numeric Mob IDs and spell IDs are excluded from popup text; the detailed immunity inspection screen remains authoritative for these diagnostics.
+- Existing boolean `learningImmunitySCT` is only a compatibility input when no new duration exists; newly selected duration is persisted under `learningImmunityAlertDuration`. Position is persisted under `learningImmunityAlertX` / `learningImmunityAlertY`.
+- The centralized listener and learner transition meanings were preserved; no change was made to `ImmunityKnowledge.lua`, HearthDB, combat observations, or learner inference.
+- **Outstanding presentation gap:** current transition payloads do not include the *complete historical list* of spell/dimension observations that eliminated other candidates during a multi-observation resolution. The UI may therefore show only the individually emitted confirmed/disproved pairs, not a single combined red+green proof trail. It must not invent such historical evidence. A follow-up bounded presentation-provenance design is required before marking the full proof-trail requirement complete. This work must not alter inference semantics.
+- Live 1.12.1 validation and a full Lua syntax/test-run have not yet been performed; inspect the alert, slider, saved location, fading, stacking/wrapping and evidence colours before treating the UI revision as runtime PASS.
+
 
 Live Slice 8 use showed that the Slice 7 custom popup is useful, but the
 "Learning SCT" name is misleading because it is not Blizzard scrolling combat
