@@ -1918,22 +1918,28 @@ and a single shared inference engine are established, but both target
 environments still need the documented live runtime matrix before Slice 8 can be
 closed.
 
+## DLSI companion-addon extraction — PLANNED; NO CODE CHANGES
+
+- The advanced immunity work is moving toward the separate `Seraphic8x2244/SCRM-DLSI` repository. Its `dev` branch was bootstrapped from VanillaTemplate with `dev_rulebook.md`, a project-specific `DEV_PROGRESS.md` and a minimal Lua/TOC skeleton. This branch remains the **source reference for the existing immunity learner and presentation implementation**, not the new ongoing development home.
+- Unmodified `brues-code/SuperCleveRoidMacros` must be the required host dependency. The host must continue working independently with its built-in immunity system when no external provider is selected.
+- `Seraphic8x2244/SuperCleveRoidMacros:main` remains an upstream mirror. The separate `immunities-hook` branch was created from mirrored `main` for a small, non-destructive, generic provider-extension PR to brues; the hook is not yet implemented.
+- The hook must be open to **any** immunity provider, never hardcoded for DLSI. Multiple providers can register; the user selects one active authoritative provider instead of relying on addon load order. The proposed provider selector is an **Immunity Provider** button in the Blizzard macro window to the left of the character-specific macros tab, visible when one or more external providers register. The default remains SCRM built-in.
+- When a separate provider is selected and active, SCRM must delegate immunity queries and suppress **all automatic built-in immunity learning/removal writes** (including direct SavedVariables writes). Legacy `CleveRoids_ImmunityData` is neither deleted nor overwritten. When built-in is selected, original behaviour and data remain intact. Specify availability/failure and persistence semantics before coding; never silently blend competing learner states.
+- Extract the existing `ImmunityObservations.lua`, `ImmunityTransient.lua`, `ImmunityStorage.lua`, `ImmunityKnowledge.lua`, `ImmunityUI.lua` and required fork-specific `Utility.lua`/startup helpers into DLSI only after the generic hook contract is agreed. Preserve the HearthDB filename `SuperCleveRoidMacros_Immunity.db`, schema, evidence semantics, permanent-learning safety gates, alerts and existing `[immune]`/`[noimmune]` conditionals. Do not treat moving five module files by itself as sufficient extraction.
+- The prior Slice 8 source/static validations remain historically recorded above; **live Slice 8 runtime validation is still pending and is not being resumed in this planning checkpoint**. The proof-trail UI provenance gap remains open.
+
 ## Exact next step
 
-Before continuing the remaining Slice 8 runtime matrix, implement only the
-bounded **Immunity Learning Alerts** presentation/settings revision documented
-under Slice 7 above. Do not change learner inference, storage, broad-immunity
-rules or combat-observation semantics as part of that UI work.
+Develop and agree the smallest safe, open immunity-provider hook contract on
+`immunities-hook`, including registration, authoritative query routing,
+provider selection, missing-provider/failure handling and a complete gate over
+upstream's automatic learner writes. Do not change SCRM `main`, start
+extracting learner runtime code, or resume Slice 8 testing yet.
 
-Then resume **Slice 8 runtime validation** from code checkpoint
-`e8634814e321a9bff23529875c2504e1fc2ac80e` in an environment with the actual
-Vanilla clients/servers and HearthDB available.
-
-Run the pending live matrix above first. If a runtime case fails, make only the
-smallest cleanup/correction justified by that failure and rerun the affected
-case. If the matrix passes, update this document to mark Slice 8 complete and
-make the final docs-only handoff commit. Do not start broad-immunity promotion
-or unrelated work.
+DLSI implementation and ongoing project-specific status now belong in
+`Seraphic8x2244/SCRM-DLSI:dev` under `DEV_PROGRESS.md`; this legacy branch
+document remains the source reference for the existing fork implementation
+and its outstanding validation matrix.
 
 The generalized learner's permanent-inference invariant remains:
 
@@ -1943,5 +1949,3 @@ multiple remaining valid causes -> keep hypothesis unresolved
 authoritative dimension-specific success -> permanent immunity disproved
 credible confirmed immunity later disproved -> vulnerable + dynamic suspicion
 ```
-
-
