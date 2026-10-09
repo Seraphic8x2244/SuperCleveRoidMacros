@@ -1480,52 +1480,65 @@ local function CreateMainFrame()
     local close = CreateFrame("Button", NewWidgetName("Close"), frame, "UIPanelCloseButton")
     close:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -6, -6)
 
+    -- Keep controls below the centered title, clear of the window chrome.
     local alertLabel = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    alertLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", 16, -15)
+    alertLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", 16, -39)
     alertLabel:SetText("Immunity Learning Alerts")
     local durationLabel = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     durationLabel:SetPoint("LEFT", alertLabel, "RIGHT", 12, 0)
     durationLabel:SetText("Duration")
+
+    local offLabel = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    offLabel:SetPoint("LEFT", durationLabel, "RIGHT", 10, 0)
+    offLabel:SetText("Off")
     learningAlertDurationSlider = CreateFrame("Slider", NewWidgetName("AlertDuration"), frame, "OptionsSliderTemplate")
-    learningAlertDurationSlider:SetWidth(135)
+    learningAlertDurationSlider:SetWidth(108)
     learningAlertDurationSlider:SetHeight(16)
-    learningAlertDurationSlider:SetPoint("LEFT", durationLabel, "RIGHT", 16, 0)
+    learningAlertDurationSlider:SetPoint("LEFT", offLabel, "RIGHT", 8, 0)
     learningAlertDurationSlider:SetMinMaxValues(0, 10)
     learningAlertDurationSlider:SetValueStep(1)
+    -- The template places Low/High below the bar; use inline end labels instead.
+    local sliderName = learningAlertDurationSlider:GetName()
+    local low = _G[sliderName .. "Low"]
+    local high = _G[sliderName .. "High"]
+    local caption = _G[sliderName .. "Text"]
+    if low then low:SetText("") end
+    if high then high:SetText("") end
+    if caption then caption:SetText("") end
+    local maxLabel = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    maxLabel:SetPoint("LEFT", learningAlertDurationSlider, "RIGHT", 8, 0)
+    maxLabel:SetText("10 sec")
     learningAlertDurationSlider:SetValue(GetLearningAlertDuration())
     learningAlertDurationSlider:SetScript("OnValueChanged", function()
         SetLearningAlertDuration(learningAlertDurationSlider:GetValue())
     end)
-    learningAlertDurationValue = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    learningAlertDurationValue:SetPoint("LEFT", learningAlertDurationSlider, "RIGHT", 9, 0)
-    learningAlertDurationValue:SetText(tostring(GetLearningAlertDuration()) .. "s")
     learningAlertLockButton = CreateFrame("Button", NewWidgetName("AlertLock"), frame, "UIPanelButtonTemplate")
     learningAlertLockButton:SetWidth(64)
     learningAlertLockButton:SetHeight(22)
-    learningAlertLockButton:SetPoint("LEFT", learningAlertDurationValue, "RIGHT", 12, 0)
+    learningAlertLockButton:SetPoint("LEFT", maxLabel, "RIGHT", 12, 0)
     learningAlertLockButton:SetText("Unlock")
     learningAlertLockButton:SetScript("OnClick", function()
         SetLearningAlertUnlocked(not (learningAlertTemplate and learningAlertTemplate:IsShown()))
     end)
 
     local ccTitle = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    ccTitle:SetPoint("TOPLEFT", frame, "TOPLEFT", 20, -48)
+    ccTitle:SetPoint("TOPLEFT", frame, "TOPLEFT", 20, -70)
     ccTitle:SetText("CC Immunities")
 
-    ccSection = CreateHorizontalSection(frame, -70, 214, CC_COLUMNS, "CC")
+    ccSection = CreateHorizontalSection(frame, -92, 214, CC_COLUMNS, "CC")
 
     local spellTitle = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    spellTitle:SetPoint("TOPLEFT", frame, "TOPLEFT", 20, -322)
+    spellTitle:SetPoint("TOPLEFT", frame, "TOPLEFT", 20, -344)
     spellTitle:SetText("Spell Immunities")
 
-    spellSection = CreateHorizontalSection(frame, -344, 190, SPELL_COLUMNS, "Spell")
+    spellSection = CreateHorizontalSection(frame, -366, 190, SPELL_COLUMNS, "Spell")
 
     legacyTitle = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    legacyTitle:SetPoint("TOPLEFT", frame, "TOPLEFT", 20, -574)
+    legacyTitle:SetPoint("TOPLEFT", frame, "TOPLEFT", 20, -596)
     legacyTitle:SetText("Manual/static unknown (0)")
 
     legacyList = CreateMessageList(frame)
-    legacyList:SetPoint("TOPLEFT", frame, "TOPLEFT", 20, -593)
+    legacyList:SetPoint("TOPLEFT", frame, "TOPLEFT", 20, -615)
     legacyList:SetWidth(670)
     legacyList:SetHeight(38)
 
