@@ -1696,12 +1696,138 @@ Static review completed:
   and `main`; the existing rework document therefore remains the available
   branch-specific handoff source for this work.
 
-No runtime testing was performed. Visual SCT layout, live transition behavior,
+No runtime testing was performed. Visual alert layout, live transition behavior,
 persistence/reload behavior and cross-core compatibility remain deferred to
 Slice 8.
 
-Stop condition: Slice 7 complete; proceed to Slice 8 in a fresh development
-chat.
+#### Runtime-driven immunity-learning alert revision — AGREED, NOT IMPLEMENTED
+
+Live Slice 8 use showed that the Slice 7 custom popup is useful, but the
+"Learning SCT" name is misleading because it is not Blizzard scrolling combat
+text. The popup should be revised as a bounded presentation/settings change;
+the learner, inference rules, transition seam and HearthDB model must remain
+unchanged.
+
+The `/cleveroid immunities` control row should become conceptually:
+
+```text
+Immunity Learning Alerts | Duration 0 ---------- 10 | Unlock / Lock
+```
+
+Required behaviour:
+
+- rename the existing "Learning SCT" control/surface to **Immunity Learning
+  Alerts**;
+- replace the binary enable toggle with a persisted **0-10 second duration**
+  control;
+- duration `0` means disabled;
+- duration `1-10` is the popup lifetime in seconds;
+- fading should remain relative to the selected lifetime rather than using the
+  current hard-coded `3.5` / `2.7` second constants;
+- add one **Unlock / Lock** position control;
+- Unlock shows a draggable template at the saved/current alert position;
+- while unlocked, dragging the template changes the alert anchor;
+- Lock saves the position and hides the template;
+- normal alerts use that persisted position. Position is therefore user-set,
+  not a new fixed screen coordinate.
+
+The alert itself should become a compact two-row surface. Evidence icons span
+the height of both text rows, so the left text block can use exactly those two
+rows for the alert state and mob name:
+
+```text
++----------------------------------------------------------------------------------+
+| Immunity Resolved!   [Spell][Dimension]   [Spell][Dimension]   [Spell][Dimension]|
+| Blackwing Spellbinder                                                            |
++----------------------------------------------------------------------------------+
+```
+
+The live popup should show the mob **name only**. Mob ID, spell IDs and other
+diagnostic/provenance detail remain available in `/cleveroid immunities` rather
+than consuming popup space.
+
+Detected/unresolved presentation:
+
+```text
++---------------------------------------------------------------+
+| Immunity Detected!   [Trigger spell]   [Candidate] [Candidate]|
+| Blackwing Spellbinder                                         |
++---------------------------------------------------------------+
+```
+
+- the triggering spell icon is shown;
+- candidate school/CC/effect icons are shown beside it;
+- the existing yellow candidate border communicates unresolved possibilities;
+- explanatory candidate text is unnecessary because the icon plus border state
+  is the intended compact presentation.
+
+Resolved presentation is an evidence trail, not only the final answer. Each
+piece of evidence is rendered as a tightly grouped **spell + dimension pair**:
+
+```text
+Immunity Resolved!   [Hammer of Justice][Holy]   [Charge Stun][Stun]
+                     [Fireball][Spell]
+Blackwing Spellbinder
+```
+
+The actual popup remains horizontal where space permits; the wrapped example
+above is only to illustrate pair membership.
+
+Resolved evidence-pair semantics:
+
+- both icons in a pair share the same outcome border colour;
+- **red** pair = that evidence/dimension survives as the confirmed permanent
+  immunity;
+- **green** pair = authoritative success eliminated that candidate;
+- **orange** remains reserved for the existing temporary/conditional suspicion
+  state where that transition is relevant;
+- multiple spell icons are expected when several observations contributed to a
+  resolution;
+- only evidence that actually participated in the learner's resolution chain is
+  shown. The popup must not become a generic combat-history display;
+- the spell icon and its dimension icon must stay visually adjacent, with a
+  larger gap between evidence pairs so pair ownership is obvious.
+
+Example resolved proof trail:
+
+```text
+Immunity Resolved!   [Charge Stun][Stun]   [Auto Attack][Physical]
+Blackwing Spellbinder
+
+[Charge Stun][Stun]      red
+[Auto Attack][Physical]  green
+```
+
+Another valid trail:
+
+```text
+Immunity Resolved!   [Hammer of Justice][Holy]   [Charge Stun][Stun]
+                     [Fireball][Spell]
+Blackwing Spellbinder
+
+[Hammer of Justice][Holy] red
+[Charge Stun][Stun]       green
+[Fireball][Spell]         green
+```
+
+Layout requirements:
+
+- evidence icons are approximately the height of the two text rows combined;
+- the alert status occupies the first text row at the left;
+- the mob name occupies the second text row at the left;
+- evidence begins to the right of that two-row text block;
+- popup width should be content-driven rather than permanently reserving the
+  current 480-pixel width;
+- if a long proof trail must wrap, wrap whole spell+dimension pairs and never
+  separate a spell icon from its paired dimension icon;
+- preserve the existing state-colour meanings and centralized transition
+  listener; this revision must not re-derive learner inference in the UI.
+
+This UI revision is intentionally separate from broad-immunity promotion and
+must not change the Slice 8 learner/runtime invariants.
+
+Stop condition: Slice 7 learner diagnostics are implemented; this agreed alert
+revision remains a bounded pending UI task during Slice 8 validation.
 
 ### Slice 8 — cross-core runtime matrix and cleanup — RUNTIME PENDING
 
@@ -1783,7 +1909,12 @@ closed.
 
 ## Exact next step
 
-Resume **Slice 8 runtime validation only** from code checkpoint
+Before continuing the remaining Slice 8 runtime matrix, implement only the
+bounded **Immunity Learning Alerts** presentation/settings revision documented
+under Slice 7 above. Do not change learner inference, storage, broad-immunity
+rules or combat-observation semantics as part of that UI work.
+
+Then resume **Slice 8 runtime validation** from code checkpoint
 `e8634814e321a9bff23529875c2504e1fc2ac80e` in an environment with the actual
 Vanilla clients/servers and HearthDB available.
 
