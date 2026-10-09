@@ -405,11 +405,23 @@ local function ShowLearningTransition(transition)
         -- Use its persisted provenance spell where provided, never invent history.
         local spellID = transition.state == "confirmed"
             and (transition.proofSpellID or transition.spellID) or transition.spellID
-        local spell = CreateLearningSCTIcon(row, spellID, nil, state)
-        spell:SetPoint("TOPLEFT", row, "TOPLEFT", x, y)
-        local dim = CreateLearningSCTIcon(row, nil, dimension, state)
-        dim:SetPoint("LEFT", spell, "RIGHT", 2, 0)
-        x = x + pairWidth + LEARNING_ALERT_PAIR_GAP
+        if transition.state == "candidate" then
+            -- The trigger icon is shown once, followed by candidate dimensions.
+            if i == 1 then
+                local spell = CreateLearningSCTIcon(row, spellID, nil, state)
+                spell:SetPoint("TOPLEFT", row, "TOPLEFT", x, y)
+                x = x + LEARNING_ALERT_ICON + LEARNING_ALERT_PAIR_GAP
+            end
+            local dim = CreateLearningSCTIcon(row, nil, dimension, state)
+            dim:SetPoint("TOPLEFT", row, "TOPLEFT", x, y)
+            x = x + LEARNING_ALERT_ICON + 3
+        else
+            local spell = CreateLearningSCTIcon(row, spellID, nil, state)
+            spell:SetPoint("TOPLEFT", row, "TOPLEFT", x, y)
+            local dim = CreateLearningSCTIcon(row, nil, dimension, state)
+            dim:SetPoint("LEFT", spell, "RIGHT", 2, 0)
+            x = x + pairWidth + LEARNING_ALERT_PAIR_GAP
+        end
     end
     row:SetWidth(math.max(textWidth + 8, x + 4))
     row:SetHeight(math.max(46, -y + LEARNING_ALERT_ICON + 6))
@@ -457,6 +469,13 @@ local function SetLearningAlertUnlocked(unlocked)
         learningAlertTemplate:SetPoint("CENTER", UIParent, "CENTER", x, y)
         learningAlertTemplate:Show()
     else
+        if learningAlertTemplate:IsShown() then
+            local x, y = learningAlertTemplate:GetCenter()
+            local px, py = UIParent:GetCenter()
+            CleveRoidMacros.learningImmunityAlertX = x - px
+            CleveRoidMacros.learningImmunityAlertY = y - py
+            LayoutLearningSCT()
+        end
         learningAlertTemplate:Hide()
     end
     if learningAlertLockButton then
