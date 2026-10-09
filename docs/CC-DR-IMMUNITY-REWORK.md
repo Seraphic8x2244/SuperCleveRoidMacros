@@ -1703,6 +1703,7 @@ Slice 8.
 #### Runtime-driven immunity-learning alert revision — UI IMPLEMENTED; COMPLETE PROOF-TRAIL PENDING
 
 Implementation checkpoint (9 October 2026): `a16fc9a89caaaf3a1a53aab4a3e4eecc4c9ed4da`.
+- Header-layout follow-up: `4bbe5edd01e4d43d3a798c815714ce0601218682` moves controls below the title, shifts the CC/spell sections down, suppresses default below-slider endpoint captions, and places `Off` and `10 sec` beside the duration slider. Runtime UI recheck pending.
 
 - `ImmunityUI.lua` now shows the **Immunity Learning Alerts** duration slider (0–10 seconds; 0 disabled), proportional fading, draggable Unlock/Lock template, and saved popup offsets in the addon SavedVariables table.
 - The alert uses a compact two-row header/mob-name surface, content-sized width, and grouped evidence icons. Numeric Mob IDs and spell IDs are excluded from popup text; the detailed immunity inspection screen remains authoritative for these diagnostics.
