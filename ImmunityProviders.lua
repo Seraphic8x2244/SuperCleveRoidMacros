@@ -108,11 +108,6 @@ local function ShowProviderMenu()
 end
 
 function CR.UpdateImmunityProviderButton()
-    if table.getn(ORDER) == 0 then
-        if providerButton then providerButton:Hide() end
-        if menu then menu:Hide() end
-        return
-    end
     if not MacroFrameTab2 then return end
     if not providerButton then
         providerButton = CreateFrame("Button", "CleveRoidsImmunityProviderButton", MacroFrame, "UIPanelButtonTemplate")
