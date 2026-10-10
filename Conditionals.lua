@@ -7718,10 +7718,14 @@ CleveRoids.Keywords = {
         end
 
         if not checkValue then
-            return true  -- If we can't determine spell/school, assume not immune
+            if CleveRoids.IsExternalImmunityActive() then return false end
+            return true  -- Preserve the built-in conditional behaviour
         end
 
         local isImmune = CleveRoids.CheckImmunity(conditionals.target or "target", checkValue)
+        if CleveRoids.IsExternalImmunityActive() and isImmune == nil then
+            return false -- Unknown cannot prove vulnerability.
+        end
         return not isImmune
     end,
 

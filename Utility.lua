@@ -6841,8 +6841,6 @@ CleveRoids.RemoveCCImmunity = RemoveCCImmunity
 --   ccType: CC type name (e.g., "stun", "fear")
 -- Returns: true if immune, false otherwise
 local function CheckCCImmunity(unitId, ccType)
-    local handled, result = CleveRoids.QueryExternalImmunity(unitId, ccType)
-    if handled then return result end
     if not unitId or not UnitExists(unitId) then
         return false
     end
@@ -6887,8 +6885,13 @@ local function CheckCCImmunity(unitId, ccType)
     return false
 end
 
--- Expose publicly
-CleveRoids.CheckCCImmunity = CheckCCImmunity
+-- Direct CC callers use the provider; internal built-in CC checks stay local.
+-- A spell query is therefore delegated to an external provider only once.
+CleveRoids.CheckCCImmunity = function(unitId, ccType)
+    local handled, result = CleveRoids.QueryExternalImmunity(unitId, ccType)
+    if handled then return result end
+    return CheckCCImmunity(unitId, ccType)
+end
 
 -- DAMAGE SCHOOL IMMUNITY RECORDING
 

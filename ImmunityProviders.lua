@@ -1,6 +1,7 @@
 -- Optional, storage-independent immunity providers for Vanilla WoW (Lua 5.0).
 -- RegisterImmunityProvider(id, displayName, check)
--- check(unitId, spellOrSchool) must return a boolean, matching CheckImmunity.
+-- check(unitId, spellOrSchool): true = immune, false = vulnerable, nil = unknown.
+-- Errors are reported separately; no legacy-data fallback.
 local CR = _G.CleveRoids
 local providers = {}
 local failed = {}
@@ -14,6 +15,7 @@ function CR.RegisterImmunityProvider(id, name, check)
         return false
     end
     providers[id] = { name = name, check = check }
+    failed[id] = nil -- A late registration may restore a previously missing choice.
     table.insert(ORDER, id)
     if CR.UpdateImmunityProviderButton then CR.UpdateImmunityProviderButton() end
     return true
@@ -24,12 +26,9 @@ function CR.GetSelectedImmunityProvider()
     return type(saved) == "string" and saved or BUILTIN
 end
 
+-- The selected authority is independent of availability and health.
 function CR.GetActiveImmunityProvider()
-    local selected = CR.GetSelectedImmunityProvider()
-    if selected ~= BUILTIN and providers[selected] and not failed[selected] then
-        return selected
-    end
-    return BUILTIN
+    return CR.GetSelectedImmunityProvider()
 end
 
 function CR.IsExternalImmunityActive()
@@ -37,16 +36,33 @@ function CR.IsExternalImmunityActive()
 end
 
 function CR.QueryExternalImmunity(unitId, spellOrSchool)
-    local id = CR.GetActiveImmunityProvider()
+    local id = CR.GetSelectedImmunityProvider()
     if id == BUILTIN then return false, nil end
-    local ok, answer = pcall(providers[id].check, unitId, spellOrSchool)
-    if ok and type(answer) == "boolean" then return true, answer end
-    failed[id] = true -- Fail closed for this session; never mix provider answers.
-    if CR.Print then
-        CR.Print("|cffff9900Immunity provider '" .. providers[id].name ..
-          "' failed. Built-in immunity restored for this session; selection retained.|r")
+
+    -- Handled remains true for an absent/failed provider. nil is unknown,
+    -- never permission to consult the legacy learner or stored facts.
+    if not failed[id] then
+        local provider = providers[id]
+        if not provider then
+            failed[id] = true
+            if CR.Print then
+                CR.Print("|cffff9900Immunity provider '" .. id ..
+                    "' unavailable. Select SCRM Built-in explicitly to restore legacy immunities.|r")
+            end
+        else
+            local ok, answer = pcall(provider.check, unitId, spellOrSchool)
+            if ok and (answer == nil or type(answer) == "boolean") then
+                return true, answer
+            end
+            failed[id] = true
+            if CR.Print then
+                CR.Print("|cffff9900Immunity provider '" .. provider.name ..
+                    "' failed. Immunity is unknown until the provider recovers or is changed.|r")
+            end
+        end
+        if CR.UpdateImmunityProviderButton then CR.UpdateImmunityProviderButton() end
     end
-    return false, nil
+    return true, nil
 end
 
 function CR.SelectImmunityProvider(id)
@@ -69,7 +85,8 @@ local function RefreshProviderSelection()
     local id = CR.GetSelectedImmunityProvider()
     local item = providers[id]
     local name = id == BUILTIN and "SCRM Built-in" or
-        (item and item.name or (id .. " (unavailable)"))
+        (item and (item.name .. (failed[id] and " (error)" or ""))
+            or (id .. " (unavailable)"))
     UIDropDownMenu_SetText(name, providerDropdown)
 end
 

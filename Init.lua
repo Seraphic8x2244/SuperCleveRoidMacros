@@ -351,7 +351,8 @@ initFrame:SetScript("OnEvent", function()
     CleveRoids_ImmunityData = CleveRoids_ImmunityData or {}
     local savedVersion = CleveRoidMacros.immunityDataVersion or 0
 
-    if savedVersion < CleveRoids.IMMUNITY_DATA_VERSION then
+    -- Legacy version migration is built-in-only; external selection preserves data.
+    if savedVersion < CleveRoids.IMMUNITY_DATA_VERSION and not CleveRoids.IsExternalImmunityActive() then
         -- Check if there was existing data to clear
         local hadData = next(CleveRoids_ImmunityData) ~= nil
 

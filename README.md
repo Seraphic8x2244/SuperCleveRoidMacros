@@ -63,31 +63,34 @@ alternative immunity checker without replacing or changing SCRM's saved immunity
 ```lua
 CleveRoids.RegisterImmunityProvider("myaddon", "My Immunity Addon",
     function(unitId, spellOrSchool)
-        -- Return true or false; use the same arguments as CheckImmunity.
+        -- true = immune, false = vulnerable, nil = unknown (more evidence needed).
         return MyAddon.IsImmune(unitId, spellOrSchool)
     end)
 ```
 
 Each provider ID must be a unique nonempty string other than `"builtin"`.
-The name must be a nonempty display string, and the callback must return a
-boolean. Registration returns false for invalid or duplicate registrations.
+The name must be a nonempty display string. The callback returns true for
+known immunity, false for known vulnerability, or nil when evidence is
+insufficient. Registration returns false for invalid or duplicate registrations.
 Addons may register after SCRM loads.
 
 The Blizzard macro window always shows an **Immunity Provider** dropdown row
 above Delete / New / Exit, even with no external provider installed. It
 allows selecting **SCRM Built-in** or one registered addon. The choice is
 account-wide in `CleveRoidMacros.immunityProvider` and survives reloads.
-Only the selected, available provider is queried; false is an authoritative
-non-immune result, not a reason to consult built-in data.
+Only the selected provider supplies immunity knowledge. The host neither
+infers missing evidence nor mixes its own stored facts with external answers.
 
-If a selected addon is missing, SCRM uses built-in immunity checks and
-learning without erasing the saved selection. If its callback throws or
-returns a non-boolean, it is disabled for this session, SCRM prints a warning,
-and built-in checking and learning resume. Reselecting a registered provider
-clears its session failure. While an external provider is active, all automatic
-SCRM immunity-learning/removal writes are suspended. Manual immunity commands
-remain available, and `CleveRoids_ImmunityData` is neither migrated nor cleared
-by switching providers.
+If a selected provider is missing, the selection is retained and its queries
+remain unknown. A callback error or invalid return type raises a warning once;
+it remains unavailable for the session until explicitly reselected. This
+operational failure is distinct from nil, which is a normal unknown result.
+In external mode, unknown makes both [immune] and [noimmune] fail. The built-in
+learner and all automatic writes remain dormant even on provider failure.
+Users must explicitly select SCRM Built-in to restore original behaviour.
+Manual management commands still work and legacy `CleveRoids_ImmunityData`
+is neither migrated nor cleared by provider switching or startup while an
+external provider is selected.
 
 ## Known Issues
 
