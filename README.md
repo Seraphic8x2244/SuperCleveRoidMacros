@@ -55,6 +55,40 @@ See the **[Wiki](https://github.com/brues-code/SuperCleveRoidMacros/wiki)** for 
 - **[Settings](https://github.com/brues-code/SuperCleveRoidMacros/wiki/Settings)** — Configuration and console commands
 - **[Supported Addons](https://github.com/brues-code/SuperCleveRoidMacros/wiki/Supported-Addons)** — Compatible addons and integrations
 
+## Optional Immunity Providers
+
+SCRM's built-in immunity tracking remains the default. Companion addons can register an
+alternative immunity checker without replacing or changing SCRM's saved immunity data.
+
+```lua
+CleveRoids.RegisterImmunityProvider("myaddon", "My Immunity Addon",
+    function(unitId, spellOrSchool)
+        -- Return true or false; use the same arguments as CheckImmunity.
+        return MyAddon.IsImmune(unitId, spellOrSchool)
+    end)
+```
+
+Each provider ID must be a unique nonempty string other than `"builtin"`.
+The name must be a nonempty display string, and the callback must return a
+boolean. Registration returns false for invalid or duplicate registrations.
+Addons may register after SCRM loads.
+
+When at least one provider registers, the Blizzard macro window shows an
+**Immunity Provider** button beside the character-specific macros tab. It
+allows selecting **SCRM Built-in** or one registered addon. The choice is
+account-wide in `CleveRoidMacros.immunityProvider` and survives reloads.
+Only the selected, available provider is queried; false is an authoritative
+non-immune result, not a reason to consult built-in data.
+
+If a selected addon is missing, SCRM uses built-in immunity checks and
+learning without erasing the saved selection. If its callback throws or
+returns a non-boolean, it is disabled for this session, SCRM prints a warning,
+and built-in checking and learning resume. Reselecting a registered provider
+clears its session failure. While an external provider is active, all automatic
+SCRM immunity-learning/removal writes are suspended. Manual immunity commands
+remain available, and `CleveRoids_ImmunityData` is neither migrated nor cleared
+by switching providers.
+
 ## Known Issues
 
 - Action-bar macros are identified by slot, so blank or duplicate macro names are fine. Only macros referenced *by name* (`{MacroName}` nesting, `/runmacro "Name"`) still need a unique name to disambiguate.
