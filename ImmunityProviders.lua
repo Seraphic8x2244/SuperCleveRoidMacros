@@ -59,67 +59,65 @@ function CR.SelectImmunityProvider(id)
     return true
 end
 
--- The Blizzard MacroFrameTab2 is the character-specific macro tab.
--- Anchor on it rather than rearranging the existing tab strip.
-local providerButton
-local menu
-local function ShowProviderMenu()
-    if not menu then
-        menu = CreateFrame("Frame", "CleveRoidsImmunityProviderMenu", UIParent)
-        menu:SetFrameStrata("DIALOG")
-        menu:SetWidth(190)
-        menu:SetBackdrop({bgFile="Interface\\Tooltips\\UI-Tooltip-Background",
-            edgeFile="Interface\\Tooltips\\UI-Tooltip-Border", tile=true,
-            tileSize=16, edgeSize=12, insets={left=3,right=3,top=3,bottom=3}})
-        menu:SetBackdropColor(0,0,0,0.95)
+-- Use the standard Blizzard dropdown, not an extra macro tab.
+-- This stays available when only SCRM Built-in is registered.
+local providerRow
+local providerDropdown
+
+local function RefreshProviderSelection()
+    if not providerDropdown then return end
+    local id = CR.GetSelectedImmunityProvider()
+    local item = providers[id]
+    local name = id == BUILTIN and "SCRM Built-in" or
+        (item and item.name or (id .. " (unavailable)"))
+    UIDropDownMenu_SetText(name, providerDropdown)
+end
+
+local function PopulateProviders()
+    local entries = { BUILTIN }
+    for _, id in ipairs(ORDER) do
+        table.insert(entries, id)
     end
-    local ids = { BUILTIN }
-    for _, id in ipairs(ORDER) do table.insert(ids, id) end
-    for i, id in ipairs(ids) do
-        local row = getglobal("CleveRoidsImmunityProviderRow"..i)
-        if not row then
-            row = CreateFrame("Button", "CleveRoidsImmunityProviderRow"..i, menu)
-            row:SetHeight(20)
-            row:SetHighlightTexture("Interface\\QuestFrame\\UI-QuestTitleHighlight")
-            local label = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-            label:SetPoint("LEFT", 8, 0)
-            row.label = label
-        end
-        row:ClearAllPoints()
-        row:SetPoint("TOPLEFT", 6, -6-(i-1)*20)
-        row:SetWidth(178)
-        row.label:SetText((id == CR.GetSelectedImmunityProvider() and "|cff00ff00* |r" or "  ") ..
-            (id == BUILTIN and "SCRM Built-in" or providers[id].name) ..
-            (id ~= BUILTIN and failed[id] and " (failed)" or ""))
-        row:SetScript("OnClick", function()
+    -- Keep the chosen provider visible even if that addon did not register.
+    local selected = CR.GetSelectedImmunityProvider()
+    if selected ~= BUILTIN and not providers[selected] then
+        table.insert(entries, selected)
+    end
+    for _, id in ipairs(entries) do
+        local info = UIDropDownMenu_CreateInfo()
+        info.text = id == BUILTIN and "SCRM Built-in" or
+            (providers[id] and providers[id].name or (id .. " (unavailable)"))
+        info.checked = id == selected
+        info.disabled = id ~= BUILTIN and not providers[id]
+        info.func = function()
             CR.SelectImmunityProvider(id)
-            menu:Hide()
-        end)
-        row:Show()
+            RefreshProviderSelection()
+        end
+        UIDropDownMenu_AddButton(info)
     end
-    for i=table.getn(ids)+1,table.getn(ORDER)+1 do
-        local row=getglobal("CleveRoidsImmunityProviderRow"..i)
-        if row then row:Hide() end
-    end
-    menu:SetHeight(12+table.getn(ids)*20)
-    menu:ClearAllPoints()
-    menu:SetPoint("BOTTOM", providerButton, "TOP", 0, 3)
-    menu:Show()
 end
 
 function CR.UpdateImmunityProviderButton()
-    if not MacroFrameTab2 then return end
-    if not providerButton then
-        providerButton = CreateFrame("Button", "CleveRoidsImmunityProviderButton", MacroFrame, "UIPanelButtonTemplate")
-        providerButton:SetWidth(118)
-        providerButton:SetHeight(22)
-        providerButton:SetText("Immunity Provider")
-        providerButton:SetPoint("RIGHT", MacroFrameTab2, "LEFT", -4, 0)
-        providerButton:SetScript("OnClick", function()
-            if menu and menu:IsShown() then menu:Hide() else ShowProviderMenu() end
-        end)
+    if not MacroFrame or not UIDropDownMenu_Initialize then return end
+    if not providerRow then
+        providerRow = CreateFrame("Frame", "CleveRoidsImmunityProviderRow", MacroFrame)
+        providerRow:SetWidth(450)
+        providerRow:SetHeight(34)
+        -- Above the existing Delete / New / Exit footer controls.
+        providerRow:SetPoint("BOTTOMLEFT", MacroFrame, "BOTTOMLEFT", 23, 66)
+
+        local label = providerRow:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        label:SetPoint("LEFT", providerRow, "LEFT", 0, 0)
+        label:SetText("Immunity Provider:")
+
+        providerDropdown = CreateFrame("Frame", "CleveRoidsImmunityProviderDropdown",
+            providerRow, "UIDropDownMenuTemplate")
+        providerDropdown:SetPoint("LEFT", label, "RIGHT", -9, -2)
+        UIDropDownMenu_SetWidth(230, providerDropdown)
+        UIDropDownMenu_Initialize(providerDropdown, PopulateProviders)
     end
-    providerButton:Show()
+    RefreshProviderSelection()
+    providerRow:Show()
 end
 
 local frame = CreateFrame("Frame")
