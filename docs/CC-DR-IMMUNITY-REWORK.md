@@ -1928,6 +1928,17 @@ closed.
 - Extract the existing `ImmunityObservations.lua`, `ImmunityTransient.lua`, `ImmunityStorage.lua`, `ImmunityKnowledge.lua`, `ImmunityUI.lua` and required fork-specific `Utility.lua`/startup helpers into DLSI only after the generic hook contract is agreed. Preserve the HearthDB filename `SuperCleveRoidMacros_Immunity.db`, schema, evidence semantics, permanent-learning safety gates, alerts and existing `[immune]`/`[noimmune]` conditionals. Do not treat moving five module files by itself as sufficient extraction.
 - The prior Slice 8 source/static validations remain historically recorded above; **live Slice 8 runtime validation is still pending and is not being resumed in this planning checkpoint**. The proof-trail UI provenance gap remains open.
 
+### Agreed upstream hook PR scope (fresh-chat handoff)
+
+- Work only on `immunities-hook`, currently based on upstream-mirroring `main` at `37ca7cef4012cc0d76b7e559ac9517c785dbae79`. Verify its actual remote HEAD before implementation. Keep `main` unchanged.
+- The PR is **generic, optional and storage-independent**: any companion addon can register an immunity provider; no DLSI or HearthDB names, files, schema or requirements in upstream.
+- Multiple external providers may register. The user chooses exactly one active provider; the SCRM built-in provider is the default, not whichever addon happens to load first. Define safe selection persistence, availability and error behaviour before coding.
+- Add a compact **Immunity Provider** button to the Blizzard macro window, immediately left of the existing character-specific macros button (shown as `Revenra Specific Macros` in the user screenshot). Hide it when zero external providers register; show a selector including SCRM Built-in otherwise. Preserve macro-window layout and appearance.
+- Preserve the public `[immune]` / `[noimmune]` conditional semantics. Route checks to the selected provider when it is active; never OR together contradictory built-in and external learning answers.
+- Guard **every automatic legacy immunity learning and removal mutation**, including direct `CleveRoids_ImmunityData` writes, while an external provider is active. Manual user management must not be unintentionally blocked. Built-in behaviour must remain unchanged when selected or when no external addon is installed. Never delete, rewrite or migrate legacy data.
+- Minimise the patch and maintenance burden for brues: no unrelated refactors, dependency additions, fork-only learner modules, speculative frameworks or bundled mock providers in production. Keep the contract easy for other addon authors to use.
+- Verify complete write-path coverage, Lua 5.0.3 compatibility, unchanged built-in behaviour, registration/selection, macro UI and failure handling. Static checks are not in-game runtime validation. Do not open a PR before review and authorisation.
+
 ## Exact next step
 
 Develop and agree the smallest safe, open immunity-provider hook contract on
