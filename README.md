@@ -73,8 +73,8 @@ The name must be a nonempty display string, and the callback must return a
 boolean. Registration returns false for invalid or duplicate registrations.
 Addons may register after SCRM loads.
 
-The Blizzard macro window always shows an **Immunity Provider** button beside
-the character-specific macros tab, even with no external provider installed. It
+The Blizzard macro window always shows an **Immunity Provider** dropdown row
+above Delete / New / Exit, even with no external provider installed. It
 allows selecting **SCRM Built-in** or one registered addon. The choice is
 account-wide in `CleveRoidMacros.immunityProvider` and survives reloads.
 Only the selected, available provider is queried; false is an authoritative
