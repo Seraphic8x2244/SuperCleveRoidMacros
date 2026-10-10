@@ -98,13 +98,13 @@ local function PopulateProviders()
 end
 
 function CR.UpdateImmunityProviderButton()
-    if not MacroFrame or not UIDropDownMenu_Initialize then return end
+    if not MacroFrame or not MacroDeleteButton or not UIDropDownMenu_Initialize then return end
     if not providerRow then
         providerRow = CreateFrame("Frame", "CleveRoidsImmunityProviderRow", MacroFrame)
         providerRow:SetWidth(450)
-        providerRow:SetHeight(34)
-        -- Above the existing Delete / New / Exit footer controls.
-        providerRow:SetPoint("BOTTOMLEFT", MacroFrame, "BOTTOMLEFT", 23, 112)
+        providerRow:SetHeight(22)
+        -- Follow the existing Delete button, including UI skin/layout changes.
+        providerRow:SetPoint("BOTTOMLEFT", MacroDeleteButton, "TOPLEFT", 0, 2)
 
         local label = providerRow:CreateFontString(nil, "OVERLAY", "GameFontNormal")
         label:SetPoint("LEFT", providerRow, "LEFT", 0, 0)
