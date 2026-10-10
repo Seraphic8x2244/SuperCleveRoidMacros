@@ -2722,7 +2722,7 @@ delayedTrackingFrame:SetScript("OnUpdate", function()
                   end
                 elseif totalDebuffs < DEBUFF_CAP_THRESHOLD then
                   -- Few debuffs = likely bleed immunity, not debuff cap
-                  if pending.targetName and pending.targetName ~= "" then
+                  if not CleveRoids.IsExternalImmunityActive() and pending.targetName and pending.targetName ~= "" then
                     -- Record as BLEED immunity directly (bypass split damage override in RecordImmunity)
                     -- RecordImmunity would record Rake/Pounce as "physical" (initial school),
                     -- but we specifically detected the BLEED debuff didn't land
@@ -3365,7 +3365,7 @@ delayedTrackingFrame:SetScript("OnUpdate", function()
                 recordSchool = dbcSchoolName
               end
             end
-            if pending.targetName and pending.targetName ~= "" and recordSchool then
+            if not CleveRoids.IsExternalImmunityActive() and pending.targetName and pending.targetName ~= "" and recordSchool then
               -- Record immunity for this spell's school
               if not CleveRoids_ImmunityData[recordSchool] then
                 CleveRoids_ImmunityData[recordSchool] = {}
@@ -6752,6 +6752,7 @@ CleveRoids.GetSpellImmunityDRType = GetSpellImmunityDRType
 --   conditionalBuff: Optional buff name required for the immunity
 --   spellName: Optional spell name for debug output
 local function RecordCCImmunity(npcName, ccType, conditionalBuff, spellName)
+    if CleveRoids.IsExternalImmunityActive() then return end
     if not npcName or not ccType or npcName == "" then
         return
     end
@@ -6813,6 +6814,7 @@ CleveRoids.RecordCCImmunity = RecordCCImmunity
 --   npcName: Name of the NPC
 --   ccType: CC type name (e.g., "stun", "fear", "root")
 local function RemoveCCImmunity(npcName, ccType)
+    if CleveRoids.IsExternalImmunityActive() then return end
     if not npcName or not ccType or npcName == "" then
         return
     end
@@ -6839,6 +6841,8 @@ CleveRoids.RemoveCCImmunity = RemoveCCImmunity
 --   ccType: CC type name (e.g., "stun", "fear")
 -- Returns: true if immune, false otherwise
 local function CheckCCImmunity(unitId, ccType)
+    local handled, result = CleveRoids.QueryExternalImmunity(unitId, ccType)
+    if handled then return result end
     if not unitId or not UnitExists(unitId) then
         return false
     end
@@ -6895,6 +6899,7 @@ CleveRoids.CheckCCImmunity = CheckCCImmunity
 --   conditionalBuff: Optional buff name required for the immunity
 --   spellID: Optional spell ID for more accurate school detection
 local function RecordImmunity(npcName, spellName, conditionalBuff, spellID)
+    if CleveRoids.IsExternalImmunityActive() then return end
     if not npcName or (not spellName and not spellID) or npcName == "" then
         return
     end
@@ -7004,6 +7009,7 @@ CleveRoids.RecordImmunity = RecordImmunity
 --   npcName: Name of the NPC
 --   school: Damage school (e.g., "fire", "bleed") or spell name for unknown schools
 local function RemoveSpellImmunity(npcName, school)
+    if CleveRoids.IsExternalImmunityActive() then return end
     if not npcName or not school or npcName == "" then
         return
     end
@@ -7360,7 +7366,7 @@ local function ParseImmunityCombatLog()
     end
 
     -- If we have a school but no spell, use the school directly
-    if school and targetName and not spellName then
+    if school and targetName and not spellName and not CleveRoids.IsExternalImmunityActive() then
         -- Check if target is queryable for buff check
         local canQuery = UnitExists("target") and UnitName("target") == targetName
         if canQuery then
@@ -7528,6 +7534,8 @@ end
 -- Check if a unit is immune to a spell, damage school, or CC type
 -- Supports: CheckImmunity(unitId, "Flame Shock") or CheckImmunity(unitId, "fire") or CheckImmunity(unitId, "stun")
 function CleveRoids.CheckImmunity(unitId, spellOrSchool)
+    local handled, result = CleveRoids.QueryExternalImmunity(unitId, spellOrSchool)
+    if handled then return result end
     if not unitId or not UnitExists(unitId) then
         return false
     end

@@ -8,6 +8,7 @@
 ## LoadSavedVariablesFirst: 1
 Localization.lua
 Init.lua
+ImmunityProviders.lua
 NampowerAPI.lua
 ClassicAPI.lua
 Utility.lua
