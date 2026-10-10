@@ -84,7 +84,7 @@ local function PopulateProviders()
         table.insert(entries, selected)
     end
     for _, id in ipairs(entries) do
-        local info = UIDropDownMenu_CreateInfo()
+        local info = {} -- Vanilla 1.12 has no UIDropDownMenu_CreateInfo
         info.text = id == BUILTIN and "SCRM Built-in" or
             (providers[id] and providers[id].name or (id .. " (unavailable)"))
         info.checked = id == selected
@@ -104,7 +104,7 @@ function CR.UpdateImmunityProviderButton()
         providerRow:SetWidth(450)
         providerRow:SetHeight(34)
         -- Above the existing Delete / New / Exit footer controls.
-        providerRow:SetPoint("BOTTOMLEFT", MacroFrame, "BOTTOMLEFT", 23, 66)
+        providerRow:SetPoint("BOTTOMLEFT", MacroFrame, "BOTTOMLEFT", 23, 112)
 
         local label = providerRow:CreateFontString(nil, "OVERLAY", "GameFontNormal")
         label:SetPoint("LEFT", providerRow, "LEFT", 0, 0)
