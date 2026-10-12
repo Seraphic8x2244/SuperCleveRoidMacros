@@ -106,10 +106,15 @@ local function PopulateProviders()
             (providers[id] and providers[id].name or (id .. " (unavailable)"))
         info.checked = id == selected
         info.disabled = id ~= BUILTIN and not providers[id]
-        info.func = function()
-            CR.SelectImmunityProvider(id)
-            RefreshProviderSelection()
+        -- Bind each entry's ID in a separate function scope. Lua 5.0
+        -- closures over the iterator can otherwise select the wrong entry.
+        local function MakeSelectionHandler(providerId)
+            return function()
+                CR.SelectImmunityProvider(providerId)
+                RefreshProviderSelection()
+            end
         end
+        info.func = MakeSelectionHandler(id)
         UIDropDownMenu_AddButton(info)
     end
 end
